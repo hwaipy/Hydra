@@ -26,18 +26,15 @@ import io.netty.util.AttributeKey
 import java.io._
 import java.lang.Thread.UncaughtExceptionHandler
 import java.util.Properties
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, Executors, ThreadFactory}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent._
 import java.lang.reflect.InvocationTargetException
 import java.net.Socket
-
 import org.slf4j.LoggerFactory
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
 import scala.language.dynamics
@@ -129,65 +126,50 @@ class MessageServer(portMsgpack: Int, portJSON: Int) {
   }
 }
 
+
 class MessageClient(val name: String, host: String, port: Int, invokeHandler: Any = None, autoReconnect: Boolean = false) {
 
   import com.hydra.core.MessageType._
 
-  private val alive = new AtomicBoolean(true)
-  private val socket = new AtomicReference[Socket]()
+  private val socket = new AtomicReference[ReconnectableSocket]
   private val outputStream = new AtomicReference[OutputStream]()
   private lazy val handler = new MessageClientHandler(invokeHandler, this)
 
   def start = {
-    val latch = new CountDownLatch(1)
-    new Thread(new Runnable {
-      override def run() = {
-        while (alive.get) {
-          val socketLock = new CountDownLatch(1)
-          try {
-            val s = new Socket(host, port)
-            socket.set(s)
-            outputStream.set(s.getOutputStream)
-            println("link open")
-            handler.reset
-            new Thread(new Runnable {
-              override def run() = {
-                try {
-                  val in = socket.get.getInputStream
-                  val buffer = new Array[Byte](1024 * 1024 * 8)
-                  while (true) {
-                    val read = in.read(buffer)
-                    handler.dataIn(buffer, 0, read)
-                  }
-                } finally {
-                  socketLock.countDown
-                }
-              }
-            })
-            latch.countDown
-            while (!socket.get.isClosed) {
-              Thread.sleep(200)
-            }
-          } catch {
-            case e: Throwable => {
-              println("failed")
-              latch.countDown
-              socket.get match {
-                case s if s != null => s.close
-                case _ =>
-              }
-            }
-          } finally {
-            socketLock.await
-            Thread.sleep(Random.nextInt(2000) + 100)
-          }
-        }
+    val startLatch = new CountDownLatch(1)
+    val refStatus = new AtomicReference[ReconnectableSocket.StatusChange]()
+    val rSocket = new ReconnectableSocket(host, port, (data) => {}, (status) => {
+      refStatus.compareAndSet(null, status)
+      startLatch.countDown
+    })
+    socket.set(rSocket)
+    Future[Unit] {
+      refStatus.get match {
+        case ReconnectableSocket.OnConnected() =>
+        case ReconnectableSocket.OnException() => throw new RuntimeException("Exception on ReconnectableSocket.")
+        case ReconnectableSocket.OnClosed() => throw new RuntimeException("ReconnectableSocket closed.")
+        case _ => throw new RuntimeException("Unknown exception in ReconnectableSocket.")
       }
-    }).start
-    latch.await
+    }(new ExecutionContext {
+      override def reportFailure(cause: Throwable): Unit = {
+        println("e")
+      }
+
+      override def execute(runnable: Runnable): Unit = {
+        new Thread(new Runnable {
+          override def run(): Unit = {
+            startLatch.await
+            runnable.run
+          }
+        }).start
+      }
+    })
   }
 
-  def stop = alive.set(false)
+  def stop = socket.get match {
+    case s if s != null => s.close
+    case _ => throw new IllegalStateException("Client not started.")
+  }
 
   def toMessageInvoker(target: String = "") = new MessageRemoteObject(this, target)
 
@@ -197,7 +179,7 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 
   def sendMessage(msg: Message): Future[Any] = {
     require(msg.messageType == Request)
-    //      handler.future(channel, msg, msg.messageID)
+    handler.future(channel, msg, msg.messageID)
     null
   }
 
@@ -236,8 +218,143 @@ object MessageClient {
   }
 }
 
-protected class ReconnectableSocket(host:String, port:Int, statusChange :){
-  case class StatusChangeOn
+object ReconnectableSocket {
+
+  abstract class StatusChange
+
+  case class OnConnected() extends StatusChange
+
+  case class OnException() extends StatusChange
+
+  case class OnClosed() extends StatusChange
+
+}
+
+class ReconnectableSocket(host: String, port: Int, onRead: Array[Byte] => Unit = (a) => {}, onStatusChange: ReconnectableSocket.StatusChange => Unit = (a) => {}) {
+  private var work = true
+  val loopThread = new Thread(new Runnable {
+    override def run = while (work) {
+      try {
+        mainLoop
+      } catch {
+        case e: InterruptedException =>
+        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception in ReconnectableSocket.", e)
+      } finally {
+        Thread.sleep(Random.nextInt(3000))
+      }
+    }
+  }, "Thread-ReconnectableSockdet-MainLoop")
+  val writeThread = new Thread(new Runnable {
+    override def run = while (work) writeLoop
+  }, "Thread-ReconnectableSockdet-WriteLoop")
+  val dispatchThread = new Thread(new Runnable {
+    override def run = while (work) {
+      try {
+        dispatch
+      } catch {
+        case e: InterruptedException =>
+        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
+      }
+    }
+  }, "Thread-ReconnectableSockdet-DispatchLoop")
+
+  def close = {
+    work = false
+    refSocket.get.close
+    writeThread.interrupt
+    dispatchThread.interrupt
+    Future[Any] {
+      println("1")
+      123
+    }(new ExecutionContext {
+      override def reportFailure(cause: Throwable): Unit = {
+        println("f")
+      }
+
+      override def execute(runnable: Runnable): Unit = println("r")
+    })
+  }
+
+  private val refConnectionReadyLatch = new AtomicReference[CountDownLatch](new CountDownLatch(1))
+  private val refSocketClosedLatch = new AtomicReference[CountDownLatch](new CountDownLatch(1))
+  private val refSocket = new AtomicReference[Socket]
+  private val writeQueue = new LinkedBlockingQueue[Array[Byte]]
+  private val readQueue = new LinkedBlockingQueue[Array[Byte]]
+
+  private def mainLoop = {
+    try {
+      val socket = new Socket(host, port)
+      try {
+        onStatusChange(ReconnectableSocket.OnConnected())
+      } catch {
+        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
+      }
+      refSocket.set(socket)
+      refConnectionReadyLatch.get.countDown
+      val in = socket.getInputStream
+      val buffer = new Array[Byte](4096 * 4096)
+      try {
+        while (work) {
+          val r = in.read(buffer)
+          val b = java.util.Arrays.copyOfRange(buffer, 0, r)
+          readQueue.offer(b)
+        }
+      } catch {
+        case e: Throwable =>
+      }
+      try {
+        onStatusChange(if (work) ReconnectableSocket.OnException() else ReconnectableSocket.OnClosed())
+      } catch {
+        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
+      }
+      refConnectionReadyLatch.set(new CountDownLatch(1))
+      refSocketClosedLatch.get.await
+    } catch {
+      case e: Throwable =>
+        try {
+          onStatusChange(ReconnectableSocket.OnException())
+        } catch {
+          case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
+        }
+    }
+  }
+
+  private def writeLoop = {
+    try {
+      refConnectionReadyLatch.get.await
+      val out = refSocket.get.getOutputStream
+      while (work) {
+        val data = writeQueue.take
+        out.write(data)
+      }
+    } catch {
+      case e: Throwable =>
+    } finally {
+      refSocketClosedLatch.get.countDown
+    }
+  }
+
+  private def dispatch = {
+    val data = readQueue.take
+    onRead(data)
+  }
+
+  loopThread.start
+  writeThread.start
+  dispatchThread.start
+
+  def write(data: Array[Byte]) {
+    writeQueue.offer(data)
+  }
+
+  def flush: Unit = {
+    writeQueue.offer(Array[Byte](0))
+  }
+
+  def writeAndFlush(data: Array[Byte]) {
+    write(data)
+    flush
+  }
 
 }
 
@@ -326,7 +443,7 @@ protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient)
 
   private class FutureEntry(var result: Option[Any] = None, var cause: Option[Throwable] = None)
 
-  def future(channel: SocketChannel, msg: Message, id: Long) = {
+  def future(rs: ReconnectableSocket, msg: Message, id: Long) = {
     val futureEntry = new FutureEntry
     val singleLatch = new AtomicInteger(0)
     var channelFuture: ChannelFuture = null
@@ -346,7 +463,7 @@ protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient)
               if (waitingMap.contains(id)) throw new IllegalArgumentException("MessageID have been used.")
               waitingMap.put(id, (futureEntry, runnable))
             }
-            channelFuture = channel.writeAndFlush(msg)
+            channelFuture = rs.writeAndFlush(msg)
             try {
               channelFuture.addListener(new ChannelFutureListener() {
                 override def operationComplete(future: ChannelFuture) {

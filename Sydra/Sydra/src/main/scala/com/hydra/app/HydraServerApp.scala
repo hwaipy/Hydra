@@ -29,7 +29,6 @@ object HydraServerApp extends App {
     }
     case a if a(0) == "test" => {
       val client = MessageClient.newClient("localhost", 20102, "Test-Client")
-      client.start
       println("out")
       Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
       println("Stoping Test Client...")
