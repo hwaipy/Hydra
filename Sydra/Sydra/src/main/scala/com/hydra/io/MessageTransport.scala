@@ -5,6 +5,7 @@ import com.hydra.core.MessageGenerator
 import com.hydra.core.MessagePacker
 import com.hydra.core.MessageBuilder
 import com.hydra.core.RuntimeInvoker
+import io.netty.bootstrap.Bootstrap
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.ByteBuf
 import io.netty.channel.ChannelFuture
@@ -17,30 +18,34 @@ import io.netty.channel.EventLoopGroup
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
+import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
 import io.netty.handler.timeout.IdleStateHandler
 import io.netty.handler.timeout.IdleStateEvent
 import io.netty.handler.timeout.IdleState
 import io.netty.util.AttributeKey
-import java.io._
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileNotFoundException
+import java.io.IOException
 import java.lang.Thread.UncaughtExceptionHandler
 import java.util.Properties
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
-import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ConcurrentHashMap
 import java.lang.reflect.InvocationTargetException
-import java.net.Socket
-
+import java.util.concurrent.atomic.AtomicLong
 import org.slf4j.LoggerFactory
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
-import scala.collection.mutable
 import scala.language.dynamics
-import scala.util.Random
 
 object MessageTransport {
   //TODO: The configuration is not safe here. Need a immutable one.
@@ -64,7 +69,7 @@ object MessageTransport {
     System.setProperty("log4j.configurationFile", properties.getProperty("log4j.configurationFile", "./config/log4j.xml"))
     properties
   }
-  lazy val Logger = LoggerFactory.getLogger("MessageTransport")
+  val Logger = LoggerFactory.getLogger("MessageTransport")
   implicit lazy val FutureDirect: ExecutionContext = SingleThreadExecutionContext
 }
 
@@ -95,19 +100,17 @@ private object SingleThreadExecutionContext extends ExecutionContext with Uncaug
   }
 }
 
-class MessageServer(portMsgpack: Int, portJSON: Int) {
-  protected lazy val msgpackBossGroup: EventLoopGroup = new NioEventLoopGroup
-  protected lazy val msgpackWorkerGroup: EventLoopGroup = new NioEventLoopGroup
-  protected lazy val jsonBossGroup: EventLoopGroup = new NioEventLoopGroup
-  protected lazy val jsonWorkerGroup: EventLoopGroup = new NioEventLoopGroup
+class MessageServer(port: Int) {
+  protected lazy val bossGroup: EventLoopGroup = new NioEventLoopGroup
+  protected lazy val workerGroup: EventLoopGroup = new NioEventLoopGroup
 
   def start = {
-    val handler = new MessageServerHandler(ctx => new MessageServerInvokeHandler(ctx))
     new ServerBootstrap()
-      .group(msgpackBossGroup, msgpackWorkerGroup)
+      .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])
       .childHandler(new ChannelInitializer[SocketChannel]() {
         override def initChannel(ch: SocketChannel) {
+          val handler = new MessageServerHandler(ctx => new MessageServerInvokeHandler(ctx))
           ch.pipeline
             .addLast(new IdleStateHandler(20, 0, 0))
             .addLast(new MessagePackDecoder)
@@ -117,66 +120,40 @@ class MessageServer(portMsgpack: Int, portJSON: Int) {
       })
       .option(ChannelOption.SO_BACKLOG.asInstanceOf[ChannelOption[Any]], 128)
       .childOption(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], false)
-      .bind(portMsgpack)
+      .bind(port)
   }
 
   def stop = {
-    msgpackWorkerGroup.shutdownGracefully
-    jsonWorkerGroup.shutdownGracefully
-    msgpackBossGroup.shutdownGracefully
-    jsonBossGroup.shutdownGracefully
+    workerGroup.shutdownGracefully
+    bossGroup.shutdownGracefully
   }
 }
-
 
 class MessageClient(val name: String, host: String, port: Int, invokeHandler: Any = None, autoReconnect: Boolean = false) {
 
   import com.hydra.core.MessageType._
 
-  private val socket = new AtomicReference[ReconnectableSocket]
-  private val outputStream = new AtomicReference[OutputStream]()
+  private lazy val workerGroup: EventLoopGroup = new NioEventLoopGroup
   private lazy val handler = new MessageClientHandler(invokeHandler, this)
-
-  def start = {
-    val startLatch = new CountDownLatch(1)
-    val refStatus = new AtomicReference[ReconnectableSocket.StatusChange]()
-    val rSocket = new ReconnectableSocket(host, port, (data) => {
-      println("onread: $data")
-    }, (status) => {
-      refStatus.compareAndSet(null, status)
-      startLatch.countDown
-    })
-    socket.set(rSocket)
-    Future[Unit] {
-      refStatus.get match {
-        case ReconnectableSocket.OnConnected() =>
-        case ReconnectableSocket.OnException() => throw new RuntimeException("Exception on ReconnectableSocket.")
-        case ReconnectableSocket.OnClosed() => throw new RuntimeException("ReconnectableSocket closed.")
-        case _ => throw new RuntimeException("Unknown exception in ReconnectableSocket.")
-      }
-    }(new ExecutionContext {
-      override def reportFailure(cause: Throwable): Unit = {
-        println("e")
-      }
-
-      override def execute(runnable: Runnable): Unit = {
-        new Thread(new Runnable {
-          override def run(): Unit = {
-            startLatch.await
-            println(s"Here we connect to the server with client $name.")
-            val r = blockingInvoker().connect(name)
-            println(s"Here is the response: $r")
-            runnable.run
-          }
-        }).start
+  private lazy val channelFuture = new Bootstrap()
+    .group(workerGroup)
+    .channel(classOf[NioSocketChannel])
+    .option(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
+    .handler(new ChannelInitializer[SocketChannel]() {
+      override def initChannel(ch: SocketChannel) {
+        ch.pipeline()
+          .addLast(new IdleStateHandler(0, 10, 0))
+          .addLast(new MessagePackEncoder)
+          .addLast(new MessagePackDecoder)
+          .addLast(handler)
       }
     })
-  }
+    .connect(host, port)
+  private lazy val channel = channelFuture.channel.asInstanceOf[SocketChannel]
 
-  def stop = socket.get match {
-    case s if s != null => s.close
-    case _ => throw new IllegalStateException("Client not started.")
-  }
+  def start = channelFuture
+
+  def stop = workerGroup.shutdownGracefully
 
   def toMessageInvoker(target: String = "") = new MessageRemoteObject(this, target)
 
@@ -184,13 +161,14 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 
   def blockingInvoker(target: String = "", timeout: Duration = 2 second) = new BlockingRemoteObject(this, target, timeout = timeout)
 
-  def sendMessage(msg: Message): Future[Any] = {
+  def sendMessage(msg: Message) = {
+//    println(s"Send message $msg")
     require(msg.messageType == Request)
-    handler.future(socket.get, msg, msg.messageID)
+    handler.future(channel, msg, msg.messageID)
   }
 
   def requestMessage(msg: Message, timeout: Duration) = {
-    val future = this.sendMessage(msg)
+    val future = this.sendMessage(msg);
     Await.result[Any](future, timeout)
   }
 
@@ -213,784 +191,23 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
   protected[io] def fireSessionDisconnected(session: String) {
     sessionListeners.keys.foreach(l => l.sessionDisconnected(session))
   }
-
-  protected[io] def writeAndFlush(bytes: Array[Byte]) {
-  }
 }
 
 object MessageClient {
   def newClient(host: String, port: Int, name: String, invokeHandler: Any = None, timeout: Duration = 2 second) = {
-    new MessageClient(name, host, port, invokeHandler)
-  }
-}
-
-object ReconnectableSocket {
-
-  abstract class StatusChange
-
-  case class OnConnected() extends StatusChange
-
-  case class OnException() extends StatusChange
-
-  case class OnClosed() extends StatusChange
-
-}
-
-class ReconnectableSocket(host: String, port: Int, onRead: List[Message] => Unit = (ms) => {}, onStatusChange: ReconnectableSocket.StatusChange => Unit = (a) => {}) {
-  private var work = true
-  val loopThread = new Thread(new Runnable {
-    override def run = while (work) {
-      try {
-        mainLoop
-      } catch {
-        case e: InterruptedException =>
-        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception in ReconnectableSocket.", e)
-      } finally {
-        Thread.sleep(Random.nextInt(3000))
-      }
-    }
-  }, "Thread-ReconnectableSockdet-MainLoop")
-  val writeThread = new Thread(new Runnable {
-    override def run = while (work) writeLoop
-  }, "Thread-ReconnectableSockdet-WriteLoop")
-  val dispatchThread = new Thread(new Runnable {
-    override def run = while (work) {
-      try {
-        dispatch
-      } catch {
-        case e: InterruptedException =>
-        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
-      }
-    }
-  }, "Thread-ReconnectableSockdet-DispatchLoop")
-
-  def close = {
-    work = false
-    refSocket.get.close
-    writeThread.interrupt
-    dispatchThread.interrupt
-    Future[Any] {
-      println("1")
-      123
-    }(new ExecutionContext {
-      override def reportFailure(cause: Throwable): Unit = {
-        println("f")
-      }
-
-      override def execute(runnable: Runnable): Unit = println("r")
-    })
-  }
-
-  private val refConnectionReadyLatch = new AtomicReference[CountDownLatch](new CountDownLatch(1))
-  private val refSocketClosedLatch = new AtomicReference[CountDownLatch](new CountDownLatch(1))
-  private val refSocket = new AtomicReference[Socket]
-  private val writeQueue = new LinkedBlockingQueue[Array[Byte]]
-  private val readQueue = new LinkedBlockingQueue[Array[Byte]]
-
-  private def mainLoop = {
-    try {
-      val socket = new Socket(host, port)
-      try {
-        onStatusChange(ReconnectableSocket.OnConnected())
-      } catch {
-        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
-      }
-      refSocket.set(socket)
-      refConnectionReadyLatch.get.countDown
-      val in = socket.getInputStream
-      val buffer = new Array[Byte](4096 * 4096)
-      try {
-        while (work) {
-          val r = in.read(buffer)
-          println(s"read $r bytes. now the socket is ${socket.isClosed}")
-          if (r > 0) {
-            val b = java.util.Arrays.copyOfRange(buffer, 0, r)
-            readQueue.offer(b)
-          }
-        }
-      } catch {
-        case e: Throwable => e.printStackTrace
-      }
-      try {
-        onStatusChange(if (work) ReconnectableSocket.OnException() else ReconnectableSocket.OnClosed())
-      } catch {
-        case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
-      }
-      refConnectionReadyLatch.set(new CountDownLatch(1))
-      refSocketClosedLatch.get.await
-    } catch {
-      case e: Throwable =>
-        try {
-          onStatusChange(ReconnectableSocket.OnException())
-        } catch {
-          case e: Throwable => LoggerFactory.getLogger(this.getClass).warn("Exception on dispatching StatusChange.", e)
-        }
-    }
-  }
-
-  private def writeLoop = {
-    try {
-      refConnectionReadyLatch.get.await
-      val out = refSocket.get.getOutputStream
-      while (work) {
-        val data = writeQueue.take
-        out.write(data)
-      }
-    } catch {
-      case e: Throwable =>
-    } finally {
-      refSocketClosedLatch.get.countDown
-    }
-  }
-
-  private def dispatch = {
-    val data = readQueue.take
-    val msgs = decode(data)
-    println(msgs)
-    onRead(msgs)
-  }
-
-  loopThread.start
-  writeThread.start
-  dispatchThread.start
-
-  def write(data: Array[Byte]) {
-    writeQueue.offer(data)
-  }
-
-  def flush: Unit = {
-    writeQueue.offer(Array[Byte](0))
-  }
-
-  def writeAndFlush(data: Array[Byte]) {
-    write(data)
-    flush
-  }
-
-  def writeAndFlush(msg: Message) {
-    write(new MessagePacker().feed(msg.content, msg.to).pack)
-    flush
-  }
-
-  private val generator = new MessageGenerator()
-
-  private def decode(data: Array[Byte]) = {
-    //    val generatorAttr = ctx.channel.attr(AttributeKey.valueOf[MessageGenerator]("Generator"))
-    //    val generator = generatorAttr.get match {
-    //      case null => {
-    //        val shapper = ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).get
-    //        val g = new MessageGenerator(shapper)
-    //        generatorAttr.set(g)
-    //        g
-    //      }
-    //      case g => g
-    //    }
-    //    if (in.readableBytes == 0) return
-    //    in.nioBuffers.foreach(buffer => {
-    //      in.skipBytes(buffer.remaining)
-    //      generator.feed(buffer)
-    //    })
-    generator.feed(data)
-    val msgBuffer = new ArrayBuffer[Message]()
-    val generatorHasNext = new AtomicBoolean(true)
-    while (generatorHasNext.get) {
-      generator.next match {
-        case Some(x) => {
-          msgBuffer += x
-        }
-        case _ => {
-          //          ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get match {
-          //            case null =>
-          //            case session => {
-          //              val sta = generator.getStatistics
-          //              session.updateMessageReceivedStatistics(sta._1, sta._2)
-          //            }
-          //          }
-          generatorHasNext.set(false)
-        }
-      }
-    }
-    msgBuffer.toList
-  }
-}
-
-protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient) {
-  private val waitingMap: HashMap[Long, (FutureEntry, Runnable)] = new HashMap
-  private val remoteReferenceMap = HashMap[Any, Long]()
-  private val remoteReferenceKeyMap = HashMap[Long, Tuple3[Any, RuntimeInvoker, HashMap[String, AtomicInteger]]]()
-  private val remoteReferenceID = new AtomicLong(-1)
-  private val dynamicInvokerExecutor = Executors.newCachedThreadPool
-
-  class MessageClientSystemLevelHandler {
-    def remoteClientConnected(remoteClientName: String) {
-      client.fireSessionConnected(remoteClientName)
-    }
-
-    def remoteClientDisconnected(remoteClientName: String) {
-      MessageClientHandler.this.remoteObjectFinalized(None, remoteClientName)
-      client.fireSessionDisconnected(remoteClientName)
-    }
-
-    def remoteObjectDistributed(remoteObjectID: Long, distributedClient: String) {
-      MessageClientHandler.this.remoteObjectDistributed(remoteObjectID, distributedClient)
-    }
-
-    def remoteObjectFinalized(remoteObjectID: Long, finalizedClient: String) {
-      MessageClientHandler.this.remoteObjectFinalized(Some(remoteObjectID), finalizedClient)
-    }
-  }
-
-  instanceRemoteObject(new MessageClientSystemLevelHandler)
-  instanceRemoteObject(defaultInvoker)
-
-  private def instanceRemoteObject(obj: Any, target: Option[String] = None) = {
-    remoteReferenceMap.synchronized {
-      val ro =
-        RemoteObject(client.name, remoteReferenceMap.getOrElseUpdate(obj, {
-          val id = remoteReferenceID.getAndIncrement
-          remoteReferenceMap.put(obj, id)
-          remoteReferenceKeyMap.put(id, (obj, new RuntimeInvoker(obj), HashMap()))
-          id
-        }))
-      target match {
-        case None =>
-        case Some(targetString) => remoteObjectDistributed(ro.remoteID, targetString)
-      }
-      ro
-    }
-  }
-
-  private def remoteObjectDistributed(objectID: Long, target: String) {
-    remoteReferenceMap.synchronized {
-      remoteReferenceKeyMap.get(objectID) match {
-        case Some(v) => v._3.getOrElseUpdate(target, new AtomicInteger(0)).getAndIncrement
-        case _ =>
-      }
-    }
-  }
-
-  private def remoteObjectFinalized(objectID: Option[Long], target: String) {
-    remoteReferenceMap.synchronized {
-      objectID match {
-        case None => remoteReferenceKeyMap.keys.filter(key => key > 0).foreach(key => fin(key, target))
-        case Some(id) => fin(id, target)
-      }
-      def fin(id: Long, target: String) {
-        remoteReferenceKeyMap.get(id) match {
-          case None =>
-          case Some(value) => {
-            val map = value._3
-            map.get(target) match {
-              case None =>
-              case Some(i) => i.decrementAndGet match {
-                case 0 => map.remove(target)
-                case _ =>
-              }
-            }
-            if (map.isEmpty) {
-              remoteReferenceKeyMap.remove(id)
-              remoteReferenceMap.remove(value._1)
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private class FutureEntry(var result: Option[Any] = None, var cause: Option[Throwable] = None)
-
-  def future(rs: ReconnectableSocket, msg: Message, id: Long) = {
-    val futureEntry = new FutureEntry
-    val singleLatch = new AtomicInteger(0)
-    val exceptionRef = new AtomicReference[Throwable](null)
-    //    var channelFuture: ChannelFuture = null
-    Future[Any] {
-      if (singleLatch.getAndIncrement == 0) {
-        //        if (!channelFuture.isDone) throw new RuntimeException(s"ChannelFuture not done: $channelFuture", channelFuture.cause())
-        if (exceptionRef.get != null) throw new RuntimeException(s"Write to socket failed: $rs", exceptionRef.get)
-        if (futureEntry.result.isDefined) futureEntry.result.get
-        else if (futureEntry.cause.isDefined) throw futureEntry.cause.get
-        else throw new RuntimeException("Error state: FutureEntry not defined.")
-      }
-    }(new ExecutionContext {
-      def execute(runnable: Runnable): Unit = {
-        SingleThreadExecutionContext.execute(new Runnable() {
-          override def run() {
-            try {
-              waitingMap.synchronized {
-                if (waitingMap.contains(id)) throw new IllegalArgumentException("MessageID have been used.")
-                waitingMap.put(id, (futureEntry, runnable))
-              }
-              rs.writeAndFlush(msg)
-            } catch {
-              case e: Throwable => {
-                exceptionRef.set(e)
-                runnable.run
-              }
-            }
-          }
-        })
-      }
-
-      def reportFailure(cause: Throwable): Unit = {
-        println(s"nn:$cause")
-      }
-    })
-  }
-
-  protected def request(request: Message, ctx: ChannelHandlerContext) {
-    //    println(s"Read message $request")
-    try {
-      val objectID = request.objectID match {
-        case None => 0
-        case Some(id) => id
-      }
-      val invoker = remoteReferenceKeyMap.get(objectID) match {
-        case None => throw new IllegalArgumentException(s"ObjectID $objectID not exists.")
-        case Some(inv) => inv._2
-      }
-      dynamicInvokerExecutor.submit(new Runnable {
-        override def run {
-          try {
-            val r = invoker.invoke(request)
-            request.get[Boolean](Message.KeyNoResponse) match {
-              case Some(x) if x == true =>
-              case _ => ctx.writeAndFlush(r)
-            }
-          } catch {
-            case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => ctx.writeAndFlush(request.error(e.getMessage))
-            case e: InvocationTargetException => ctx.writeAndFlush(request.error(e.getCause.getMessage))
-            case e: Throwable =>
-          }
-        }
-      })
-    } catch {
-      case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => ctx.writeAndFlush(request.error(e.getMessage))
-      case e: InvocationTargetException => ctx.writeAndFlush(request.error(e.getCause.getMessage))
-      case e: Throwable =>
-    }
-  }
-
-  //  override protected def response(response: Message, ctx: ChannelHandlerContext) {
-  //    val (responseItem, id) = response.responseContent
-  //    waitingMap.synchronized {
-  //      waitingMap.get(id) match {
-  //        case None => MessageTransport.Logger.info(s"ResponseID not recgonized: $response")
-  //        case Some((futureEntry, runnable)) => {
-  //          futureEntry.result = Some(responseItem)
-  //          runnable.run
-  //        }
-  //      }
-  //    }
-  //  }
-  //
-  //  protected def error(error: Message, ctx: ChannelHandlerContext) {
-  //    val (errorItem, id) = error.errorContent
-  //    waitingMap.synchronized {
-  //      waitingMap.get(id) match {
-  //        case None => MessageTransport.Logger.info(s"ResponseID not recgonized: $error")
-  //        case Some((futureEntry, runnable)) => {
-  //          futureEntry.cause = Some(new RemoteInvokeException(errorItem))
-  //          runnable.run
-  //        }
-  //      }
-  //    }
-  //  }
-  //
-  //  def userEventTriggered(ctx: ChannelHandlerContext, evt: Any) {
-  //    evt match {
-  //      case e: IdleStateEvent if e.state == IdleState.WRITER_IDLE => {
-  //        client.asynchronousInvoker().ping
-  //      }
-  //    }
-  //  }
-
-  //  override def channelActive(ctx: ChannelHandlerContext) {
-  //    def flatter(obj: Any, target: Option[String]): RemoteObject = {
-  //      obj match {
-  //        case ro: RemoteObject => {
-  //          target match {
-  //            case None =>
-  //            case Some(targetString) => ro.remoteName match {
-  //              case client.name => remoteObjectDistributed(ro.remoteID, targetString)
-  //              case _ =>
-  //              //val msg = MessageBuilder.newBuilder.asRequest("remoteObjectDistributed", ro.remoteID :: targetString :: Nil).to(ro.remoteName).objectID(-1).+=(Message.KeyNoResponse, true).create
-  //              //client.sendMessage(msg)
-  //            }
-  //          }
-  //          ro
-  //        }
-  //        case o => instanceRemoteObject(obj, target)
-  //      }
-  //    }
-  //    def shapper(name: String, id: Long): RemoteObject = RemoteObject(client, name, id)
-  //    ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).set(flatter)
-  //    ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).set(shapper)
-  //  }
-  //
-  //  override def channelInactive(ctx: ChannelHandlerContext) {
-  //  }
-
-  //  protected class MessagePackEncoder extends MessageToByteEncoder[Message] {
-  //    override def encode(ctx: ChannelHandlerContext, msg: Message, out: ByteBuf) = {
-  //      try {
-  //        val packer = ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).get match {
-  //          case null => new MessagePacker
-  //          case flatter => new MessagePacker(flatter)
-  //        }
-  //        val pack = packer.feed(msg.content, msg.to).pack
-  //        ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get match {
-  //          case null =>
-  //          case session => session.increseMessageSendStatistics(pack.size)
-  //        }
-  //        out.writeBytes(pack)
-  //      } catch {
-  //        case e: Throwable => println(e)
-  //      }
-  //    }
-  //  }
-  //
-  //  protected class MessagePackDecoder extends ByteToMessageDecoder {
-  //
-  //    override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: java.util.List[Object]) {
-  //      val generatorAttr = ctx.channel.attr(AttributeKey.valueOf[MessageGenerator]("Generator"))
-  //      val generator = generatorAttr.get match {
-  //        case null => {
-  //          val shapper = ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).get
-  //          val g = new MessageGenerator(shapper)
-  //          generatorAttr.set(g)
-  //          g
-  //        }
-  //        case g => g
-  //      }
-  //      if (in.readableBytes == 0) return
-  //      in.nioBuffers.foreach(buffer => {
-  //        in.skipBytes(buffer.remaining)
-  //        generator.feed(buffer)
-  //      })
-  //      while (true) {
-  //        generator.next match {
-  //          case Some(x) => {
-  //            out.add(x)
-  //          }
-  //          case _ => {
-  //            ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get match {
-  //              case null =>
-  //              case session => {
-  //                val sta = generator.getStatistics
-  //                session.updateMessageReceivedStatistics(sta._1, sta._2)
-  //              }
-  //            }
-  //            return
-  //          }
-  //        }
-  //      }
-  //    }
-  //  }
-}
-
-//
-//protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient) extends MessageTransportHandler {
-//  private val waitingMap: HashMap[Long, (FutureEntry, Runnable)] = new HashMap
-//  private val remoteReferenceMap = HashMap[Any, Long]()
-//  private val remoteReferenceKeyMap = HashMap[Long, Tuple3[Any, RuntimeInvoker, HashMap[String, AtomicInteger]]]()
-//  private val remoteReferenceID = new AtomicLong(-1)
-//  private val dynamicInvokerExecutor = Executors.newCachedThreadPool
-//
-//  class MessageClientSystemLevelHandler {
-//    def remoteClientConnected(remoteClientName: String) {
-//      client.fireSessionConnected(remoteClientName)
-//    }
-//
-//    def remoteClientDisconnected(remoteClientName: String) {
-//      MessageClientHandler.this.remoteObjectFinalized(None, remoteClientName)
-//      client.fireSessionDisconnected(remoteClientName)
-//    }
-//
-//    def remoteObjectDistributed(remoteObjectID: Long, distributedClient: String) {
-//      MessageClientHandler.this.remoteObjectDistributed(remoteObjectID, distributedClient)
-//    }
-//
-//    def remoteObjectFinalized(remoteObjectID: Long, finalizedClient: String) {
-//      MessageClientHandler.this.remoteObjectFinalized(Some(remoteObjectID), finalizedClient)
-//    }
-//  }
-//
-//  instanceRemoteObject(new MessageClientSystemLevelHandler)
-//  instanceRemoteObject(defaultInvoker)
-//
-//  private def instanceRemoteObject(obj: Any, target: Option[String] = None) = {
-//    remoteReferenceMap.synchronized {
-//      val ro =
-//        RemoteObject(client.name, remoteReferenceMap.getOrElseUpdate(obj, {
-//          val id = remoteReferenceID.getAndIncrement
-//          remoteReferenceMap.put(obj, id)
-//          remoteReferenceKeyMap.put(id, (obj, new RuntimeInvoker(obj), HashMap()))
-//          id
-//        }))
-//      target match {
-//        case None =>
-//        case Some(targetString) => remoteObjectDistributed(ro.remoteID, targetString)
-//      }
-//      ro
-//    }
-//  }
-//
-//  private def remoteObjectDistributed(objectID: Long, target: String) {
-//    remoteReferenceMap.synchronized {
-//      remoteReferenceKeyMap.get(objectID) match {
-//        case Some(v) => v._3.getOrElseUpdate(target, new AtomicInteger(0)).getAndIncrement
-//        case _ =>
-//      }
-//    }
-//  }
-//
-//  private def remoteObjectFinalized(objectID: Option[Long], target: String) {
-//    remoteReferenceMap.synchronized {
-//      objectID match {
-//        case None => remoteReferenceKeyMap.keys.filter(key => key > 0).foreach(key => fin(key, target))
-//        case Some(id) => fin(id, target)
-//      }
-//      def fin(id: Long, target: String) {
-//        remoteReferenceKeyMap.get(id) match {
-//          case None =>
-//          case Some(value) => {
-//            val map = value._3
-//            map.get(target) match {
-//              case None =>
-//              case Some(i) => i.decrementAndGet match {
-//                case 0 => map.remove(target)
-//                case _ =>
-//              }
-//            }
-//            if (map.isEmpty) {
-//              remoteReferenceKeyMap.remove(id)
-//              remoteReferenceMap.remove(value._1)
-//            }
-//          }
-//        }
-//      }
-//    }
-//  }
-//
-//  private class FutureEntry(var result: Option[Any] = None, var cause: Option[Throwable] = None)
-//
-//  def future(channel: SocketChannel, msg: Message, id: Long) = {
-//    val futureEntry = new FutureEntry
-//    val singleLatch = new AtomicInteger(0)
-//    var channelFuture: ChannelFuture = null
-//    Future[Any] {
-//      if (singleLatch.getAndIncrement == 0) {
-//        if (!channelFuture.isDone) throw new RuntimeException(s"ChannelFuture not done: $channelFuture", channelFuture.cause())
-//        if (!channelFuture.isSuccess) throw new RuntimeException(s"ChannelFuture failed: $channelFuture", channelFuture.cause())
-//        if (futureEntry.result.isDefined) futureEntry.result.get
-//        else if (futureEntry.cause.isDefined) throw futureEntry.cause.get
-//        else throw new RuntimeException("Error state: FutureEntry not defined.")
-//      }
-//    }(new ExecutionContext {
-//      def execute(runnable: Runnable): Unit = {
-//        SingleThreadExecutionContext.execute(new Runnable() {
-//          override def run() {
-//            waitingMap.synchronized {
-//              if (waitingMap.contains(id)) throw new IllegalArgumentException("MessageID have been used.")
-//              waitingMap.put(id, (futureEntry, runnable))
-//            }
-//            channelFuture = channel.writeAndFlush(msg)
-//            try {
-//              channelFuture.addListener(new ChannelFutureListener() {
-//                override def operationComplete(future: ChannelFuture) {
-//                  if (!future.isSuccess) {
-//                    futureEntry.cause = Some(future.cause)
-//                    runnable.run
-//                  }
-//                }
-//              })
-//            } catch {
-//              case e: Throwable => e.printStackTrace
-//            }
-//          }
-//        })
-//      }
-//
-//      def reportFailure(cause: Throwable): Unit = {
-//        println(s"nn:$cause")
-//      }
-//    })
-//  }
-//
-//  override protected def request(request: Message, ctx: ChannelHandlerContext) {
-//    //    println(s"Read message $request")
-//    try {
-//      val objectID = request.objectID match {
-//        case None => 0
-//        case Some(id) => id
-//      }
-//      val invoker = remoteReferenceKeyMap.get(objectID) match {
-//        case None => throw new IllegalArgumentException(s"ObjectID $objectID not exists.")
-//        case Some(inv) => inv._2
-//      }
-//      dynamicInvokerExecutor.submit(new Runnable {
-//        override def run {
-//          try {
-//            val r = invoker.invoke(request)
-//            request.get[Boolean](Message.KeyNoResponse) match {
-//              case Some(x) if x == true =>
-//              case _ => ctx.writeAndFlush(r)
-//            }
-//          } catch {
-//            case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => ctx.writeAndFlush(request.error(e.getMessage))
-//            case e: InvocationTargetException => ctx.writeAndFlush(request.error(e.getCause.getMessage))
-//            case e: Throwable =>
-//          }
-//        }
-//      })
-//    } catch {
-//      case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => ctx.writeAndFlush(request.error(e.getMessage))
-//      case e: InvocationTargetException => ctx.writeAndFlush(request.error(e.getCause.getMessage))
-//      case e: Throwable =>
-//    }
-//  }
-//
-//  override protected def response(response: Message, ctx: ChannelHandlerContext) {
-//    val (responseItem, id) = response.responseContent
-//    waitingMap.synchronized {
-//      waitingMap.get(id) match {
-//        case None => MessageTransport.Logger.info(s"ResponseID not recgonized: $response")
-//        case Some((futureEntry, runnable)) => {
-//          futureEntry.result = Some(responseItem)
-//          runnable.run
-//        }
-//      }
-//    }
-//  }
-//
-//  override protected def error(error: Message, ctx: ChannelHandlerContext) {
-//    val (errorItem, id) = error.errorContent
-//    waitingMap.synchronized {
-//      waitingMap.get(id) match {
-//        case None => MessageTransport.Logger.info(s"ResponseID not recgonized: $error")
-//        case Some((futureEntry, runnable)) => {
-//          futureEntry.cause = Some(new RemoteInvokeException(errorItem))
-//          runnable.run
-//        }
-//      }
-//    }
-//  }
-//
-//  override def userEventTriggered(ctx: ChannelHandlerContext, evt: Any) {
-//    evt match {
-//      case e: IdleStateEvent if e.state == IdleState.WRITER_IDLE => {
-//        client.asynchronousInvoker().ping
-//      }
-//    }
-//  }
-//
-//  override def channelActive(ctx: ChannelHandlerContext) {
-//    def flatter(obj: Any, target: Option[String]): RemoteObject = {
-//      obj match {
-//        case ro: RemoteObject => {
-//          target match {
-//            case None =>
-//            case Some(targetString) => ro.remoteName match {
-//              case client.name => remoteObjectDistributed(ro.remoteID, targetString)
-//              case _ =>
-//              //val msg = MessageBuilder.newBuilder.asRequest("remoteObjectDistributed", ro.remoteID :: targetString :: Nil).to(ro.remoteName).objectID(-1).+=(Message.KeyNoResponse, true).create
-//              //client.sendMessage(msg)
-//            }
-//          }
-//          ro
-//        }
-//        case o => instanceRemoteObject(obj, target)
-//      }
-//    }
-//    def shapper(name: String, id: Long): RemoteObject = RemoteObject(client, name, id)
-//    ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).set(flatter)
-//    ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).set(shapper)
-//  }
-//
-//  override def channelInactive(ctx: ChannelHandlerContext) {
-//  }
-//}
-
-//class MessageClient(val name: String, host: String, port: Int, invokeHandler: Any = None, autoReconnect: Boolean = false) {
-//
-//  import com.hydra.core.MessageType._
-//
-//  private lazy val workerGroup: EventLoopGroup = new NioEventLoopGroup
-//  private lazy val handler = new MessageClientHandler(invokeHandler, this)
-//  private lazy val channelFuture = new Bootstrap()
-//    .group(workerGroup)
-//    .channel(classOf[NioSocketChannel])
-//    .option(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
-//    .handler(new ChannelInitializer[SocketChannel]() {
-//      override def initChannel(ch: SocketChannel) {
-//        ch.pipeline()
-//          .addLast(new IdleStateHandler(0, 10, 0))
-//          .addLast(new MessagePackEncoder)
-//          .addLast(new MessagePackDecoder)
-//          .addLast(handler)
-//      }
-//    })
-//    .connect(host, port)
-//  private lazy val channel = channelFuture.channel.asInstanceOf[SocketChannel]
-//
-//  def start = channelFuture
-//
-//  def stop = workerGroup.shutdownGracefully
-//
-//  def toMessageInvoker(target: String = "") = new MessageRemoteObject(this, target)
-//
-//  def asynchronousInvoker(target: String = "") = new AsynchronousRemoteObject(this, target)
-//
-//  def blockingInvoker(target: String = "", timeout: Duration = 2 second) = new BlockingRemoteObject(this, target, timeout = timeout)
-//
-//  def sendMessage(msg: Message) = {
-//    //    println(s"Send message $msg")
-//    require(msg.messageType == Request)
-//    handler.future(channel, msg, msg.messageID)
-//  }
-//
-//  def requestMessage(msg: Message, timeout: Duration) = {
-//    val future = this.sendMessage(msg);
-//    Await.result[Any](future, timeout)
-//  }
-//
-//  def connect() = this.asynchronousInvoker().connect(name)
-//
-//  private val sessionListeners: collection.concurrent.Map[SessionListener, Int] = new ConcurrentHashMap[SessionListener, Int]
-//
-//  def addSessionListener(listener: SessionListener) {
-//    sessionListeners.put(listener, 0)
-//  }
-//
-//  def removeSessionListener(listener: Tuple2[String => Unit, String => Unit]) {
-//    sessionListeners.remove(listener)
-//  }
-//
-//  protected[io] def fireSessionConnected(session: String) {
-//    sessionListeners.keys.foreach(l => l.sessionConnected(session))
-//  }
-//
-//  protected[io] def fireSessionDisconnected(session: String) {
-//    sessionListeners.keys.foreach(l => l.sessionDisconnected(session))
-//  }
-//}
-//
-//object MessageClient {
-//  def newClient(host: String, port: Int, name: String, invokeHandler: Any = None, timeout: Duration = 2 second) = {
-//    val client = new MessageClient(name, host, port, invokeHandler)
-//    val f = client.start
-//    f.await(timeout.toMillis)
-//    if (f.isDone || f.isSuccess) {
-//      client.blockingInvoker().connect(name)
-//      client
-//    } else {
+    val client = new MessageClient(name, host, port, invokeHandler)
+    val f = client.start
+    f.await(timeout.toMillis)
+    if (f.isDone || f.isSuccess) {
+      client.blockingInvoker().connect(name)
+      client
+    } else {
 //      println(f)
-//      f.cause.printStackTrace
-//      throw new RuntimeException(f.cause)
-//    }
-//  }
-//}
+      f.cause.printStackTrace
+      throw new RuntimeException(f.cause)
+    }
+  }
+}
 
 class RemoteInvokeException(item: Any) extends Exception(item.toString) {
 }
@@ -1217,6 +434,228 @@ trait SessionListener {
   def sessionConnected(name: String)
 
   def sessionDisconnected(name: String)
+}
+
+protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient) extends MessageTransportHandler {
+  private val waitingMap: HashMap[Long, (FutureEntry, Runnable)] = new HashMap
+  private val remoteReferenceMap = HashMap[Any, Long]()
+  private val remoteReferenceKeyMap = HashMap[Long, Tuple3[Any, RuntimeInvoker, HashMap[String, AtomicInteger]]]()
+  private val remoteReferenceID = new AtomicLong(-1)
+  private val dynamicInvokerExecutor = Executors.newCachedThreadPool
+
+  class MessageClientSystemLevelHandler {
+    def remoteClientConnected(remoteClientName: String) {
+      client.fireSessionConnected(remoteClientName)
+    }
+
+    def remoteClientDisconnected(remoteClientName: String) {
+      MessageClientHandler.this.remoteObjectFinalized(None, remoteClientName)
+      client.fireSessionDisconnected(remoteClientName)
+    }
+
+    def remoteObjectDistributed(remoteObjectID: Long, distributedClient: String) {
+      MessageClientHandler.this.remoteObjectDistributed(remoteObjectID, distributedClient)
+    }
+
+    def remoteObjectFinalized(remoteObjectID: Long, finalizedClient: String) {
+      MessageClientHandler.this.remoteObjectFinalized(Some(remoteObjectID), finalizedClient)
+    }
+  }
+
+  instanceRemoteObject(new MessageClientSystemLevelHandler)
+  instanceRemoteObject(defaultInvoker)
+
+  private def instanceRemoteObject(obj: Any, target: Option[String] = None) = {
+    remoteReferenceMap.synchronized {
+      val ro =
+        RemoteObject(client.name, remoteReferenceMap.getOrElseUpdate(obj, {
+          val id = remoteReferenceID.getAndIncrement
+          remoteReferenceMap.put(obj, id)
+          remoteReferenceKeyMap.put(id, (obj, new RuntimeInvoker(obj), HashMap()))
+          id
+        }))
+      target match {
+        case None =>
+        case Some(targetString) => remoteObjectDistributed(ro.remoteID, targetString)
+      }
+      ro
+    }
+  }
+
+  private def remoteObjectDistributed(objectID: Long, target: String) {
+    remoteReferenceMap.synchronized {
+      remoteReferenceKeyMap.get(objectID) match {
+        case Some(v) => v._3.getOrElseUpdate(target, new AtomicInteger(0)).getAndIncrement
+        case _ =>
+      }
+    }
+  }
+
+  private def remoteObjectFinalized(objectID: Option[Long], target: String) {
+    remoteReferenceMap.synchronized {
+      objectID match {
+        case None => remoteReferenceKeyMap.keys.filter(key => key > 0).foreach(key => fin(key, target))
+        case Some(id) => fin(id, target)
+      }
+      def fin(id: Long, target: String) {
+        remoteReferenceKeyMap.get(id) match {
+          case None =>
+          case Some(value) => {
+            val map = value._3
+            map.get(target) match {
+              case None =>
+              case Some(i) => i.decrementAndGet match {
+                case 0 => map.remove(target)
+                case _ =>
+              }
+            }
+            if (map.isEmpty) {
+              remoteReferenceKeyMap.remove(id)
+              remoteReferenceMap.remove(value._1)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private class FutureEntry(var result: Option[Any] = None, var cause: Option[Throwable] = None)
+
+  def future(channel: SocketChannel, msg: Message, id: Long) = {
+    val futureEntry = new FutureEntry
+    val singleLatch = new AtomicInteger(0)
+    var channelFuture: ChannelFuture = null
+    Future[Any] {
+      if (singleLatch.getAndIncrement == 0) {
+        if (!channelFuture.isDone) throw new RuntimeException(s"ChannelFuture not done: $channelFuture")
+        if (!channelFuture.isSuccess) throw new RuntimeException(s"ChannelFuture failed: $channelFuture")
+        if (futureEntry.result.isDefined) futureEntry.result.get
+        else if (futureEntry.cause.isDefined) throw futureEntry.cause.get
+        else throw new RuntimeException("Error state: FutureEntry not defined.")
+      }
+    }(new ExecutionContext {
+      def execute(runnable: Runnable): Unit = {
+        SingleThreadExecutionContext.execute(new Runnable() {
+          override def run() {
+            waitingMap.synchronized {
+              if (waitingMap.contains(id)) throw new IllegalArgumentException("MessageID have been used.")
+              waitingMap.put(id, (futureEntry, runnable))
+            }
+            channelFuture = channel.writeAndFlush(msg)
+            try {
+              channelFuture.addListener(new ChannelFutureListener() {
+                override def operationComplete(future: ChannelFuture) {
+                  if (!future.isSuccess) {
+                    futureEntry.cause = Some(future.cause)
+                    runnable.run
+                  }
+                }
+              })
+            } catch {
+              case e: Throwable => e.printStackTrace
+            }
+          }
+        })
+      }
+
+      def reportFailure(cause: Throwable): Unit = {
+        println(s"nn:$cause")
+      }
+    })
+  }
+
+  override protected def request(request: Message, ctx: ChannelHandlerContext) {
+//    println(s"Read message $request")
+    try {
+      val objectID = request.objectID match {
+        case None => 0
+        case Some(id) => id
+      }
+      val invoker = remoteReferenceKeyMap.get(objectID) match {
+        case None => throw new IllegalArgumentException(s"ObjectID $objectID not exists.")
+        case Some(inv) => inv._2
+      }
+      dynamicInvokerExecutor.submit(new Runnable {
+        override def run {
+          try {
+            val r = invoker.invoke(request)
+            request.get[Boolean](Message.KeyNoResponse) match {
+              case Some(x) if x == true =>
+              case _ => ctx.writeAndFlush(r)
+            }
+          } catch {
+            case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => ctx.writeAndFlush(request.error(e.getMessage))
+            case e: InvocationTargetException => ctx.writeAndFlush(request.error(e.getCause.getMessage))
+            case e: Throwable =>
+          }
+        }
+      })
+    } catch {
+      case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => ctx.writeAndFlush(request.error(e.getMessage))
+      case e: InvocationTargetException => ctx.writeAndFlush(request.error(e.getCause.getMessage))
+      case e: Throwable =>
+    }
+  }
+
+  override protected def response(response: Message, ctx: ChannelHandlerContext) {
+    val (responseItem, id) = response.responseContent
+    waitingMap.synchronized {
+      waitingMap.get(id) match {
+        case None => MessageTransport.Logger.info(s"ResponseID not recgonized: $response")
+        case Some((futureEntry, runnable)) => {
+          futureEntry.result = Some(responseItem)
+          runnable.run
+        }
+      }
+    }
+  }
+
+  override protected def error(error: Message, ctx: ChannelHandlerContext) {
+    val (errorItem, id) = error.errorContent
+    waitingMap.synchronized {
+      waitingMap.get(id) match {
+        case None => MessageTransport.Logger.info(s"ResponseID not recgonized: $error")
+        case Some((futureEntry, runnable)) => {
+          futureEntry.cause = Some(new RemoteInvokeException(errorItem))
+          runnable.run
+        }
+      }
+    }
+  }
+
+  override def userEventTriggered(ctx: ChannelHandlerContext, evt: Any) {
+    evt match {
+      case e: IdleStateEvent if e.state == IdleState.WRITER_IDLE => {
+        client.asynchronousInvoker().ping
+      }
+    }
+  }
+
+  override def channelActive(ctx: ChannelHandlerContext) {
+    def flatter(obj: Any, target: Option[String]): RemoteObject = {
+      obj match {
+        case ro: RemoteObject => {
+          target match {
+            case None =>
+            case Some(targetString) => ro.remoteName match {
+              case client.name => remoteObjectDistributed(ro.remoteID, targetString)
+              case _ =>
+              //val msg = MessageBuilder.newBuilder.asRequest("remoteObjectDistributed", ro.remoteID :: targetString :: Nil).to(ro.remoteName).objectID(-1).+=(Message.KeyNoResponse, true).create
+              //client.sendMessage(msg)
+            }
+          }
+          ro
+        }
+        case o => instanceRemoteObject(obj, target)
+      }
+    }
+    def shapper(name: String, id: Long): RemoteObject = RemoteObject(client, name, id)
+    ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).set(flatter)
+    ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).set(shapper)
+  }
+
+  override def channelInactive(ctx: ChannelHandlerContext) {
+  }
 }
 
 class MessageSession private(val id: Int, val name: String, private val ctx: ChannelHandlerContext) {
