@@ -26,17 +26,19 @@ import io.netty.util.AttributeKey
 import java.io._
 import java.lang.Thread.UncaughtExceptionHandler
 import java.util.Properties
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 import java.util.concurrent._
 import java.lang.reflect.InvocationTargetException
 import java.net.Socket
+
 import org.slf4j.LoggerFactory
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
-import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.language.dynamics
 import scala.util.Random
 
@@ -138,7 +140,9 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
   def start = {
     val startLatch = new CountDownLatch(1)
     val refStatus = new AtomicReference[ReconnectableSocket.StatusChange]()
-    val rSocket = new ReconnectableSocket(host, port, (data) => {}, (status) => {
+    val rSocket = new ReconnectableSocket(host, port, (data) => {
+      println("onread: $data")
+    }, (status) => {
       refStatus.compareAndSet(null, status)
       startLatch.countDown
     })
@@ -159,6 +163,9 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
         new Thread(new Runnable {
           override def run(): Unit = {
             startLatch.await
+            println(s"Here we connect to the server with client $name.")
+            val r = blockingInvoker().connect(name)
+            println(s"Here is the response: $r")
             runnable.run
           }
         }).start
@@ -179,13 +186,12 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 
   def sendMessage(msg: Message): Future[Any] = {
     require(msg.messageType == Request)
-    handler.future(channel, msg, msg.messageID)
-    null
+    handler.future(socket.get, msg, msg.messageID)
   }
 
   def requestMessage(msg: Message, timeout: Duration) = {
-    val future = this.sendMessage(msg);
-    //      Await.result[Any](future, timeout)
+    val future = this.sendMessage(msg)
+    Await.result[Any](future, timeout)
   }
 
   def connect() = this.asynchronousInvoker().connect(name)
@@ -230,7 +236,7 @@ object ReconnectableSocket {
 
 }
 
-class ReconnectableSocket(host: String, port: Int, onRead: Array[Byte] => Unit = (a) => {}, onStatusChange: ReconnectableSocket.StatusChange => Unit = (a) => {}) {
+class ReconnectableSocket(host: String, port: Int, onRead: List[Message] => Unit = (ms) => {}, onStatusChange: ReconnectableSocket.StatusChange => Unit = (a) => {}) {
   private var work = true
   val loopThread = new Thread(new Runnable {
     override def run = while (work) {
@@ -296,11 +302,14 @@ class ReconnectableSocket(host: String, port: Int, onRead: Array[Byte] => Unit =
       try {
         while (work) {
           val r = in.read(buffer)
-          val b = java.util.Arrays.copyOfRange(buffer, 0, r)
-          readQueue.offer(b)
+          println(s"read $r bytes. now the socket is ${socket.isClosed}")
+          if (r > 0) {
+            val b = java.util.Arrays.copyOfRange(buffer, 0, r)
+            readQueue.offer(b)
+          }
         }
       } catch {
-        case e: Throwable =>
+        case e: Throwable => e.printStackTrace
       }
       try {
         onStatusChange(if (work) ReconnectableSocket.OnException() else ReconnectableSocket.OnClosed())
@@ -336,7 +345,9 @@ class ReconnectableSocket(host: String, port: Int, onRead: Array[Byte] => Unit =
 
   private def dispatch = {
     val data = readQueue.take
-    onRead(data)
+    val msgs = decode(data)
+    println(msgs)
+    onRead(msgs)
   }
 
   loopThread.start
@@ -356,6 +367,51 @@ class ReconnectableSocket(host: String, port: Int, onRead: Array[Byte] => Unit =
     flush
   }
 
+  def writeAndFlush(msg: Message) {
+    write(new MessagePacker().feed(msg.content, msg.to).pack)
+    flush
+  }
+
+  private val generator = new MessageGenerator()
+
+  private def decode(data: Array[Byte]) = {
+    //    val generatorAttr = ctx.channel.attr(AttributeKey.valueOf[MessageGenerator]("Generator"))
+    //    val generator = generatorAttr.get match {
+    //      case null => {
+    //        val shapper = ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).get
+    //        val g = new MessageGenerator(shapper)
+    //        generatorAttr.set(g)
+    //        g
+    //      }
+    //      case g => g
+    //    }
+    //    if (in.readableBytes == 0) return
+    //    in.nioBuffers.foreach(buffer => {
+    //      in.skipBytes(buffer.remaining)
+    //      generator.feed(buffer)
+    //    })
+    generator.feed(data)
+    val msgBuffer = new ArrayBuffer[Message]()
+    val generatorHasNext = new AtomicBoolean(true)
+    while (generatorHasNext.get) {
+      generator.next match {
+        case Some(x) => {
+          msgBuffer += x
+        }
+        case _ => {
+          //          ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get match {
+          //            case null =>
+          //            case session => {
+          //              val sta = generator.getStatistics
+          //              session.updateMessageReceivedStatistics(sta._1, sta._2)
+          //            }
+          //          }
+          generatorHasNext.set(false)
+        }
+      }
+    }
+    msgBuffer.toList
+  }
 }
 
 protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient) {
@@ -446,11 +502,12 @@ protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient)
   def future(rs: ReconnectableSocket, msg: Message, id: Long) = {
     val futureEntry = new FutureEntry
     val singleLatch = new AtomicInteger(0)
-    var channelFuture: ChannelFuture = null
+    val exceptionRef = new AtomicReference[Throwable](null)
+    //    var channelFuture: ChannelFuture = null
     Future[Any] {
       if (singleLatch.getAndIncrement == 0) {
-        if (!channelFuture.isDone) throw new RuntimeException(s"ChannelFuture not done: $channelFuture", channelFuture.cause())
-        if (!channelFuture.isSuccess) throw new RuntimeException(s"ChannelFuture failed: $channelFuture", channelFuture.cause())
+        //        if (!channelFuture.isDone) throw new RuntimeException(s"ChannelFuture not done: $channelFuture", channelFuture.cause())
+        if (exceptionRef.get != null) throw new RuntimeException(s"Write to socket failed: $rs", exceptionRef.get)
         if (futureEntry.result.isDefined) futureEntry.result.get
         else if (futureEntry.cause.isDefined) throw futureEntry.cause.get
         else throw new RuntimeException("Error state: FutureEntry not defined.")
@@ -459,22 +516,17 @@ protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient)
       def execute(runnable: Runnable): Unit = {
         SingleThreadExecutionContext.execute(new Runnable() {
           override def run() {
-            waitingMap.synchronized {
-              if (waitingMap.contains(id)) throw new IllegalArgumentException("MessageID have been used.")
-              waitingMap.put(id, (futureEntry, runnable))
-            }
-            channelFuture = rs.writeAndFlush(msg)
             try {
-              channelFuture.addListener(new ChannelFutureListener() {
-                override def operationComplete(future: ChannelFuture) {
-                  if (!future.isSuccess) {
-                    futureEntry.cause = Some(future.cause)
-                    runnable.run
-                  }
-                }
-              })
+              waitingMap.synchronized {
+                if (waitingMap.contains(id)) throw new IllegalArgumentException("MessageID have been used.")
+                waitingMap.put(id, (futureEntry, runnable))
+              }
+              rs.writeAndFlush(msg)
             } catch {
-              case e: Throwable => e.printStackTrace
+              case e: Throwable => {
+                exceptionRef.set(e)
+                runnable.run
+              }
             }
           }
         })
