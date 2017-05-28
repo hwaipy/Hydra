@@ -1,4 +1,5 @@
 package com.hydra.core
+
 import com.hydra.io.MessageClient
 import com.hydra.io.MessageServer
 import com.hydra.io.MessageSession
@@ -14,6 +15,7 @@ import com.hydra.core.MessageType._
 import com.hydra.io.MessageTransport.FutureDirect
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   val port = 55659
@@ -102,30 +104,33 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     assert(f1.isSuccess)
     val invoker1 = client1.asynchronousInvoker()
     val future1 = invoker1.co
-    val latch1 = new CountDownLatch(2)
-    var uC1: Any = None
+    val latch1 = new CountDownLatch(1)
     var uS1: Any = None
-    var uF1: Any = None
-    future1.onComplete { case u => uC1 = u; latch1.countDown }
-    future1.onSuccess { case u => uS1 = u }
-    future1.onFailure { case u => uF1 = u; latch1.countDown }
+    future1.onComplete { case t =>
+      uS1 = t.isSuccess match {
+        case true => t.get
+        case _ => t.failed.get
+      }
+      latch1.countDown
+    }
     assert(latch1.await(2, java.util.concurrent.TimeUnit.SECONDS))
-    assert(uF1.getClass.getSimpleName == "RemoteInvokeException")
-    assert(uF1.asInstanceOf[RemoteInvokeException].getMessage == "Method not found: co.")
+    assert(uS1.getClass.getSimpleName == "RemoteInvokeException")
+    assert(uS1.asInstanceOf[RemoteInvokeException].getMessage == "Method not found: co.")
     client1.stop.await
     val client2 = new MessageClient("", "wrongaddress", port, None)
     val invoker2 = client2.asynchronousInvoker()
     val future2 = invoker2.co2
-    val latch2 = new CountDownLatch(2)
-    var uC2: Any = None
+    val latch2 = new CountDownLatch(1)
     var uS2: Any = None
-    var uF2: Any = None
-    future2.onComplete { case u => uC2 = u; latch2.countDown }
-    future2.onSuccess { case u => uS2 = u }
-    future2.onFailure { case u => uF2 = u; latch2.countDown }
+    future2.onComplete { case t =>
+      uS2 = t.isSuccess match {
+        case true => t.get
+        case _ => t.failed.get
+      }
+      latch2.countDown
+    }
     assert(latch2.await(2, java.util.concurrent.TimeUnit.SECONDS))
-    assert(uS2 == None)
-    assert(uF2.isInstanceOf[RuntimeException])
+    assert(uS2.isInstanceOf[RuntimeException])
     client2.stop
   }
 
@@ -145,7 +150,9 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     val r2 = invoker2.connect("TestClient2")
     assert(r2 == Unit)
     intercept[RemoteInvokeException] {
-      try { val r3 = invoker2.connect("TestClient2") }
+      try {
+        val r3 = invoker2.connect("TestClient2")
+      }
       catch {
         case e: NullPointerException => e.printStackTrace
         case e: Throwable => throw e
@@ -158,8 +165,11 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
   test("Test invoke other client") {
     class Target {
       def v8 = "V8 great!"
+
       def v9 = throw new IllegalArgumentException("V9 not good.")
+
       def v10 = throw new IOException("V10 have problems.")
+
       def v(i: Int, b: Boolean) = "OK"
     }
     val mc1 = new MessageClient("T1-Benz", "localhost", port, new Target)
@@ -237,6 +247,7 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     val oc = MessageClient.newClient("localhost", port, "T4-Benz", new Object {
       def func = new Object() {
         def change() = "Haha"
+
         override def finalize {
         }
       }
@@ -255,8 +266,13 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     val lc = MessageClient.newClient("localhost", port, "T5-Monitor")
     val latch = new CountDownLatch(2)
     lc.addSessionListener(new SessionListener {
-      def sessionConnected(session: String) { latch.countDown }
-      def sessionDisconnected(session: String) { latch.countDown }
+      def sessionConnected(session: String) {
+        latch.countDown
+      }
+
+      def sessionDisconnected(session: String) {
+        latch.countDown
+      }
     })
     val rc = MessageClient.newClient("localhost", port, "T5-Rabit")
     rc.stop.sync
@@ -267,6 +283,7 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
   test("Test Session invoke in Sessoin") {
     class PXITDCHandle {
       var session: MessageClient = null
+
       def begin() {
         val storage = session.blockingInvoker("Storage")
         storage.ask()
@@ -283,6 +300,54 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     val invoker = slocal.blockingInvoker("PXITDC", 2 second)
     invoker.begin()
     s1.stop
+  }
+
+  test("Test invoke other client with anonymous client") {
+    class Target {
+      def v8 = "V8 great!"
+
+      def v9 = throw new IllegalArgumentException("V9 not good.")
+
+      def v10 = throw new IOException("V10 have problems.")
+
+      def v(i: Int, b: Boolean) = "OK"
+    }
+    val mc1 = new MessageClient("T1-Benz", "localhost", port, new Target)
+    val f1 = mc1.start.sync
+    assert(f1.isDone)
+    assert(f1.isSuccess)
+    mc1.blockingInvoker().connect("T1-Benz")
+    val checker1 = MessageClient.newClient("localhost", port)
+    val checker2 = MessageClient.newClient("localhost", port)
+    val benzChecker1 = checker1.blockingInvoker("T1-Benz")
+    val v8r1 = benzChecker1.v8
+    assert(v8r1 == "V8 great!")
+    intercept[RemoteInvokeException] {
+      val v9r = benzChecker1.v9
+    }
+    intercept[RemoteInvokeException] {
+      val v10r = benzChecker1.v10
+    }
+    assert(benzChecker1.v(1, false) == "OK")
+    intercept[RemoteInvokeException] {
+      benzChecker1.v(false, false)
+    }
+    val benzChecker2 = checker1.blockingInvoker("T1-Benz")
+    val v8r2 = benzChecker2.v8
+    assert(v8r2 == "V8 great!")
+    intercept[RemoteInvokeException] {
+      val v9r = benzChecker2.v9
+    }
+    intercept[RemoteInvokeException] {
+      val v10r = benzChecker2.v10
+    }
+    assert(benzChecker2.v(1, false) == "OK")
+    intercept[RemoteInvokeException] {
+      benzChecker2.v(false, false)
+    }
+    mc1.stop.await
+    checker1.stop.await
+    checker2.stop.await
   }
 }
 

@@ -44,8 +44,9 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.dynamics
+import scala.language.postfixOps
 
 object MessageTransport {
   //TODO: The configuration is not safe here. Need a immutable one.
@@ -162,7 +163,7 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
   def blockingInvoker(target: String = "", timeout: Duration = 2 second) = new BlockingRemoteObject(this, target, timeout = timeout)
 
   def sendMessage(msg: Message) = {
-//    println(s"Send message $msg")
+    //    println(s"Send message $msg")
     require(msg.messageType == Request)
     handler.future(channel, msg, msg.messageID)
   }
@@ -174,13 +175,13 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 
   def connect() = this.asynchronousInvoker().connect(name)
 
-  private val sessionListeners: collection.concurrent.Map[SessionListener, Int] = new ConcurrentHashMap[SessionListener, Int]
+  private val sessionListeners: collection.concurrent.Map[SessionListener, Int] = new ConcurrentHashMap[SessionListener, Int]().asScala
 
   def addSessionListener(listener: SessionListener) {
     sessionListeners.put(listener, 0)
   }
 
-  def removeSessionListener(listener: Tuple2[String => Unit, String => Unit]) {
+  def removeSessionListener(listener: SessionListener) {
     sessionListeners.remove(listener)
   }
 
@@ -194,7 +195,7 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 }
 
 object MessageClient {
-  def newClient(host: String, port: Int, name: String, invokeHandler: Any = None, timeout: Duration = 2 second) = {
+  def newClient(host: String, port: Int, name: String = "", invokeHandler: Any = None, timeout: Duration = 2 second) = {
     val client = new MessageClient(name, host, port, invokeHandler)
     val f = client.start
     f.await(timeout.toMillis)
@@ -202,7 +203,7 @@ object MessageClient {
       client.blockingInvoker().connect(name)
       client
     } else {
-//      println(f)
+      //      println(f)
       f.cause.printStackTrace
       throw new RuntimeException(f.cause)
     }
@@ -230,6 +231,13 @@ protected class MessagePackEncoder extends MessageToByteEncoder[Message] {
     }
   }
 }
+
+//protected class MessageDecoder extends ByteToMessageDecoder {
+//  override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: java.util.List[Object]) {
+//    val generatorAttr = ctx.channel.attr(AttributeKey.valueOf[MessageGenerator]("Generator"))
+//
+//  }
+//}
 
 protected class MessagePackDecoder extends ByteToMessageDecoder {
 
@@ -411,7 +419,11 @@ private class MessageServerInvokeHandler(ctx: ChannelHandlerContext) {
     session match {
       case None => {
         val sessions = MessageSession.getSessions
-        session = Some(MessageSession.create(name, ctx))
+        val sessionName = name match {
+          case "" => s"AnanonymousClient_${MessageServerInvokeHandler.ananonymousClientID.getAndIncrement}"
+          case n => n
+        }
+        session = Some(MessageSession.create(sessionName, ctx))
         ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).set(session.get)
         sessions.foreach(s => s.writeAndFlush(MessageBuilder.newBuilder.asRequest("remoteClientConnected", session.get.name :: Nil).to(s.name).objectID(-1).+=(Message.KeyNoResponse, true).create))
       }
@@ -428,6 +440,7 @@ private class MessageServerInvokeHandler(ctx: ChannelHandlerContext) {
 }
 
 private object MessageServerInvokeHandler {
+  private val ananonymousClientID = new AtomicLong(10)
 }
 
 trait SessionListener {
@@ -565,7 +578,7 @@ protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient)
   }
 
   override protected def request(request: Message, ctx: ChannelHandlerContext) {
-//    println(s"Read message $request")
+    //    println(s"Read message $request")
     try {
       val objectID = request.objectID match {
         case None => 0
@@ -788,7 +801,7 @@ private class InvokeItem(client: MessageClient, target: String, id: Long = 0, na
     case (name, value) if name == null || name.isEmpty => argsList += value
     case (name, value) =>
       if (Message.Preserved.contains(name)) throw new IllegalArgumentException(s"${name} is preserved.")
-      else namedArgsMap += (name -> value)
+      else namedArgsMap.put(name, value)
   })
 
   def sendMessage = client.sendMessage(toMessage)
