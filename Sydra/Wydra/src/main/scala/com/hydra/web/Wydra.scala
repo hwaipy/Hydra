@@ -60,8 +60,10 @@ object WydraApp extends App {
   val webServer = new Server(webPort)
 
   val servletContext = new ServletContextHandler(ServletContextHandler.SESSIONS)
-  servletContext.addServlet(new ServletHolder(new ClientDocumentServlet()), ClientDocumentServlet.path)
-  servletContext.setContextPath("/servlet")
+  val clientDocumentServletHolder = new ServletHolder(new ClientDocumentServlet())
+  servletContext.addServlet(clientDocumentServletHolder, ClientDocumentServlet.path)
+  servletContext.addServlet(new ServletHolder(new MsgPackRequestServlet()), MsgPackRequestServlet.path)
+  servletContext.setContextPath("/wydra")
 
   val fileContext = new ResourceHandler()
   fileContext.setResourceBase("res")

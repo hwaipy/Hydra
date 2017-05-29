@@ -1,16 +1,17 @@
 package com.hydra.web
 
 import java.util.regex.Pattern
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import com.hwaipy.hydrogen.web.servlet.AsyncHttpServlet
 
 object ClientDocumentServlet {
   val path = "/documents/*"
   val pathPattern = Pattern.compile("/documents/(.*)\\??.*")
 }
 
-class ClientDocumentServlet extends HttpServlet {
+class ClientDocumentServlet extends AsyncHttpServlet {
 
-  override def doGet(req: HttpServletRequest, resp: HttpServletResponse) {
+  override def doGetAsync(req: HttpServletRequest, resp: HttpServletResponse) {
     val matcher = ClientDocumentServlet.pathPattern.matcher(req.getRequestURI)
     if (!matcher.find) throw new RuntimeException("Wrong URL")
     val name = matcher.group(1)
