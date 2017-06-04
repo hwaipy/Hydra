@@ -5,68 +5,46 @@
     <script type="text/javascript" src="../lib/scripts/jquery-3.2.1.min.js"></script>
     <script type="text/javascript" src="../lib/scripts/jquery.tablesorter.min.js"></script>
     <script type="text/javascript" src="../lib/scripts/msgpack.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/showdown.min.js"></script>
     <script type="text/javascript" src="monitor.js"></script>
     <link rel="stylesheet" href="../lib/styles/tablesorter/blue/style.css" type="text/css"/>
+    <link rel="stylesheet" href="monitor.css" type="text/css"/>
 </head>
 <body>
 <p id="debug-trigger" class="debug-trigger">Trigger</p>
+<p class="select-note">更新频率</p>
+<select id="refresh-frequency">
+    <option value="1">非常频繁 (1 s)</option>
+    <option value="2">频繁 (2 s)</option>
+    <option value="5">一般 (5 s)</option>
+    <option value="60">慢 (60 s)</option>
+</select>
 <table id="client-table" border="1" class="tablesorter">
     <thead>
     <tr>
-        <th class="header">First Name</th>
-        <th class="header">Last Name</th>
-        <th class="header">Age</th>
-        <th class="header">Total</th>
-        <th class="header">Discount</th>
-        <th class="header">Date</th>
-        <th class="header">State</th>
+        <th class="header">ClientID</th>
+        <th class="header">Name</th>
+        <th class="header">ConnectedTime</th>
+        <th class="header">MessageSend</th>
+        <th class="header">MessageReceived</th>
+        <th class="header">BytesSend</th>
+        <th class="header">BytesReceived</th>
     </tr>
     </thead>
-    <tr id="client-id-1">
-        <td>Peter</td>
-        <td>Parker</td>
-        <td>28</td>
-        <td>$9.99</td>
-        <td>20%</td>
-        <td>Jul 6, 2006 8:14 AM</td>
-        <td>已审核</td>
-    </tr>
-    <tr id="client-id-2">
-        <td>John</td>
-        <td>Hood</td>
-        <td>33</td>
-        <td>$19.99</td>
-        <td>25%</td>
-        <td>Dec 10, 2002 5:14 AM</td>
-        <td>已审核</td>
-    </tr>
-    <tr id="client-id-3">
-        <td>Clark</td>
-        <td>Kent</td>
-        <td>18</td>
-        <td>$15.89</td>
-        <td>44%</td>
-        <td>Jan 12, 2003 11:14 AM</td>
-        <td>已作废</td>
-    </tr>
-    <tr id="client-id-4">
-        <td>Bruce</td>
-        <td>Almighty</td>
-        <td>45</td>
-        <td>$153.19</td>
-        <td>44%</td>
-        <td>Jan 18, 2001 9:12 AM</td>
-        <td>待审核</td>
-    </tr>
-    <tr id="client-id-5">
-        <td>Bruce</td>
-        <td>Evans</td>
-        <td>22</td>
-        <td>$13.19</td>
-        <td>11%</td>
-        <td>Jan 18, 2007 9:12 AM</td>
-        <td>已生效</td>
+    <tr id="TEMP_u2u484u8248923748912ujoawef">
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
     </tr>
 </table>
+
+<div id="summary">
+
+</div>
+
 </body>
 </html>
