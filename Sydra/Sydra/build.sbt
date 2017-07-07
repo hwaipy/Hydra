@@ -14,3 +14,5 @@ libraryDependencies += "io.netty" % "netty-all" % "4.1.4.Final"
 libraryDependencies += "io.spray" %%  "spray-json" % "1.3.3"
 libraryDependencies += "org.pegdown" % "pegdown" % "1.6.0"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
+scalacOptions ++= Seq("-feature")
+scalacOptions ++= Seq("-deprecation")

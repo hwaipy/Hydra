@@ -1,9 +1,7 @@
 package com.hydra.storage
 
 import java.nio.file.Path
-import scala.collection.JavaConversions._
-import scala.math._
-import ElementType._
+
 import com.hydra.io.MessageClient
 import java.nio.file.Paths
 import java.util.Properties
@@ -11,6 +9,9 @@ import java.io.IOException
 import java.io.FileNotFoundException
 import java.io.File
 import java.io.FileInputStream
+
+import com.hydra.hap.SydraAppHandler
+
 import scala.io.Source
 
 object StorageService extends App {
@@ -46,7 +47,21 @@ object StorageService extends App {
   println(serverAddress)
   println(serverPort)
 
-  val client = MessageClient.newClient(serverAddress, serverPort, "StorageService", storageService)
+  lazy val clientName = Configuration.getProperty("clientName", "StorageService")
+  val client = MessageClient.newClient(serverAddress, serverPort, clientName, storageService)
+
+//  val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "doc.md") {
+//    override def getSummary() = {
+//      (<html>
+//        <h1>
+//          {clientName}
+//        </h1>
+//        <p></p>
+//        <p>running...</p>
+//      </html>).toString
+//    }
+//  })
+
   println("Storage Service online.")
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
   println("Stoping Storage Service...")

@@ -30,6 +30,10 @@ function refreshTrigger() {
 function updateClientInformation() {
     requestMessage({"Request": ["sessionsInformation"]}, function (msg) {
         msg = msg[0]
+        if (typeof msg === "string") {
+            console.warn(msg)
+            return
+        }
         var informations = [], newTableIDs = []
         for (var i = 0; i < msg.length; i++) {
             var ci = new ClientInformation(msg[i])

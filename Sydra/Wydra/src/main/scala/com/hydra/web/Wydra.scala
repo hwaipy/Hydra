@@ -39,7 +39,7 @@ object WydraApp extends App {
   } catch {
     case e: Throwable => 20102
   }
-  lazy val clientName = Configuration.getProperty("client", "Wydra")
+  lazy val clientName = Configuration.getProperty("clientName", "Wydra")
   val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "doc.md") {
     override def getSummary() = {
       (<html>
