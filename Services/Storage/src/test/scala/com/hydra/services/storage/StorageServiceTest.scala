@@ -51,7 +51,6 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   test("Test listMetaData") {
     val service = new StorageService(testSpace)
     val e = service.listElements("", "/", true)
-    println(e)
   }
 
   test("Test read") {
