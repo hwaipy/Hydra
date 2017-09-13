@@ -12,6 +12,10 @@ $(document).ready(function () {
         $(this)[0].setAttribute('order', tableSortingOrder)
         updateSorting()
     })
+    $(".tablesorter").tablesorter({
+        theme: 'blue',
+        widthFixed: true,
+    })
 
     if (document.addEventListener) {
         document.addEventListener("keydown", keydown, false)
@@ -72,6 +76,7 @@ function keydown(e) {
 
 var refreshCount = 0
 var refreshPeriod = 3
+
 function refreshTrigger() {
     refreshCount++
     if (refreshCount >= refreshPeriod) {
@@ -91,6 +96,7 @@ function updateFilesInformation() {
 
 var tableSortingColumn = 0
 var tableSortingOrder = 1
+
 function sortFun(a, b) {
     var valA = document.getElementById('path:' + a.id).children[tableSortingColumn].getAttribute('value')
     var valB = document.getElementById('path:' + b.id).children[tableSortingColumn].getAttribute('value')
@@ -106,6 +112,7 @@ function sortFun(a, b) {
     if (valA > valB) return 1 * tableSortingOrder
     return 0
 }
+
 function sortBeforeLoad(items) {
     var fun = function (a, b) {
         var valA = [a.creationTime, a.lastModifiedTime, a.size][tableSortingColumn]
@@ -245,6 +252,7 @@ function FileItem(msg) {
     this.sizeFormatted = formatSize(this.size)
 
     this.editAttributionTds = editAttributionTds
+
     function editAttributionTds(tds) {
         tds[0].setAttribute('value', this.creationTime)
         tds[0].innerHTML = this.creationTimeFormatted
@@ -256,8 +264,8 @@ function FileItem(msg) {
     }
 
     function formatSize(size) {
-        if (size < 0)return '--'
-        if (size < 1000)return size + ' B'
+        if (size < 0) return '--'
+        if (size < 1000) return size + ' B'
         var mS = size
         var me = 0
         while (mS >= 10000) {
@@ -285,7 +293,7 @@ function FileItem(msg) {
 
     function fillToTwoDigits(num) {
         var ns = '' + num
-        if (ns.length >= 2)return ns
+        if (ns.length >= 2) return ns
         else return '0' + ns
     }
 
@@ -440,7 +448,6 @@ function selectNextVisibleRow(currentPath, reverse) {
     var newIndex = preIndex + (reverse ? -1 : 1)
     if (newIndex < 0) newIndex = 0
     if (newIndex >= visiblePaths.length) newIndex = visiblePaths.length - 1
-    console.log('new idnex is ' + newIndex)
     if (newIndex == preIndex) return
     selectInFileTable(visiblePaths[newIndex])
 }
@@ -448,8 +455,8 @@ function selectNextVisibleRow(currentPath, reverse) {
 function isVisible(node) {
     while (true) {
         node = node.parentNode()
-        if (node == null)return true
-        if (node.collapsed())return false
+        if (node == null) return true
+        if (node.collapsed()) return false
     }
 }
 
@@ -457,7 +464,7 @@ function routes(path) {
     function parents(p, stack) {
         var index = p.lastIndexOf('/')
         var pp = p.substr(0, index)
-        if (pp.length == 0)return
+        if (pp.length == 0) return
         else {
             stack.push(pp)
             parents(pp, stack)
@@ -471,6 +478,7 @@ function routes(path) {
 }
 
 var nodeLoadListeners = []
+
 function onNodeLoad(path) {
     for (var i = 0; i < nodeLoadListeners.length; i++) {
         nodeLoadListeners[i](path)
@@ -487,53 +495,81 @@ function selectInFileTable(path) {
 function updateHipTableEntryList(selectedPath) {
     var tr = document.getElementById('path:' + selectedPath)
     if (tr.getAttribute('type') == 'hip') {
-        console.log('Need a native mathod to get hip informations.')
         doUpdateHipTableEntryList(selectedPath)
+    } else {
+        var table = document.getElementById('hip-table').getElementsByTagName('tbody')[0]
+        var trs = table.getElementsByTagName('tr')
+        var trsLength = trs.length
+        for (var i = 0; i < trsLength; i++) {
+            table.removeChild(trs[0])
+        }
+        document.getElementById('HipEntryNote').innerHTML = ''
     }
 }
 
 function doUpdateHipTableEntryList(path, onFinish) {
-    requestMessage({"Request": ["listElements", "", path, true], "To": "StorageService"}, function (msg) {
+    requestMessage({"Request": ["getHipInformation", "", path, true], "To": "StorageService"}, function (msg) {
             msg = msg[0]
             if (typeof msg === "string") {
                 console.warn(msg)
                 return
             }
-            var items = []
-            for (var i = 0; i < msg.length; i++) {
-                var fi = new HipEntry(msg[i])
-                items.push(fi)
+            var items = msg.items
+            var hipEntries = [], newTableIDs = []
+            var note = msg.note
+            for (var i = 0; i < items.length; i++) {
+                var fi = new HipEntry(items[i])
+                if (fi.type == 'Content') {
+                    hipEntries.push(fi)
+                    newTableIDs.push(fi.entryID)
+                }
             }
-            // console.log(items)
-            // sortBeforeLoad(items)
-            // var newTablePaths = []
-            // for (var i = 0; i < items.length; i++) {
-            //     var fi = items[i]
-            //     newTablePaths.push(fi.path)
-            // }
-            // var tableBody = document.getElementById('file-table').getElementsByTagName('tbody')[0]
-            // var existTablePaths = getExistChildPaths(tableBody, path)
-            // for (var i = 0; i < existTablePaths.length; i++) {
-            //     existTablePath = existTablePaths[i]
-            //     var keep = $.inArray(existTablePath, newTablePaths) >= 0
-            //     if (!keep) {
-            //         $("#file-table").treetable("removeNode", existTablePath)
-            //     }
-            // }
-            // for (var i = 0; i < newTablePaths.length; i++) {
-            //     var newTablePath = newTablePaths[i]
-            //     var index = $.inArray(newTablePath, existTablePaths)
-            //     var item = items[i]
-            //     if (index == -1) {
-            //         createTableRow('file-table', parentNode, item)
-            //     } else {
-            //         var tr = document.getElementById(item.pathID)
-            //         updateTableRow(tr, item)
-            //     }
-            // }
-            // if (onFinish != undefined) {
-            //     onFinish()
-            // }
+            var table = document.getElementById('hip-table').getElementsByTagName('tbody')[0]
+            var trs = table.getElementsByTagName('tr')
+            var existTableIDs = []
+            var existTableRows = []
+            for (var i = 0; i < trs.length; i++) {
+                existTableIDs.push(trs[i].getAttribute('id'))
+                existTableRows.push(trs[i])
+            }
+            for (var i = 0; i < existTableIDs.length; i++) {
+                existTableID = existTableIDs[i]
+                var keep = $.inArray(existTableID, newTableIDs) >= 0
+                if (!keep) {
+                    table.removeChild(existTableRows[i])
+                }
+            }
+            for (var i = 0; i < newTableIDs.length; i++) {
+                var newTableID = newTableIDs[i]
+                var index = $.inArray(newTableID, existTableIDs)
+                var entry = hipEntries[i]
+                var contents = entry.contents()
+                if (index == -1) {
+                    var tr = document.createElement('tr')
+                    tr.setAttribute('id', entry.entryID)
+                    table.appendChild(tr)
+                    for (var j = 0; j < contents.length; j++) {
+                        var td = document.createElement('td')
+                        var text = document.createTextNode(contents[j])
+                        td.appendChild(text)
+                        tr.appendChild(td)
+                    }
+                    var onClockUtilFunction = function (name) {
+                        return function () {
+                            onClickTableRow(name)
+                        }
+                    }
+                    $('#' + entry.entryID).click(onClockUtilFunction(entry.name))
+                } else {
+                    var tr = document.getElementById(entry.entryID)
+                    var tds = tr.getElementsByTagName('td')
+                    for (var j = 0; j < tds.length; j++) {
+                        tds[j].innerHTML = contents[j]
+                    }
+                }
+            }
+            $(".tablesorter").trigger("update")
+            document.getElementById('HipEntryNote').innerHTML = note
         }
     )
 }
@@ -542,7 +578,6 @@ function selectInHipTable() {
 }
 
 function HipEntry(msg) {
-    console.log(msg)
     this.name = msg.Name
     this.path = msg.Path
     this.parentPath = this.path.substring(0, this.path.lastIndexOf('/'))
@@ -551,20 +586,21 @@ function HipEntry(msg) {
     this.lastModifiedTime = msg.LastModifiedTime
     // this.pathID = 'path:' + msg.Path
     this.type = msg.Type
-    // if (this.type == 'Content') {
-    //     this.size = msg.Size
-    // } else {
-    //     this.size = -1
-    // }
+    this.entryID = 'hip-id-' + this.name
+    if (this.type == 'Content') {
+        this.size = msg.Size
+    } else {
+        this.size = -1
+    }
     // this.itemType = 'Unknown'
     // if (this.name.endsWith('.hip') && this.type == 'Collection') this.itemType = 'hip'
     // else if (this.type == 'Collection') this.itemType = 'folder'
     // else if (this.type == 'Content') this.itemType = 'file'
     //
     // this.creationTimeFormatted = formatDateTime(this.creationTime)
-    // this.lastModifiedTimeFormatted = formatDateTime(this.lastModifiedTime)
+    this.lastModifiedTimeFormatted = formatDateTime(this.lastModifiedTime)
     // this.lastAccessTimeFormatted = formatDateTime(this.lastAccessTime)
-    // this.sizeFormatted = formatSize(this.size)
+    this.sizeFormatted = formatSize(this.size)
     //
     // this.editAttributionTds = editAttributionTds
     // function editAttributionTds(tds) {
@@ -577,45 +613,58 @@ function HipEntry(msg) {
     //     return tds
     // }
     //
-    // function formatSize(size) {
-    //     if (size < 0)return '--'
-    //     if (size < 1000)return size + ' B'
-    //     var mS = size
-    //     var me = 0
-    //     while (mS >= 10000) {
-    //         mS /= 10
-    //         me++
-    //     }
-    //     var validValue = parseInt(mS + 0.5)
-    //     var vv = validValue * Math.pow(10, me)
-    //     var unitPre = 0
-    //     while (vv >= 1000) {
-    //         vv /= 1000
-    //         unitPre++
-    //     }
-    //     var unitPres = ['B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
-    //     return vv + ' ' + unitPres[unitPre]
-    // }
-    //
-    // function formatDateTime(time) {
-    //     var date = new Date(time)
-    //     var fullDate = getFullDate(date)
-    //     var fullTime = getFullTime(date)
-    //     var currentDate = getFullDate(new Date())
-    //     return (currentDate == fullDate ? '' : (fullDate + ' ')) + fullTime
-    // }
-    //
-    // function fillToTwoDigits(num) {
-    //     var ns = '' + num
-    //     if (ns.length >= 2)return ns
-    //     else return '0' + ns
-    // }
-    //
-    // function getFullDate(date) {
-    //     return date.getFullYear() + '-' + fillToTwoDigits(date.getMonth() + 1) + '-' + fillToTwoDigits(date.getDate())
-    // }
-    //
-    // function getFullTime(date) {
-    //     return fillToTwoDigits(date.getHours()) + ':' + fillToTwoDigits(date.getMinutes()) + ':' + fillToTwoDigits(date.getSeconds())
-    // }
+    function formatSize(size) {
+        if (size < 0) return '--'
+        if (size < 1000) return size + ' B'
+        var mS = size
+        var me = 0
+        while (mS >= 10000) {
+            mS /= 10
+            me++
+        }
+        var validValue = parseInt(mS + 0.5)
+        var vv = validValue * Math.pow(10, me)
+        var unitPre = 0
+        while (vv >= 1000) {
+            vv /= 1000
+            unitPre++
+        }
+        var unitPres = ['B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+        return vv + ' ' + unitPres[unitPre]
+    }
+
+    function formatDateTime(time) {
+        var date = new Date(time)
+        var fullDate = getFullDate(date)
+        var fullTime = getFullTime(date)
+        var currentDate = getFullDate(new Date())
+        return (currentDate == fullDate ? '' : (fullDate + ' ')) + fullTime
+    }
+
+    function fillToTwoDigits(num) {
+        var ns = '' + num
+        if (ns.length >= 2) return ns
+        else return '0' + ns
+    }
+
+    function getFullDate(date) {
+        return date.getFullYear() + '-' + fillToTwoDigits(date.getMonth() + 1) + '-' + fillToTwoDigits(date.getDate())
+    }
+
+    function getFullTime(date) {
+        return fillToTwoDigits(date.getHours()) + ':' + fillToTwoDigits(date.getMinutes()) + ':' + fillToTwoDigits(date.getSeconds())
+    }
+
+    this.contents = contents
+
+    function contents() {
+        var dotIndex = this.name.lastIndexOf(".")
+        var entryName = this.name.substring(0, dotIndex)
+        var type = this.name.substring(dotIndex + 1, this.name.length)
+        if (dotIndex == -1) {
+            entryName = this.name
+            type = "-"
+        }
+        return [entryName, type, this.lastModifiedTimeFormatted, this.sizeFormatted]
+    }
 }

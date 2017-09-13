@@ -139,8 +139,7 @@ function ClientInformation(msg) {
 
     this.contents = contents
     function contents() {
-        return [this.id, this.name, formatTimePeriod(new Date().getTime() - this.connectedTime), this.messageSend, this.messageReceived, this.bytesSend, this.bytesReceived
-        ]
+        return [this.id, this.name, formatTimePeriod(new Date().getTime() - this.connectedTime), this.messageSend, this.messageReceived, this.bytesSend, this.bytesReceived]
     }
 
     function formatTimePeriod(ms) {

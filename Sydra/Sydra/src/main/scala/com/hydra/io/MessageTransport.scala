@@ -106,7 +106,6 @@ class MessageServer(port: Int) {
   protected lazy val workerGroup: EventLoopGroup = new NioEventLoopGroup
 
   def start = {
-    println("start the server")
     val server = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])

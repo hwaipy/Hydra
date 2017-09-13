@@ -50,17 +50,17 @@ object StorageService extends App {
   lazy val clientName = Configuration.getProperty("clientName", "StorageService")
   val client = MessageClient.newClient(serverAddress, serverPort, clientName, storageService)
 
-//  val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "doc.md") {
-//    override def getSummary() = {
-//      (<html>
-//        <h1>
-//          {clientName}
-//        </h1>
-//        <p></p>
-//        <p>running...</p>
-//      </html>).toString
-//    }
-//  })
+  //  val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "doc.md") {
+  //    override def getSummary() = {
+  //      (<html>
+  //        <h1>
+  //          {clientName}
+  //        </h1>
+  //        <p></p>
+  //        <p>running...</p>
+  //      </html>).toString
+  //    }
+  //  })
 
   println("Storage Service online.")
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
@@ -137,5 +137,12 @@ class StorageService(basePath: Path) {
     val e = storage.getStorageElement(path).exists
     storage.clearPermission
     e
+  }
+
+  def getHipInformation(user: String, path: String) = {
+    storage.updatePermission(new Permission(user))
+    val info = storage.getHipInformation(path)
+    storage.clearPermission
+    info
   }
 }

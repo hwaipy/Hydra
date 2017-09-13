@@ -50,6 +50,16 @@ class Storage(val basePath: Path) {
   }
 
   //def getStorageElement(path: String, cacheable: Boolean) = doGetStorageElement(path, cacheable)
+  def getHipInformation(path: String) = {
+    val element = getStorageElement(path)
+    if (!element.name.toLowerCase.endsWith(".hip") || element.getType != ElementType.Collection) throw new IOException(s"Path is not a HIP: $path")
+    val elements = element.listElements
+    val (note, items) = elements.indexWhere(e => e.name == "note") match {
+      case -1 => ("", elements)
+      case i => (new String(elements(i).readAll), elements.filter(_.name != "note"))
+    }
+    Map("note" -> note, "items" -> items.map(e => e.metaDataMap(true)))
+  }
 
   private def doGetStorageElement(path: String, cacheable: Boolean): StorageElement = {
     val formattedPath = formatPath(path)
@@ -175,6 +185,12 @@ class StorageElement(private val storage: Storage, val path: String) {
     raf.read(buffer)
     raf.close
     buffer
+  }
+
+  def readAll = {
+    validationVerify(getType == Content, "Path [" + path + "] is not content.")
+    permissionVerify(this, Read)
+    read(0, size.toInt)
   }
 
   def append(data: Array[Byte]) {
