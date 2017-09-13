@@ -55,7 +55,7 @@ object MessageTransport {
     val propertiesFile = new File("Sydra.properties")
     try {
       val propertiesIn = new FileInputStream(propertiesFile)
-      properties.load(propertiesIn);
+      properties.load(propertiesIn)
       propertiesIn.close
     } catch {
       case ex: FileNotFoundException => {
@@ -70,7 +70,7 @@ object MessageTransport {
     System.setProperty("log4j.configurationFile", properties.getProperty("log4j.configurationFile", "./config/log4j.xml"))
     properties
   }
-  val Logger = LoggerFactory.getLogger("MessageTransport")
+  lazy val Logger = LoggerFactory.getLogger("MessageTransport")
   implicit lazy val FutureDirect: ExecutionContext = SingleThreadExecutionContext
 }
 
@@ -106,7 +106,8 @@ class MessageServer(port: Int) {
   protected lazy val workerGroup: EventLoopGroup = new NioEventLoopGroup
 
   def start = {
-    new ServerBootstrap()
+    println("start the server")
+    val server = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])
       .childHandler(new ChannelInitializer[SocketChannel]() {
@@ -122,11 +123,15 @@ class MessageServer(port: Int) {
       .option(ChannelOption.SO_BACKLOG.asInstanceOf[ChannelOption[Any]], 128)
       .childOption(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], false)
       .bind(port)
+    MessageTransport.Logger.info(s"Hydra Server started on port $port.")
+    server
   }
 
   def stop = {
+    MessageTransport.Logger.info("Hydra Server stopping.")
     workerGroup.shutdownGracefully
     bossGroup.shutdownGracefully
+    MessageTransport.Logger.info("Hydra Server stopped.")
   }
 }
 
@@ -312,13 +317,16 @@ protected class MessageServerHandler(factory: ChannelHandlerContext => Any) exte
 
   override def channelActive(ctx: ChannelHandlerContext) {
     MessageTransport.Logger.info(s"A new connection actived: $ctx")
+
     def flatter(obj: Any, target: Option[String]): RemoteObject = {
       obj match {
         case ro: RemoteObject => ro
         case o => throw new RuntimeException(s"Object Type $obj.getClass not recgonized.")
       }
     }
+
     def shapper(name: String, id: Long): RemoteObject = RemoteObject(name, id)
+
     ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).set(flatter)
     ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).set(shapper)
   }
@@ -399,6 +407,7 @@ protected class MessageServerHandler(factory: ChannelHandlerContext => Any) exte
         case _ =>
       }
     }
+
     deal(msg.content)
   }
 
@@ -510,6 +519,7 @@ protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient)
         case None => remoteReferenceKeyMap.keys.filter(key => key > 0).foreach(key => fin(key, target))
         case Some(id) => fin(id, target)
       }
+
       def fin(id: Long, target: String) {
         remoteReferenceKeyMap.get(id) match {
           case None =>
@@ -662,7 +672,9 @@ protected class MessageClientHandler(defaultInvoker: Any, client: MessageClient)
         case o => instanceRemoteObject(obj, target)
       }
     }
+
     def shapper(name: String, id: Long): RemoteObject = RemoteObject(client, name, id)
+
     ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).set(flatter)
     ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).set(shapper)
   }

@@ -13,7 +13,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import scala.io.Source
 
 object WydraApp extends App {
-  lazy val Configuration = {
+  val Configuration = {
     val properties = new Properties
     val propertiesFile = new File("Wydra.properties")
     try {
