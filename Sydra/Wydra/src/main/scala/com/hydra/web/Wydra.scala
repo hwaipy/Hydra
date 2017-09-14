@@ -33,13 +33,13 @@ object WydraApp extends App {
     System.setProperty("log4j.configurationFile", properties.getProperty("log4j.configurationFile", "./config/log4j.xml"))
     properties
   }
-  lazy val serverAddress = Configuration.getProperty("messageserver.address", "localhost")
-  lazy val serverPort = try {
+  val serverAddress = Configuration.getProperty("messageserver.address", "localhost")
+  val serverPort = try {
     Configuration.getProperty("messageserver.port").toInt
   } catch {
     case e: Throwable => 20102
   }
-  lazy val clientName = Configuration.getProperty("clientName", "Wydra")
+  val clientName = Configuration.getProperty("clientName", "Wydra")
   val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "doc.md") {
     override def getSummary() = {
       (<html>

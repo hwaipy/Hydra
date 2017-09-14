@@ -138,9 +138,9 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 
   import com.hydra.core.MessageType._
 
-  private lazy val workerGroup: EventLoopGroup = new NioEventLoopGroup
-  private lazy val handler = new MessageClientHandler(invokeHandler, this)
-  private lazy val channelFuture = new Bootstrap()
+  private val workerGroup: EventLoopGroup = new NioEventLoopGroup
+  private val handler = new MessageClientHandler(invokeHandler, this)
+  private val channelFuture = new Bootstrap()
     .group(workerGroup)
     .channel(classOf[NioSocketChannel])
     .option(ChannelOption.SO_KEEPALIVE.asInstanceOf[ChannelOption[Any]], true)
@@ -154,7 +154,7 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
       }
     })
     .connect(host, port)
-  private lazy val channel = channelFuture.channel.asInstanceOf[SocketChannel]
+  private val channel = channelFuture.channel.asInstanceOf[SocketChannel]
 
   def start = channelFuture
 
@@ -164,16 +164,15 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 
   def asynchronousInvoker(target: String = "") = new AsynchronousRemoteObject(this, target)
 
-  def blockingInvoker(target: String = "", timeout: Duration = 2 second) = new BlockingRemoteObject(this, target, timeout = timeout)
+  def blockingInvoker(target: String = "", timeout: Duration = 10 second) = new BlockingRemoteObject(this, target, timeout = timeout)
 
   def sendMessage(msg: Message) = {
-    //    println(s"Send message $msg")
     require(msg.messageType == Request)
     handler.future(channel, msg, msg.messageID)
   }
 
   def requestMessage(msg: Message, timeout: Duration) = {
-    val future = this.sendMessage(msg);
+    val future = this.sendMessage(msg)
     Await.result[Any](future, timeout)
   }
 
@@ -199,7 +198,7 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 }
 
 object MessageClient {
-  def newClient(host: String, port: Int, name: String = "", invokeHandler: Any = None, timeout: Duration = 2 second) = {
+  def newClient(host: String, port: Int, name: String = "", invokeHandler: Any = None, timeout: Duration = 10 second) = {
     val client = new MessageClient(name, host, port, invokeHandler)
     val f = client.start
     f.await(timeout.toMillis)
@@ -207,9 +206,11 @@ object MessageClient {
       client.blockingInvoker().connect(name)
       client
     } else {
-      //      println(f)
-      f.cause.printStackTrace
-      throw new RuntimeException(f.cause)
+      if (f.cause() == null) {
+        throw new RuntimeException("Timeout on start client.")
+      } else {
+        throw new RuntimeException(f.cause)
+      }
     }
   }
 }
@@ -767,7 +768,7 @@ class RemoteObject protected(val remoteName: String, val remoteID: Long) {
 protected abstract class DynamicRemoteObject(client: MessageClient, remoteName: String = "", remoteID: Long = 0, core: Option[RemoteObject] = None) extends RemoteObject(remoteName, remoteID) with Dynamic {
   def asMessageRemoteObject = new MessageRemoteObject(client, remoteName, remoteID, Some(this))
 
-  def asBlockingRemoteObject(timeout: Duration = 2 second) = new BlockingRemoteObject(client, remoteName, remoteID, timeout, Some(this))
+  def asBlockingRemoteObject(timeout: Duration = 10 second) = new BlockingRemoteObject(client, remoteName, remoteID, timeout, Some(this))
 
   def asAsynchronousRemoteObject = new AsynchronousRemoteObject(client, remoteName, remoteID, Some(this))
 
@@ -789,7 +790,7 @@ class MessageRemoteObject(client: MessageClient, remoteName: String = "", remote
   def applyDynamicNamed(name: String)(args: (String, Any)*): Message = new InvokeItem(client, remoteName, remoteID, name)(args: _*).toMessage
 }
 
-class BlockingRemoteObject(client: MessageClient, remoteName: String = "", remoteID: Long = 0, timeout: Duration = 2 second, core: Option[RemoteObject] = None) extends DynamicRemoteObject(client, remoteName, remoteID, core) {
+class BlockingRemoteObject(client: MessageClient, remoteName: String = "", remoteID: Long = 0, timeout: Duration = 10 second, core: Option[RemoteObject] = None) extends DynamicRemoteObject(client, remoteName, remoteID, core) {
   def selectDynamic(name: String): Any = new InvokeItem(client, remoteName, remoteID, name)().requestMessage(timeout)
 
   def applyDynamic(name: String)(args: Any*): Any = new InvokeItem(client, remoteName, remoteID, name)(args.map(m => ("", m)): _*).requestMessage(timeout)
