@@ -34,6 +34,7 @@ function updateClientInformation() {
             console.warn(msg)
             return
         }
+        console.log(msg)
         var informations = [], newTableIDs = []
         for (var i = 0; i < msg.length; i++) {
             var ci = new ClientInformation(msg[i])
