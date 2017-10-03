@@ -293,10 +293,17 @@ class Session:
             self.blockingInvoker().connect(name)
 
         def waitCommunicatorToStop():
+            loopStepDuration = 0.3
+            pingDuration = 5
+            pingTimePast = 0
             while True:
-                time.sleep(0.3)
+                time.sleep(loopStepDuration)
                 if not self.communicator.isRunning():
                     break
+                pingTimePast += loopStepDuration
+                if pingTimePast >= pingDuration:
+                    pingTimePast = 0
+                    self.blockingInvoker().ping()
 
         def communicatorControlLoop():
             while True:
