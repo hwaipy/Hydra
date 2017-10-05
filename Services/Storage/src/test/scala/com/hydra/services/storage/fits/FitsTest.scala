@@ -25,7 +25,8 @@ class FitsTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   }
 
   test("Fits IO Tables") {
-    val numRows = 10
+    FitsFactory.setUseAsciiTables(false)
+    val numRows = 10000000
     val x = new Array[Double](numRows)
     val y = new Array[Double](numRows)
     for (i <- Range(0, numRows)) {
@@ -35,16 +36,21 @@ class FitsTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
     val data = Array[Any](x, y)
     val f1 = new Fits()
     f1.addHDU(FitsFactory.hduFactory(data))
-    //    val bf1 = new BufferedFile("2.table-row2matrix.fits", "rw")
-    //    f1.write(bf1)
-    //    bf1.close
-    //
-    //    val bhdu = new BinaryTableHDU(null, null)
-    //    bhdu.addColumn(x)
-    //    bhdu.addColumn(y)
+    val bf1 = new BufferedFile("2.table-row2matrix.fits", "rw")
+    f1.write(bf1)
+    bf1.close
+
+    //    val bt = new BinaryTable()
+    //    bt.addColumn(x)
+    //    bt.addColumn(y)
+    //    val bhdu = new BinaryTableHDU(null, bt)
+    //    //    bhdu.addColumn(x)
+    //    //    bhdu.addColumn(y)
     //    val f2 = new Fits()
     //    f2.addHDU(bhdu)
-    //    val bf2 = new BufferedFile("2.table-row2matrix.fits", "rw")
+
+
+    //    val bf2 = new BufferedFile("2.table-row2matrixB.fits", "rw")
     //    f2.write(bf2)
     //    bf2.close
   }

@@ -73,7 +73,7 @@ class StorageService(basePath: Path) {
 
   def listElements(user: String, path: String, withMetaData: Boolean = false) = {
     storage.updatePermission(new Permission(user))
-    val elements = storage.getStorageElement(path).listElements
+    val elements = storage.getStorageElement(path).listElements.sortBy(se => se.name)
     storage.clearPermission
     if (withMetaData) {
       elements.map(e => e.metaDataMap(true))

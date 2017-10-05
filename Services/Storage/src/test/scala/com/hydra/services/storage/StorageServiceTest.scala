@@ -1,4 +1,5 @@
 package com.hydra.storage
+
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -95,7 +96,7 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     val service = new StorageService(testSpace)
     service.createFile("", "/NewFile")
     service.createFile("", "/a2/NewFile")
-    assert(service.listElements("", "/") == List("_A1", "a2", "a3", "a4", "a5", "NewFile"))
+    assert(service.listElements("", "/") == List("NewFile", "_A1", "a2", "a3", "a4", "a5"))
     assert(service.listElements("", "/a2") == List("NewFile"))
   }
 
