@@ -142,4 +142,34 @@ class StorageService(basePath: Path) {
     storage.clearPermission
     info
   }
+
+  def HBTFileInitialize(user: String, path: String, heads: List[List[String]]) = {
+    storage.updatePermission(new Permission(user))
+    storage.HBTFileInitialize(path, heads)
+    storage.clearPermission
+  }
+
+  def HBTFileAppendRows(user: String, path: String, rowsData: List[List[Any]]) = {
+    storage.updatePermission(new Permission(user))
+    storage.HBTFileAppendRows(path, rowsData)
+    storage.clearPermission
+  }
+
+  def HBTFileAppendRow(user: String, path: String, rowData: List[Any]) = {
+    HBTFileAppendRows(user, path, rowData :: Nil)
+  }
+
+  def HBTFileReadRows(user: String, path: String, from: Int, count: Int) = {
+    storage.updatePermission(new Permission(user))
+    val data = storage.HBTFileReadRows(path, from, count)
+    storage.clearPermission
+    data
+  }
+
+  def HBTFileReadAllRows(user: String, path: String) = {
+    storage.updatePermission(new Permission(user))
+    val data = storage.HBTFileReadAllRows(path)
+    storage.clearPermission
+    data
+  }
 }

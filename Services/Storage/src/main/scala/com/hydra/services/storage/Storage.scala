@@ -2,16 +2,21 @@ package com.hydra.storage
 
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.LinkOption
 import java.nio.file.attribute.BasicFileAttributes
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.WeakHashMap
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+
+import com.hydra.storage.HydraBinaryTableStorageElementExtension.HeadEntry
+
 import scala.collection.JavaConverters._
 import scala.math._
 
@@ -59,6 +64,30 @@ class Storage(val basePath: Path) {
       case i => (new String(elements(i).readAll), elements.filter(_.name != "note"))
     }
     Map("note" -> note, "items" -> items.map(e => e.metaDataMap(true)))
+  }
+
+  def HBTFileInitialize(path: String, heads: List[List[String]]) = {
+    val element = getStorageElement(path)
+    if (!element.exists) element.createFile
+    val hbtExt = HydraBinaryTableStorageElementExtension.initialize(element, heads)
+  }
+
+  def HBTFileAppendRows(path: String, rowsData: List[List[Any]]) = {
+    val element = getStorageElement(path)
+    val hbtExt = HydraBinaryTableStorageElementExtension.load(element)
+    hbtExt.appendRows(rowsData)
+  }
+
+  def HBTFileReadRows(path: String, from: Int, count: Int) = {
+    val element = getStorageElement(path)
+    val hbtExt = HydraBinaryTableStorageElementExtension.load(element)
+    hbtExt.readRows(from, count)
+  }
+
+  def HBTFileReadAllRows(path: String) = {
+    val element = getStorageElement(path)
+    val hbtExt = HydraBinaryTableStorageElementExtension.load(element)
+    hbtExt.readAllRows
   }
 
   private def doGetStorageElement(path: String, cacheable: Boolean): StorageElement = {
@@ -359,6 +388,147 @@ class StorageElementAttribute(path: Path) {
         case Some(level) => PermissionLevel.permission(level, requiredLevel)
       }
     }
+  }
+}
+
+object HydraBinaryTableStorageElementExtension {
+
+  def initialize(element: StorageElement, heads: List[List[String]]) = {
+    if (element.size > 0) throw new IOException(s"Can not initialize an non-empty StorageElement.")
+    if (!element.name.toLowerCase.endsWith(".hbt")) throw new IOException(s"Invalid StorageElement. Should be .hbt file.")
+    val headEntries = heads.map(e => new HeadEntry(e(0), e(1)))
+    val headEntriesString = headEntries.map(e => s"${e.dataType}:${e.title}").mkString("\n")
+
+    val headString = headEntriesString
+    val headBytes = headString.getBytes("UTF-8")
+    val buffer = ByteBuffer.allocate(8 + headBytes.size)
+    buffer.put(Array[Byte]('H', 'B', 'T', 0))
+    buffer.putInt(headBytes.size)
+    buffer.put(headBytes)
+    element.append(buffer.array)
+  }
+
+  def load(element: StorageElement) = {
+    if (!element.name.toLowerCase.endsWith(".hbt")) throw new IOException(s"Invalid StorageElement. Should be .hbt file.")
+    val headMeta = ByteBuffer.wrap(element.read(0, 8))
+    val headSize = headMeta.getInt(4)
+    val headBytes = element.read(8, headSize)
+    val headString = new String(headBytes, "UTF-8")
+
+    val headEntriesString = headString
+    val headEntries = headEntriesString.split("\n").toList.map(line => {
+      val s = line.split(":", 2)
+      new HeadEntry(s(1), s(0))
+    })
+    new HydraBinaryTableStorageElementExtension(element, headEntries, 8 + headSize)
+  }
+
+  val acceptableTypes = Map("Byte" -> 1, "Short" -> 2, "Int" -> 4, "Long" -> 8, "Float" -> 4, "Double" -> 8)
+
+  class HeadEntry(val title: String, val dataType: String) {
+    if (!acceptableTypes.contains(dataType)) throw new IOException(s"Data type ${dataType} is not acceptable.")
+    val dataLength = acceptableTypes(dataType)
+  }
+
+}
+
+class HydraBinaryTableStorageElementExtension(val element: StorageElement, val headEntries: List[HeadEntry], private val headLength: Int) {
+  private val rowDataLength = headEntries.map(e => e.dataLength).sum
+
+  def appendRows(rowsData: List[List[Any]]) = {
+    val rowCount = rowsData.size
+    val buffer = ByteBuffer.allocate(rowDataLength * rowCount)
+    rowsData.foreach(r => pushRowData(buffer, r))
+    element.append(buffer.array)
+  }
+
+  def readRows(from: Int, count: Int) = {
+    val bytes = element.read(headLength + from * rowDataLength, count * rowDataLength)
+    val buffer = ByteBuffer.wrap(bytes)
+    Range(0, count).toList.map(r => {
+      headEntries.map(headEntry => {
+        headEntry.dataType match {
+          case "Byte" => buffer.get
+          case "Short" => buffer.getShort
+          case "Int" => buffer.getInt
+          case "Long" => buffer.getLong
+          case "Float" => buffer.getFloat
+          case "Double" => buffer.getDouble
+          case _ => None
+        }
+      })
+    })
+  }
+
+  def readAllRows = readRows(0, ((element.size - headLength) / rowDataLength).toInt)
+
+  private def pushRowData(buffer: ByteBuffer, rowData: List[Any]) = {
+    if (rowData.size != headEntries.size) throw new IOException(s"Row Data size not match. Should be ${headEntries.size}.")
+    rowData.zip(headEntries).foreach(zip => {
+      val data = zip._1
+      val dataType = zip._2.dataType
+      if (data.isInstanceOf[Byte]) {
+        val d = data.asInstanceOf[Byte]
+        dataType match {
+          case "Byte" => buffer.put(d)
+          case "Short" => buffer.putShort(d)
+          case "Int" => buffer.putInt(d)
+          case "Long" => buffer.putLong(d)
+          case "Float" => buffer.putFloat(d)
+          case "Double" => buffer.putDouble(d)
+        }
+      } else if (data.isInstanceOf[Short]) {
+        val d = data.asInstanceOf[Short]
+        dataType match {
+          case "Byte" => buffer.put(d.toByte)
+          case "Short" => buffer.putShort(d)
+          case "Int" => buffer.putInt(d)
+          case "Long" => buffer.putLong(d)
+          case "Float" => buffer.putFloat(d)
+          case "Double" => buffer.putDouble(d)
+        }
+      } else if (data.isInstanceOf[Int]) {
+        val d = data.asInstanceOf[Int]
+        dataType match {
+          case "Byte" => buffer.put(d.toByte)
+          case "Short" => buffer.putShort(d.toShort)
+          case "Int" => buffer.putInt(d)
+          case "Long" => buffer.putLong(d)
+          case "Float" => buffer.putFloat(d)
+          case "Double" => buffer.putDouble(d)
+        }
+      } else if (data.isInstanceOf[Long]) {
+        val d = data.asInstanceOf[Long]
+        dataType match {
+          case "Byte" => buffer.put(d.toByte)
+          case "Short" => buffer.putShort(d.toShort)
+          case "Int" => buffer.putInt(d.toInt)
+          case "Long" => buffer.putLong(d)
+          case "Float" => buffer.putFloat(d)
+          case "Double" => buffer.putDouble(d)
+        }
+      } else if (data.isInstanceOf[Float]) {
+        val d = data.asInstanceOf[Float]
+        dataType match {
+          case "Byte" => buffer.put(d.toByte)
+          case "Short" => buffer.putShort(d.toShort)
+          case "Int" => buffer.putInt(d.toInt)
+          case "Long" => buffer.putLong(d.toLong)
+          case "Float" => buffer.putFloat(d)
+          case "Double" => buffer.putDouble(d)
+        }
+      } else if (data.isInstanceOf[Double]) {
+        val d = data.asInstanceOf[Double]
+        dataType match {
+          case "Byte" => buffer.put(d.toByte)
+          case "Short" => buffer.putShort(d.toShort)
+          case "Int" => buffer.putInt(d.toInt)
+          case "Long" => buffer.putLong(d.toLong)
+          case "Float" => buffer.putFloat(d.toFloat)
+          case "Double" => buffer.putDouble(d)
+        }
+      }
+    })
   }
 }
 

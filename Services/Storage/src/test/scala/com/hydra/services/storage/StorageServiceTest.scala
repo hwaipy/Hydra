@@ -106,6 +106,23 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     assert(service.listElements("", "/a2") == List("NewDir", "NewFile"))
   }
 
+  test("Tetst HBTFile.") {
+    val service = new StorageService(testSpace)
+    service.HBTFileInitialize("", "/HBTFileTest.hbt", List("Column 1", "Byte") :: List("Column 2", "Short") ::
+      List("Column 3", "Int") :: List("Column 4", "Long") :: List("Column 5", "Float") :: List("Column 6", "Double") :: Nil)
+    service.HBTFileAppendRow("", "/HBTFileTest.hbt", List(1, 2, 3, 4, 5, 6))
+    service.HBTFileAppendRows("", "/HBTFileTest.hbt", List(1.toByte, 2.toByte, 3.toByte, 4.toByte, 5.toByte, 6.toByte) ::
+      List(1.toShort, 2.toShort, 3.toShort, 4.toShort, 5.toShort, 6.toShort) :: List(1l, 2l, 3l, 4l, 5l, 6l) ::
+      List(1.1f, 2.2f, 3.3f, 4.4f, 5.5f, 6.6f) :: List(1.1, 2.2, 3.3, 4.4, 5.5, 6.6) :: Nil)
+    val readRows = service.HBTFileReadAllRows("", "/HBTFileTest.hbt")
+    assert(readRows(0) == List(1, 2, 3, 4, 5, 6))
+    assert(readRows(1) == List(1, 2, 3, 4, 5, 6))
+    assert(readRows(2) == List(1, 2, 3, 4, 5, 6))
+    assert(readRows(3) == List(1, 2, 3, 4, 5, 6))
+    assert(readRows(4) == List(1, 2, 3, 4, 5.5, 6.6.toFloat))
+    assert(readRows(5) == List(1, 2, 3, 4, 5.5, 6.6))
+  }
+
   after {
   }
 
