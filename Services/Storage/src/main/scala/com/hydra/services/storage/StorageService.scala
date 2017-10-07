@@ -44,9 +44,6 @@ object StorageService extends App {
   lazy val storageSpace = Configuration.getProperty("storagespace", "target/storagespace")
   lazy val storageService = new StorageService(Paths.get(storageSpace))
 
-  println(serverAddress)
-  println(serverPort)
-
   lazy val clientName = Configuration.getProperty("clientName", "StorageService")
   val client = MessageClient.newClient(serverAddress, serverPort, clientName, storageService)
 

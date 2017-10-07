@@ -130,7 +130,6 @@ class MessageServer(port: Int) {
     MessageTransport.Logger.info("Hydra Server stopping.")
     workerGroup.shutdownGracefully
     bossGroup.shutdownGracefully
-    MessageTransport.Logger.info("Hydra Server stopped.")
   }
 }
 
