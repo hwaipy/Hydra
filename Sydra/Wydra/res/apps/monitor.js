@@ -1,11 +1,8 @@
 $(document).ready(function () {
-    $(".tablesorter").tablesorter({
+    clientTable = new SortedTable("client-table", {
         theme: 'blue',
         widthFixed: true,
-    })
-    $(".debug-trigger").click(function () {
-        console.log('mo')
-    })
+    }, onClickTableData)
     $('#refresh-frequency').val(5)
     $('#refresh-frequency').change(function () {
         var a = $("#refresh-frequency").val();
@@ -18,6 +15,7 @@ $(document).ready(function () {
 
 var refreshCount = 0
 var refreshPeriod = 5
+
 function refreshTrigger() {
     refreshCount++
     if (refreshCount >= refreshPeriod) {
@@ -34,89 +32,25 @@ function updateClientInformation() {
             console.warn(msg)
             return
         }
-        console.log(msg)
-        var informations = [], newTableIDs = []
+        //console.log(msg)
+        var newTrs = []
         for (var i = 0; i < msg.length; i++) {
             var ci = new ClientInformation(msg[i])
-            informations.push(ci)
-            newTableIDs.push(ci.tableID)
+            newTrs.push(ci.tr())
         }
-        var table = document.getElementById('client-table').getElementsByTagName('tbody')[0]
-        var trs = table.getElementsByTagName('tr')
-        var existTableIDs = []
-        var existTableRows = []
-        for (var i = 0; i < trs.length; i++) {
-            existTableIDs.push(trs[i].getAttribute('id'))
-            existTableRows.push(trs[i])
-        }
-        for (var i = 0; i < existTableIDs.length; i++) {
-            existTableID = existTableIDs[i]
-            var keep = $.inArray(existTableID, newTableIDs) >= 0
-            if (!keep) {
-                table.removeChild(existTableRows[i])
-            }
-        }
-        for (var i = 0; i < newTableIDs.length; i++) {
-            var newTableID = newTableIDs[i]
-            var index = $.inArray(newTableID, existTableIDs)
-            var information = informations[i]
-            var contents = information.contents()
-            if (index == -1) {
-                var tr = document.createElement('tr')
-                tr.setAttribute('id', information.tableID)
-                table.appendChild(tr)
-                for (var j = 0; j < contents.length; j++) {
-                    var td = document.createElement('td')
-                    var text = document.createTextNode(contents[j])
-                    td.appendChild(text)
-                    tr.appendChild(td)
-                }
-                var onClockUtilFunction = function (name) {
-                    return function () {
-                        onClickTableRow(name)
-                    }
-                }
-                $('#' + information.tableID).click(onClockUtilFunction(information.name))
-            } else {
-                var tr = document.getElementById(information.tableID)
-                var tds = tr.getElementsByTagName('td')
-                for (var j = 0; j < tds.length; j++) {
-                    tds[j].innerHTML = contents[j]
-                }
-            }
-        }
-        $(".tablesorter").trigger("update")
+        clientTable.updateTrs(newTrs)
     })
 }
 
-function requestMessage(message, onResponse) {
-    var buffer = msgpack.encode(message)
-    var bytesArray = new Uint8Array(toArray(buffer))
-    var xhr = new XMLHttpRequest()
-    xhr.open("POST", "/wydra/request/abc", true)
-    xhr.responseType = "arraybuffer"
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
-    xhr.onload = function () {
-        if (this.status == 200) {
-            var data = this.response
-            var msg = msgpack.decode(new Uint8Array(data))
-            onResponse(msg)
-        }
-    }
-    xhr.send(bytesArray)
-}
-
-function toArray(buffer) {
-    return Array.prototype.slice.call(buffer);
-}
-
-function onClickTableRow(name) {
-    console.log('oc: ' + name)
-    summaryClient = name
+function onClickTableData(e) {
+    var tr = e.target.parentNode
+    var trID = tr.getAttribute('id')
+    summaryClient = tr.childNodes[1].innerHTML
     doUpdateSummaryInformation()
 }
 
 var summaryClient = ""
+
 function doUpdateSummaryInformation() {
     if (summaryClient != "") {
         requestMessage({"Request": ["getSummary"], "To": summaryClient}, function (msg) {
@@ -139,8 +73,24 @@ function ClientInformation(msg) {
     this.bytesReceived = msg[6]
 
     this.contents = contents
+
     function contents() {
         return [this.id, this.name, formatTimePeriod(new Date().getTime() - this.connectedTime), this.messageSend, this.messageReceived, this.bytesSend, this.bytesReceived]
+    }
+
+    this.tr = tr
+
+    function tr() {
+        var TR = document.createElement('tr')
+        TR.setAttribute('id', this.tableID)
+        c = this.contents()
+        for (var j = 0; j < c.length; j++) {
+            var td = document.createElement('td')
+            var text = document.createTextNode(c[j])
+            td.appendChild(text)
+            TR.appendChild(td)
+        }
+        return TR
     }
 
     function formatTimePeriod(ms) {
