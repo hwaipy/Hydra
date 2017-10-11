@@ -1,5 +1,8 @@
-function TreeTable(tableID, treetableParas, onNodeExpand, dataFormatters, defaultSelectionRoute) {
+function TreeTable(tableID, treetableParas, onNodeExpand, onNodeSelect, dataFormatters, defaultSelectionRoute) {
     treetableParas.onNodeExpand = nodeExpand
+    treetableParas.onSelect = function (e) {
+        console.log(e)
+    }
     $("#" + tableID).treetable(treetableParas)
 
     //Rows is a list of ROWs, with following functions and fields:
@@ -102,6 +105,7 @@ function TreeTable(tableID, treetableParas, onNodeExpand, dataFormatters, defaul
                 if (index == defaultSelectionRoute.length - 1) {
                     select(row.id)
                     defaultSelectionRoute = []
+                    break
                 } else if (index >= 0) {
                     expand(row.id)
                 }
@@ -127,6 +131,12 @@ function TreeTable(tableID, treetableParas, onNodeExpand, dataFormatters, defaul
         if (tr.getAttribute('Indicate-On-Creating-Loading-Fake-Node') != 'true') {
             onNodeExpand(tr.getAttribute('data-tt-id'))
         }
+    }
+
+    this.getNode = getNode
+
+    function getNode(id) {
+        return $('#' + tableID).treetable('node', id)
     }
 
     this.getExpandedExpandableTrs = getExpandedExpandableTrs
@@ -215,9 +225,18 @@ function TreeTable(tableID, treetableParas, onNodeExpand, dataFormatters, defaul
     }
 
     function selectRow(tr) {
+        var previousSelection = $(".selected")
         $(".selected").removeClass("selected")
         tr.setAttribute('class', tr.getAttribute('class') + ' selected')
-        // updateHipTableEntryList(path)
+
+        var pre = null
+        if (previousSelection != null && previousSelection != undefined) {
+            previousSelection = previousSelection[0]
+            if (previousSelection != null && previousSelection != undefined && previousSelection.__proto__ == HTMLTableRowElement.prototype) {
+                pre = previousSelection.getAttribute('data-tt-id')
+            }
+        }
+        onNodeSelect(tr.getAttribute('data-tt-id'), pre)
     }
 
     this.select = select

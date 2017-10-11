@@ -20,7 +20,7 @@ $(document).ready(function () {
     fileTable = new TreeTable("file-table", {
         expandable: true,
         clickableNodeNames: true
-    }, updatePathInformation, [null, formatDateTime, formatDateTime, formatSize], rs)
+    }, updatePathInformation, onNodeSelect, [null, formatDateTime, formatDateTime, formatSize], rs)
 
     setInterval("refreshTrigger()", 1000)
 })
@@ -33,6 +33,7 @@ function refreshTrigger() {
     if (refreshCount >= refreshPeriod) {
         refreshCount = 0
         updateFilesInformation()
+        updateHipInformation()
     }
 }
 
@@ -105,22 +106,51 @@ function routes(path) {
     return rs
 }
 
-//
-// function updateHipTableEntryList(selectedPath) {
-//     var tr = document.getElementById('path:' + selectedPath)
-//     if (tr.getAttribute('type') == 'hip') {
-//         doUpdateHipTableEntryList(selectedPath)
-//     } else {
-//         var table = document.getElementById('hip-table').getElementsByTagName('tbody')[0]
-//         var trs = table.getElementsByTagName('tr')
-//         var trsLength = trs.length
-//         for (var i = 0; i < trsLength; i++) {
-//             table.removeChild(trs[0])
-//         }
-//         document.getElementById('HipEntryNote').innerHTML = ''
-//     }
-// }
-//
+function onNodeSelect(currentId, previousId) {
+    var currentHip = getContainerHip(currentId)
+    var previousHip = getContainerHip(previousId)
+    if (currentHip != previousHip) {
+        if (previousHip != null) onHipUnselected(previousHip)
+        if (currentHip != null) onHipSelected(currentHip)
+    }
+    // var tr = fileTable.getNode(currentId).row[0]
+    // var type = tr.children[0].children[1].getAttribute('class')
+    // if (type == 'hip') {
+    //     console.log('jp')
+    // }
+}
+
+function onHipSelected(hip) {
+    currentSelectedHip = hip
+    updateHipInformation()
+}
+
+function onHipUnselected(hip) {
+    currentSelectedHip = null
+    updateHipInformation()
+}
+
+var currentSelectedHip = null
+
+function getContainerHip(path) {
+    if (path == null || path == undefined) return null
+    var rs = routes(path)
+    for (var i = 0; i < rs.length; i++) {
+        if (rs[i].toLowerCase().endsWith('.hip')) {
+            return rs[i]
+        }
+    }
+    return null
+}
+
+function updateHipInformation() {
+    if (currentSelectedHip != null) {
+
+    } else {
+        document.getElementById('HipEntryNote').innerHTML = ''
+    }
+}
+
 // function doUpdateHipTableEntryList(path, onFinish) {
 //     requestMessage({"Request": ["getHipInformation", "", path, true], "To": "StorageService"}, function (msg) {
 //             msg = msg[0]
