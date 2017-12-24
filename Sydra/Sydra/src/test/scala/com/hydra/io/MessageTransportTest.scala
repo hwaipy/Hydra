@@ -117,21 +117,21 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     assert(uS1.getClass.getSimpleName == "RemoteInvokeException")
     assert(uS1.asInstanceOf[RemoteInvokeException].getMessage == "Method not found: co.")
     client1.stop.await
-    val client2 = new MessageClient("", "wrongaddress", port, None)
-    val invoker2 = client2.asynchronousInvoker()
-    val future2 = invoker2.co2
-    val latch2 = new CountDownLatch(1)
-    var uS2: Any = None
-    future2.onComplete { case t =>
-      uS2 = t.isSuccess match {
-        case true => t.get
-        case _ => t.failed.get
-      }
-      latch2.countDown
-    }
-    assert(latch2.await(2, java.util.concurrent.TimeUnit.SECONDS))
-    assert(uS2.isInstanceOf[RuntimeException])
-    client2.stop
+//    val client2 = new MessageClient("", "wrongaddress", port, None)
+//    val invoker2 = client2.asynchronousInvoker()
+//    val future2 = invoker2.co2
+//    val latch2 = new CountDownLatch(1)
+//    var uS2: Any = None
+//    future2.onComplete { case t =>
+//      uS2 = t.isSuccess match {
+//        case true => t.get
+//        case _ => t.failed.get
+//      }
+//      latch2.countDown
+//    }
+//    assert(latch2.await(2, java.util.concurrent.TimeUnit.SECONDS))
+//    assert(uS2.isInstanceOf[RuntimeException])
+//    client2.stop
   }
 
   test("Test register client.") {
