@@ -1,22 +1,24 @@
 package com.hydra.storage
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.LinkOption;
+import java.nio.file.LinkOption
+
 import org.scalatest._
 import PermissionLevel._
 import PermissionDecision._
 import ElementType._
+
 import scala.collection.mutable.ArrayBuffer
 
 class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   val testSpace = Paths.get("target/testservicespace/")
 
   override def beforeAll() {
-    if (Files.exists(testSpace, LinkOption.NOFOLLOW_LINKS)) clearPath(testSpace)
-    Files.createDirectories(testSpace)
+    if (Files.exists(testSpace, LinkOption.NOFOLLOW_LINKS)) clearPath(testSpace.toFile)
+    testSpace.toFile.mkdirs
     val storage = new Storage(testSpace)
     storage.getStorageElement("/a1").createDirectories
     storage.getStorageElement("/a2").createDirectories
@@ -51,7 +53,31 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
 
   test("Test listMetaData") {
     val service = new StorageService(testSpace)
-    val e = service.listElements("", "/", true)
+    val listElements = service.listElements("", "/", true)
+    val elements = listElements.asInstanceOf[List[Map[String, _]]]
+    val expected = List(
+      List("_A1", "/_A1", "Content"),
+      List("_A2", "/_A2", "Content"),
+      List("a1", "/a1", "Collection"),
+      List("a2", "/a2", "Collection"),
+      List("a3", "/a3", "Collection"),
+      List("a4", "/a4", "Collection"),
+      List("a5", "/a5", "Collection"))
+    assert(elements.size == expected.size)
+    expected.zip(elements).foreach(z => {
+      val exp = z._1
+      val res = z._2.asInstanceOf[Map[String, _]]
+      assert(List("Name", "Path", "Type").map(key => res(key)) == exp)
+    })
+    assert(elements(0)("Size") == 36)
+    assert(elements(1)("Size") == 256)
+  }
+
+  test("Test note") {
+    val service = new StorageService(testSpace)
+    assert(service.readNote("", "/")("Note") == "")
+    service.writeNote("", "/", "Test Note")
+    assert(service.readNote("", "/")("Note") == "Test Note")
   }
 
   test("Test read") {
@@ -126,14 +152,14 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   after {
   }
 
-  private def clearPath(path: Path) {
-    if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-      val it = Files.list(path).iterator
+  private def clearPath(file: File) {
+    if (file.isDirectory) {
+      val it = file.listFiles.iterator
       while (it.hasNext) {
         clearPath(it.next)
       }
     }
-    Files.delete(path)
+    file.delete
   }
 }
 

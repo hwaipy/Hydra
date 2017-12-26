@@ -117,6 +117,19 @@ class StorageService(basePath: Path) {
     storage.clearPermission
   }
 
+  def readNote(user: String, path: String) = {
+    storage.updatePermission(new Permission(user))
+    val data = storage.getStorageElement(path).readNote
+    storage.clearPermission
+    Map("Note" -> data)
+  }
+
+  def writeNote(user: String, path: String, data: String): Unit = {
+    storage.updatePermission(new Permission(user))
+    storage.getStorageElement(path).writeNote(data)
+    storage.clearPermission
+  }
+
   def createFile(user: String, path: String) {
     storage.updatePermission(new Permission(user))
     storage.getStorageElement(path).createFile

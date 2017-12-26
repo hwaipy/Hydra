@@ -1,9 +1,10 @@
 package com.hydra.storage
+
 import java.io.IOException
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.LinkOption;
+import java.nio.file.LinkOption
+import java.io.File
 import org.scalatest._
 import PermissionLevel._
 import PermissionDecision._
@@ -13,8 +14,8 @@ class StorageTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   val testSpace = Paths.get("target/testspace/")
 
   override def beforeAll() {
-    if (Files.exists(testSpace, LinkOption.NOFOLLOW_LINKS)) clearPath(testSpace)
-    Files.createDirectories(testSpace)
+    if (Files.exists(testSpace, LinkOption.NOFOLLOW_LINKS)) clearPath(testSpace.toFile)
+    testSpace.toFile.mkdirs()
   }
 
   override def afterAll() {
@@ -75,14 +76,14 @@ class StorageTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   after {
   }
 
-  private def clearPath(path: Path) {
-    if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-      val it = Files.list(path).iterator
+  private def clearPath(file: File) {
+    if (file.isDirectory) {
+      val it = file.listFiles.iterator
       while (it.hasNext) {
         clearPath(it.next)
       }
     }
-    Files.delete(path)
+    file.delete
   }
 }
 

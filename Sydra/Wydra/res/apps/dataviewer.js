@@ -52,7 +52,6 @@ function updatePathInformation(path, onFinish) {
             console.warn(msg)
             return
         }
-//             var parentNode = (path == '' || path == '/') ? null : $("#file-table").treetable("node", path)
         var newRows = []
         for (var i = 0; i < msg.length; i++) {
             var fi = new FileItem(msg[i])
@@ -145,22 +144,22 @@ function getContainerHip(path) {
 
 function updateHipInformation() {
     if (currentSelectedHip != null) {
-
+        doUpdateHipNote(currentSelectedHip)
     } else {
         document.getElementById('HipEntryNote').innerHTML = ''
     }
 }
 
-// function doUpdateHipTableEntryList(path, onFinish) {
-//     requestMessage({"Request": ["getHipInformation", "", path, true], "To": "StorageService"}, function (msg) {
-//             msg = msg[0]
-//             if (typeof msg === "string") {
-//                 console.warn(msg)
-//                 return
-//             }
-//             var items = msg.items
-//             var hipEntries = [], newTableIDs = []
-//             var note = msg.note
+function doUpdateHipNote(path, onFinish) {
+    document.getElementById('HipEntryNote').innerHTML = '11'
+    requestMessage({"Request": ["readNote", "", path], "To": "StorageService"}, function (msg) {
+            msg = msg[0]
+            if (typeof msg === "string") {
+                console.warn(msg)
+                return
+            }
+            var note = msg.Note
+            console.log(note)
 //             for (var i = 0; i < items.length; i++) {
 //                 var fi = new HipEntry(items[i])
 //                 if (fi.type == 'Content') {
@@ -214,9 +213,10 @@ function updateHipInformation() {
 //             }
 //             $(".tablesorter").trigger("update")
 //             document.getElementById('HipEntryNote').innerHTML = note
-//         }
-//     )
-// }
+        }
+    )
+}
+
 //
 // function selectInHipTable() {
 // }

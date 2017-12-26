@@ -14,6 +14,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.WeakHashMap
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import com.hydra.storage.HydraBinaryTableStorageElementExtension.HeadEntry
 
@@ -137,6 +138,7 @@ class StorageElement(private val storage: Storage, val path: String) {
   val name = if (isRoot) "" else path.substring(path.lastIndexOf("/") + 1)
   val attribute = new StorageElementAttribute(if (isRoot) absolutePath.resolve("..root") else absolutePath.getParent().resolve("." + name))
   private var elementType: ElementType = _
+  private var note: Option[StorageElementCollectionNote] = _
   private var validation: Boolean = _
   private var fileLength: Long = -1
   private var creationTime: Long = 0
@@ -156,7 +158,7 @@ class StorageElement(private val storage: Storage, val path: String) {
 
   def getElement(path: String) = storage.getStorageElement(this.path + "/" + path)
 
-  def listElements(): List[StorageElement] = listElements(true)
+  def listElements: List[StorageElement] = listElements(true)
 
   def listElements(validOnly: Boolean) = {
     validationVerify(valid, "Path [" + path + "] not valid.")
@@ -180,7 +182,8 @@ class StorageElement(private val storage: Storage, val path: String) {
     if (exists) throw new IOException("Directory exists.")
     if (parent == null) throw new IOException("RootElement can not be created.")
     permissionVerify(parent, Append)
-    Files.createDirectories(absolutePath)
+    //    Files.createDirectories()
+    absolutePath.toFile.mkdirs
     var e = this
     while (e != null && !e.exists) {
       e.reload()
@@ -194,7 +197,7 @@ class StorageElement(private val storage: Storage, val path: String) {
     if (parent == null) throw new IOException("RootElement can not be created.")
     permissionVerify(parent, Append)
     if (!parent.exists) parent.createDirectories()
-    Files.createFile(absolutePath)
+    absolutePath.toFile.createNewFile
     reload()
   }
 
@@ -220,6 +223,18 @@ class StorageElement(private val storage: Storage, val path: String) {
     validationVerify(getType == Content, "Path [" + path + "] is not content.")
     permissionVerify(this, Read)
     read(0, size.toInt)
+  }
+
+  def readNote = {
+    validationVerify(getType == Collection, "Path [" + path + "] is not content.")
+    permissionVerify(this, Read)
+    note.get.read
+  }
+
+  def writeNote(content: String) = {
+    validationVerify(getType == Collection, "Path [" + path + "] is not content.")
+    permissionVerify(this, Modify)
+    note.get.write(content)
   }
 
   def append(data: Array[Byte]) {
@@ -251,7 +266,7 @@ class StorageElement(private val storage: Storage, val path: String) {
     reload()
   }
 
-  def delete() {
+  def delete {
     validationVerify(valid, "Path [" + path + "] not valid.")
     if (!exists) throw new IOException("Path not exists.")
     if (parent == null) throw new IOException("RootElement can not be deleted.")
@@ -288,7 +303,7 @@ class StorageElement(private val storage: Storage, val path: String) {
     if (elementType == Content) {
       metaData += "Size" -> size
     }
-    metaData
+    metaData.toMap
   }
 
   override def toString = s"${this.getClass().getSimpleName()}[${path}]"
@@ -309,6 +324,7 @@ class StorageElement(private val storage: Storage, val path: String) {
         creationTime = attributes.creationTime.toMillis
         lastAccessTime = attributes.lastAccessTime.toMillis
         lastModifiedTime = attributes.lastModifiedTime.toMillis
+        note = if (elementType == Collection) Option(new StorageElementCollectionNote(this)) else None
       }
       case false => elementType = NotExist
     }
@@ -388,6 +404,33 @@ class StorageElementAttribute(path: Path) {
         case Some(level) => PermissionLevel.permission(level, requiredLevel)
       }
     }
+  }
+}
+
+class StorageElementCollectionNote(storageElement: StorageElement) {
+  private val absolutePath = storageElement.absolutePath.resolve(".note")
+
+  def read = {
+    Files.exists(absolutePath, LinkOption.NOFOLLOW_LINKS) match {
+      case true => {
+        val length = Files.readAttributes[BasicFileAttributes](absolutePath, classOf[BasicFileAttributes], LinkOption.NOFOLLOW_LINKS).size.toInt
+        val buffer = new Array[Byte](length)
+        val raf = new RandomAccessFile(absolutePath.toFile, "r")
+        raf.read(buffer)
+        raf.close
+        new String(buffer, "UTF-8")
+      }
+      case false => ""
+    }
+  }
+
+  def write(data: String) {
+    if (!Files.exists(absolutePath, LinkOption.NOFOLLOW_LINKS)) {
+      absolutePath.toFile.createNewFile
+    }
+    val raf = new RandomAccessFile(absolutePath.toFile, "rw")
+    raf.write(data.getBytes("UTF-8"))
+    raf.close
   }
 }
 
