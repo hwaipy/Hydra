@@ -45,6 +45,9 @@ class Communicator:
     def isRunning(self):
         return self.__running
 
+    def stop(self):
+        self.__running = False
+
 
 class BlockingCommunicator(Communicator):
     def __init__(self, channel, dataFetcher, dataSender):

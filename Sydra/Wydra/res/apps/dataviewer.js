@@ -33,7 +33,8 @@ function refreshTrigger() {
     if (refreshCount >= refreshPeriod) {
         refreshCount = 0
         updateFilesInformation()
-        updateHipInformation()
+        // updateHipInformation()
+        trySyncNote()
     }
 }
 
@@ -112,11 +113,8 @@ function onNodeSelect(currentId, previousId) {
         if (previousHip != null) onHipUnselected(previousHip)
         if (currentHip != null) onHipSelected(currentHip)
     }
-    // var tr = fileTable.getNode(currentId).row[0]
-    // var type = tr.children[0].children[1].getAttribute('class')
-    // if (type == 'hip') {
-    //     console.log('jp')
-    // }
+    var currentFile = currentId
+    onFileSelection(currentFile)
 }
 
 function onHipSelected(hip) {
@@ -150,71 +148,96 @@ function updateHipInformation() {
     }
 }
 
+var lastSyncedNote = ""
+
 function doUpdateHipNote(path, onFinish) {
-    document.getElementById('HipEntryNote').innerHTML = '11'
     requestMessage({"Request": ["readNote", "", path], "To": "StorageService"}, function (msg) {
             msg = msg[0]
             if (typeof msg === "string") {
                 console.warn(msg)
                 return
             }
+            if (currentSelectedHip != path) {
+                console.debug('Note of path ' + path + ' expired.')
+                return
+            }
             var note = msg.Note
-            console.log(note)
-//             for (var i = 0; i < items.length; i++) {
-//                 var fi = new HipEntry(items[i])
-//                 if (fi.type == 'Content') {
-//                     hipEntries.push(fi)
-//                     newTableIDs.push(fi.entryID)
-//                 }
-//             }
-//             var table = document.getElementById('hip-table').getElementsByTagName('tbody')[0]
-//             var trs = table.getElementsByTagName('tr')
-//             var existTableIDs = []
-//             var existTableRows = []
-//             for (var i = 0; i < trs.length; i++) {
-//                 existTableIDs.push(trs[i].getAttribute('id'))
-//                 existTableRows.push(trs[i])
-//             }
-//             for (var i = 0; i < existTableIDs.length; i++) {
-//                 existTableID = existTableIDs[i]
-//                 var keep = $.inArray(existTableID, newTableIDs) >= 0
-//                 if (!keep) {
-//                     table.removeChild(existTableRows[i])
-//                 }
-//             }
-//             for (var i = 0; i < newTableIDs.length; i++) {
-//                 var newTableID = newTableIDs[i]
-//                 var index = $.inArray(newTableID, existTableIDs)
-//                 var entry = hipEntries[i]
-//                 var contents = entry.contents()
-//                 if (index == -1) {
-//                     var tr = document.createElement('tr')
-//                     tr.setAttribute('id', entry.entryID)
-//                     table.appendChild(tr)
-//                     for (var j = 0; j < contents.length; j++) {
-//                         var td = document.createElement('td')
-//                         var text = document.createTextNode(contents[j])
-//                         td.appendChild(text)
-//                         tr.appendChild(td)
-//                     }
-//                     var onClockUtilFunction = function (name) {
-//                         return function () {
-//                             onClickTableRow(name)
-//                         }
-//                     }
-//                     $('#' + entry.entryID).click(onClockUtilFunction(entry.name))
-//                 } else {
-//                     var tr = document.getElementById(entry.entryID)
-//                     var tds = tr.getElementsByTagName('td')
-//                     for (var j = 0; j < tds.length; j++) {
-//                         tds[j].innerHTML = contents[j]
-//                     }
-//                 }
-//             }
-//             $(".tablesorter").trigger("update")
-//             document.getElementById('HipEntryNote').innerHTML = note
+            lastSyncedNote = note
+            document.getElementById('HipEntryNote').innerHTML = '<form>Note:<br>\n<textarea id="HipEntryNoteTextArea" name="message" rows="10" cols="30">' + note + '</textarea></form>\n'
         }
     )
+}
+
+function trySyncNote() {
+    currentNote = $('#HipEntryNoteTextArea')
+    if (currentNote.length > 0) {
+        currentNote = currentNote.val()
+        if (currentNote != lastSyncedNote) {
+            console.log("now updating note")
+            requestMessage({
+                    "Request": ["writeNote", "", currentSelectedHip, currentNote],
+                    "To": "StorageService"
+                }, function (msg) {
+                    console.log(msg)
+                    msg = msg[0]
+                    console.log(msg)
+                    // if (typeof msg === "string") {
+                    //     console.warn(msg)
+                    //     return
+                    // }
+                }
+            )
+        }
+    }
+}
+
+var currentSelectedID = null
+var currentViewer = null
+var viewers = {'HBT': new HBTViewer()}
+
+function onFileSelection(selectedID) {
+    if (selectedID == currentSelectedID) return
+    currentSelectedID = selectedID
+    if (currentViewer != null) currentViewer.stop()
+    fileViewerDiv = $('#FileViewer')[0]
+    fileViewerDiv.innerHTML = '<div id="FileViewerContent"></div>'
+    content = $('#FileViewerContent')[0]
+    fileType = selectedID.split('.').reverse()[0]
+    currentViewer = viewers[fileType.toUpperCase()]
+    if (currentViewer != null && currentViewer != undefined) currentViewer.show(content, currentSelectedID)
+}
+
+function HBTViewer() {
+
+    this.show = show
+
+    function show(div, selectedID) {
+        console.log('show')
+        div.innerHTML = selectedID
+
+
+        // requestMessage({"Request": ["readNote", "", path], "To": "StorageService"}, function (msg) {
+        //         msg = msg[0]
+        //         if (typeof msg === "string") {
+        //             console.warn(msg)
+        //             return
+        //         }
+        //         if (currentSelectedHip != path) {
+        //             console.debug('Note of path ' + path + ' expired.')
+        //             return
+        //         }
+        //         var note = msg.Note
+        //         lastSyncedNote = note
+        //         document.getElementById('HipEntryNote').innerHTML = '<form>Note:<br>\n<textarea id="HipEntryNoteTextArea" name="message" rows="10" cols="30">' + note + '</textarea></form>\n'
+        //     }
+        // )
+    }
+
+    this.stop = stop
+
+    function stop() {
+        console.log('stop')
+    }
 }
 
 //

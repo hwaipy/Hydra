@@ -132,7 +132,7 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     assert(service.listElements("", "/a2") == List("NewDir", "NewFile"))
   }
 
-  test("Tetst HBTFile.") {
+  test("Test HBTFile.") {
     val service = new StorageService(testSpace)
     service.HBTFileInitialize("", "/HBTFileTest.hbt", List("Column 1", "Byte") :: List("Column 2", "Short") ::
       List("Column 3", "Int") :: List("Column 4", "Long") :: List("Column 5", "Float") :: List("Column 6", "Double") :: Nil)

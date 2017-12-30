@@ -249,6 +249,7 @@ class Session:
     def __init__(self, address, invoker, name=None):
         self.address = address
         self.name = name
+        self.__running = True
         self.__waitingMap = {}
         self.__waitingMapLock = threading.Lock()
         self.__remoteReferenceMap = {}
@@ -309,6 +310,8 @@ class Session:
             while True:
                 if self.communicator.isRunning():
                     waitCommunicatorToStop()
+                    if not self.__running:
+                        break
                     print('Connection break. Try again.')
                 try:
                     createCommunicator()
@@ -321,6 +324,7 @@ class Session:
         threading.Thread(target=communicatorControlLoop, name="CommunicatorControlLoop").start()
 
     def stop(self):
+        self.__running = False
         self.socket.close()
 
     def toMessageInvoker(self, target=None):
