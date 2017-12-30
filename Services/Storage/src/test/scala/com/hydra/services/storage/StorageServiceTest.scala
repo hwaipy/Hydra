@@ -147,6 +147,9 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     assert(readRows(3) == List(1, 2, 3, 4, 5, 6))
     assert(readRows(4) == List(1, 2, 3, 4, 5.5, 6.6.toFloat))
     assert(readRows(5) == List(1, 2, 3, 4, 5.5, 6.6))
+    val metaExpect = Map("ColumnCount" -> 6, "RowDataLength" -> 27, "RowCount" -> 6,
+      "Heads" -> List(List("Column 1", "Byte"), List("Column 2", "Short"), List("Column 3", "Int"), List("Column 4", "Long"), List("Column 5", "Float"), List("Column 6", "Double")))
+    assert(service.HBTFileMetaData("", "/HBTFileTest.hbt") == metaExpect)
   }
 
   after {

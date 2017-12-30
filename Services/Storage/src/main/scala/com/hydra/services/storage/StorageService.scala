@@ -170,6 +170,13 @@ class StorageService(basePath: Path) {
     storage.clearPermission
   }
 
+  def HBTFileMetaData(user: String, path: String) = {
+    storage.updatePermission(new Permission(user))
+    val metaData = storage.HBTFileMetaData(path)
+    storage.clearPermission
+    metaData
+  }
+
   def HBTFileAppendRows(user: String, path: String, rowsData: List[List[Any]]) = {
     storage.updatePermission(new Permission(user))
     storage.HBTFileAppendRows(path, rowsData)

@@ -212,31 +212,83 @@ function HBTViewer() {
     this.show = show
 
     function show(div, selectedID) {
-        console.log('show')
-        div.innerHTML = selectedID
-
-
-        // requestMessage({"Request": ["readNote", "", path], "To": "StorageService"}, function (msg) {
-        //         msg = msg[0]
-        //         if (typeof msg === "string") {
-        //             console.warn(msg)
-        //             return
-        //         }
-        //         if (currentSelectedHip != path) {
-        //             console.debug('Note of path ' + path + ' expired.')
-        //             return
-        //         }
-        //         var note = msg.Note
-        //         lastSyncedNote = note
-        //         document.getElementById('HipEntryNote').innerHTML = '<form>Note:<br>\n<textarea id="HipEntryNoteTextArea" name="message" rows="10" cols="30">' + note + '</textarea></form>\n'
-        //     }
-        // )
+        requestMessage({"Request": ["HBTFileMetaData", "", selectedID], "To": "StorageService"}, function (msg) {
+            msg = msg[0]
+            if (typeof msg === "string") {
+                console.warn(msg)
+                return
+            }
+            columnCount = msg.ColumnCount
+            rowCount = msg.RowCount
+            rowDataLength = msg.RowDataLength
+            heads = msg.Heads
+            requestMessage({
+                "Request": ["HBTFileReadRows", "", selectedID, 0, rowCount],
+                "To": "StorageService"
+            }, function (msg) {
+                msg = msg[0]
+                if (typeof msg === "string") {
+                    console.warn(msg)
+                    return
+                }
+                if (currentSelectedID != selectedID) {
+                    return
+                }
+                dataSets = []
+                for (var column = 0; column < columnCount; column++) {
+                    dataSets[column] = []
+                }
+                for (var row = 0; row < columnCount; row++) {
+                    rowData = msg[row]
+                    for (var column = 0; column < columnCount; column++) {
+                        dataSets[column][row] = rowData[column]
+                    }
+                }
+                div.innerHTML = '<canvas id="HBTChart"></canvas>'
+                var ctx = document.getElementById("HBTChart").getContext('2d')
+                var myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: dataSets[0],
+                        datasets: [{
+                            label: '# of Votes',
+                            data: dataSets[1],
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.2)',
+                                'rgba(54, 162, 235, 0.2)',
+                                'rgba(255, 206, 86, 0.2)',
+                                'rgba(75, 192, 192, 0.2)',
+                                'rgba(153, 102, 255, 0.2)',
+                                'rgba(255, 159, 64, 0.2)'
+                            ],
+                            borderColor: [
+                                'rgba(255,99,132,1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                }
+                            }]
+                        }
+                    }
+                });
+            })
+        })
     }
 
     this.stop = stop
 
     function stop() {
-        console.log('stop')
     }
 }
 

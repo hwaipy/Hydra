@@ -73,6 +73,12 @@ class Storage(val basePath: Path) {
     val hbtExt = HydraBinaryTableStorageElementExtension.initialize(element, heads)
   }
 
+  def HBTFileMetaData(path: String) = {
+    val element = getStorageElement(path)
+    val hbtExt = HydraBinaryTableStorageElementExtension.load(element)
+    hbtExt.metaData
+  }
+
   def HBTFileAppendRows(path: String, rowsData: List[List[Any]]) = {
     val element = getStorageElement(path)
     val hbtExt = HydraBinaryTableStorageElementExtension.load(element)
@@ -477,6 +483,8 @@ object HydraBinaryTableStorageElementExtension {
 
 class HydraBinaryTableStorageElementExtension(val element: StorageElement, val headEntries: List[HeadEntry], private val headLength: Int) {
   private val rowDataLength = headEntries.map(e => e.dataLength).sum
+
+  def metaData = Map("ColumnCount" -> headEntries.size, "RowDataLength" -> rowDataLength, "RowCount" -> (element.size - headLength) / rowDataLength, "Heads" -> headEntries.map(e => List(e.title, e.dataType)))
 
   def appendRows(rowsData: List[List[Any]]) = {
     val rowCount = rowsData.size
