@@ -243,7 +243,7 @@ class Session:
     @classmethod
     def newSession(cls, address, invoker=None, name=""):
         session = Session(address, invoker, name)
-        session.start(name)
+        session.start()
         return session
 
     def __init__(self, address, invoker, name=None):
@@ -275,7 +275,7 @@ class Session:
         def remoteObjectFinalized(self, remoteObjectID, finalizedClient):
             self.session._remoteObjectFinalized(remoteObjectID, finalizedClient)
 
-    def start(self, name=""):
+    def start(self):
         def hook(code, data):
             if code == 11:
                 return DynamicRemoteObject(self, False, True, str(data[:-8], 'utf-8'),
@@ -291,7 +291,7 @@ class Session:
             self.socket = sct
             self.communicator = Utils.BlockingCommunicator(self.socket, self.__dataFetcher, self.__dataSender)
             self.communicator.start()
-            self.blockingInvoker().connect(name)
+            self.blockingInvoker().connect(self.name)
 
         def waitCommunicatorToStop():
             loopStepDuration = 0.3

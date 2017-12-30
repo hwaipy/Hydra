@@ -10,11 +10,10 @@ import random
 import math
 
 if __name__ == '__main__':
-    mc = Session(("localhost", 20102), None)
+    mc = Session(("192.168.25.27", 20102), None)
     mc.start()
     service = StorageService(mc)
     hbtFile = service.getElement('HBTChartTest.hbt').toHBTFileElement()
-    hbtFile.storageElement.delete()
     hbtFile.initialize(
         [["Column 1", HBTFileElement.BYTE], ["Column 2", HBTFileElement.SHORT], ["Column 3", HBTFileElement.INT],
          ["Column 4", HBTFileElement.LONG], ["Column 5", HBTFileElement.FLOAT], ["Column 6", HBTFileElement.DOUBLE]])
