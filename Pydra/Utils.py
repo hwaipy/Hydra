@@ -71,7 +71,7 @@ class SingleThreadProcessor:
                          daemon=True).start()
 
     def invokeLater(self, action, *args, **kwargs):
-        self.queue.put((action, args, kwargs))
+        self.queue.put((action, args, kwargs, None, [None, None]))
 
     def invokeAndWait(self, action, *args, **kwargs):
         semaphore = threading.Semaphore(0)
@@ -90,7 +90,8 @@ class SingleThreadProcessor:
                 result[0] = ret
             except BaseException as e:
                 result[1] = e
-            semaphore.release()
+            if semaphore is not None:
+                semaphore.release()
 
 
 class SingleThreadWarpper:
