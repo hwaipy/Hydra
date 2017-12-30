@@ -173,18 +173,11 @@ function trySyncNote() {
     if (currentNote.length > 0) {
         currentNote = currentNote.val()
         if (currentNote != lastSyncedNote) {
-            console.log("now updating note")
             requestMessage({
                     "Request": ["writeNote", "", currentSelectedHip, currentNote],
                     "To": "StorageService"
                 }, function (msg) {
-                    console.log(msg)
                     msg = msg[0]
-                    console.log(msg)
-                    // if (typeof msg === "string") {
-                    //     console.warn(msg)
-                    //     return
-                    // }
                 }
             )
         }
@@ -238,7 +231,7 @@ function HBTViewer() {
                 for (var column = 0; column < columnCount; column++) {
                     dataSets[column] = []
                 }
-                for (var row = 0; row < columnCount; row++) {
+                for (var row = 0; row < rowCount; row++) {
                     rowData = msg[row]
                     for (var column = 0; column < columnCount; column++) {
                         dataSets[column][row] = rowData[column]
