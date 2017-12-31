@@ -169,7 +169,7 @@ function doUpdateHipNote(path, onFinish) {
 }
 
 function trySyncNote() {
-    currentNote = $('#HipEntryNoteTextArea')
+    var currentNote = $('#HipEntryNoteTextArea')
     if (currentNote.length > 0) {
         currentNote = currentNote.val()
         if (currentNote != lastSyncedNote) {
@@ -192,10 +192,10 @@ function onFileSelection(selectedID) {
     if (selectedID == currentSelectedID) return
     currentSelectedID = selectedID
     if (currentViewer != null) currentViewer.stop()
-    fileViewerDiv = $('#FileViewer')[0]
+    var fileViewerDiv = $('#FileViewer')[0]
     fileViewerDiv.innerHTML = '<div id="FileViewerContent"></div>'
-    content = $('#FileViewerContent')[0]
-    fileType = selectedID.split('.').reverse()[0]
+    var content = $('#FileViewerContent')[0]
+    var fileType = selectedID.split('.').reverse()[0]
     currentViewer = viewers[fileType.toUpperCase()]
     if (currentViewer != null && currentViewer != undefined) currentViewer.show(content, currentSelectedID)
 }
@@ -211,10 +211,10 @@ function HBTViewer() {
                 console.warn(msg)
                 return
             }
-            columnCount = msg.ColumnCount
-            rowCount = msg.RowCount
-            rowDataLength = msg.RowDataLength
-            heads = msg.Heads
+            var columnCount = msg.ColumnCount
+            var rowCount = msg.RowCount
+            var rowDataLength = msg.RowDataLength
+            var heads = msg.Heads
             requestMessage({
                 "Request": ["HBTFileReadRows", "", selectedID, 0, rowCount],
                 "To": "StorageService"
@@ -227,54 +227,19 @@ function HBTViewer() {
                 if (currentSelectedID != selectedID) {
                     return
                 }
-                dataSets = []
+                var dataSets = []
                 for (var column = 0; column < columnCount; column++) {
                     dataSets[column] = []
                 }
                 for (var row = 0; row < rowCount; row++) {
-                    rowData = msg[row]
+                    var rowData = msg[row]
                     for (var column = 0; column < columnCount; column++) {
                         dataSets[column][row] = rowData[column]
                     }
                 }
                 div.innerHTML = '<canvas id="HBTChart"></canvas>'
                 var ctx = document.getElementById("HBTChart").getContext('2d')
-                var myChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: dataSets[0],
-                        datasets: [{
-                            label: '# of Votes',
-                            data: dataSets[1],
-                            backgroundColor: [
-                                'rgba(255, 99, 132, 0.2)',
-                                'rgba(54, 162, 235, 0.2)',
-                                'rgba(255, 206, 86, 0.2)',
-                                'rgba(75, 192, 192, 0.2)',
-                                'rgba(153, 102, 255, 0.2)',
-                                'rgba(255, 159, 64, 0.2)'
-                            ],
-                            borderColor: [
-                                'rgba(255,99,132,1)',
-                                'rgba(54, 162, 235, 1)',
-                                'rgba(255, 206, 86, 1)',
-                                'rgba(75, 192, 192, 1)',
-                                'rgba(153, 102, 255, 1)',
-                                'rgba(255, 159, 64, 1)'
-                            ],
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        scales: {
-                            yAxes: [{
-                                ticks: {
-                                    beginAtZero: true
-                                }
-                            }]
-                        }
-                    }
-                });
+                TEMPStabilityChartPPM(ctx, heads, dataSets)
             })
         })
     }
@@ -284,6 +249,83 @@ function HBTViewer() {
     function stop() {
     }
 }
+
+function TEMPStabilityChartPPM(ctx, heads, dataSets) {
+    function toPPM(data) {
+        var ppm = []
+        for (var i = 0; i < data.length; i++) {
+            ppm[i] = (data[i] / data[0] - 1) * 1000000
+        }
+        return ppm
+    }
+
+    var PD1ppm = toPPM(dataSets[1])
+    var PD2ppm = toPPM(dataSets[2])
+
+    var ratio = []
+    for (var i = 0; i < PD1ppm.length; i++) {
+        ratio[i] = dataSets[1][i] / dataSets[2][i]
+    }
+    var ratioPpm = toPPM(ratio)
+
+    var times = []
+    for (var i = 0; i < PD1ppm.length; i++) {
+        times[i] = new Date(dataSets[0][i])
+    }
+
+
+    var myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: times,
+            datasets: [{
+                label: 'PD1',
+                data: PD1ppm,
+                borderColor: ['rgba(255,99,132,1)'],
+                borderWidth: 1,
+                fill: false,
+                pointRadius: 0
+            }, {
+                label: 'PD2',
+                data: PD2ppm,
+                borderColor: ['rgba(30,205,32,1)'],
+                borderWidth: 1,
+                fill: false,
+                pointRadius: 0
+            }, {
+                label: 'ratio',
+                data: ratioPpm,
+                borderColor: ['rgba(105,105,105,1)'],
+                borderWidth: 1,
+                fill: false,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            scales: {
+                xAxes: [{
+                    type: 'time',
+                    scaleLabel: {
+                        display: true,
+                        labelString: "Time"
+                    },
+                }],
+                yAxes: [{
+                    scaleLabel: {
+                        display: true,
+                        labelString: "Stabilization (ppm)"
+                    },
+                }]
+            },
+            elements: {
+                line: {
+                    tension: 0, // disables bezier curves
+                }
+            }
+        }
+    });
+}
+
 
 //
 // function selectInHipTable() {
