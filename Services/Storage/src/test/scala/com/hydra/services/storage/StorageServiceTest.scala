@@ -78,6 +78,8 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     assert(service.readNote("", "/")("Note") == "")
     service.writeNote("", "/", "Test Note")
     assert(service.readNote("", "/")("Note") == "Test Note")
+    service.writeNote("", "/", "Test N")
+    assert(service.readNote("", "/")("Note") == "Test N")
   }
 
   test("Test read") {

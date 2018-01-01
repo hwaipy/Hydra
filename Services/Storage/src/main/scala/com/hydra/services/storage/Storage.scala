@@ -240,7 +240,7 @@ class StorageElement(private val storage: Storage, val path: String) {
   def writeNote(content: String) = {
     validationVerify(getType == Collection, "Path [" + path + "] is not content.")
     permissionVerify(this, Modify)
-    note.get.write(content)
+    note.get.rewrite(content)
   }
 
   def append(data: Array[Byte]) {
@@ -435,6 +435,16 @@ class StorageElementCollectionNote(storageElement: StorageElement) {
       absolutePath.toFile.createNewFile
     }
     val raf = new RandomAccessFile(absolutePath.toFile, "rw")
+    raf.write(data.getBytes("UTF-8"))
+    raf.close
+  }
+
+  def rewrite(data: String) {
+    if (!Files.exists(absolutePath, LinkOption.NOFOLLOW_LINKS)) {
+      absolutePath.toFile.createNewFile
+    }
+    val raf = new RandomAccessFile(absolutePath.toFile, "rw")
+    raf.setLength(0)
     raf.write(data.getBytes("UTF-8"))
     raf.close
   }

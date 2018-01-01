@@ -123,6 +123,7 @@ function onHipSelected(hip) {
 }
 
 function onHipUnselected(hip) {
+    trySyncNote()
     currentSelectedHip = null
     updateHipInformation()
 }
@@ -178,6 +179,9 @@ function trySyncNote() {
                     "To": "StorageService"
                 }, function (msg) {
                     msg = msg[0]
+                    if (msg == true) {
+                        lastSyncedNote = currentNote
+                    }
                 }
             )
         }
@@ -261,12 +265,19 @@ function TEMPStabilityChartPPM(ctx, heads, dataSets) {
 
     var PD1ppm = toPPM(dataSets[1])
     var PD2ppm = toPPM(dataSets[2])
+    var currentPpm = toPPM(dataSets[3])
 
     var ratio = []
     for (var i = 0; i < PD1ppm.length; i++) {
         ratio[i] = dataSets[1][i] / dataSets[2][i]
     }
     var ratioPpm = toPPM(ratio)
+
+    var PD2toCurrent = []
+    for (var i = 0; i < PD2ppm.length; i++) {
+        PD2toCurrent[i] = dataSets[2][i] / dataSets[3][i]
+    }
+    var PD2toCurrentPpm = toPPM(PD2toCurrent)
 
     var times = []
     for (var i = 0; i < PD1ppm.length; i++) {
@@ -296,6 +307,20 @@ function TEMPStabilityChartPPM(ctx, heads, dataSets) {
                 label: 'ratio',
                 data: ratioPpm,
                 borderColor: ['rgba(105,105,105,1)'],
+                borderWidth: 1,
+                fill: false,
+                pointRadius: 0
+            }, {
+                label: 'LD Current',
+                data: currentPpm,
+                borderColor: ['rgba(30,30,205,1)'],
+                borderWidth: 1,
+                fill: false,
+                pointRadius: 0
+            }, {
+                label: 'ratio (PD2-LD Current',
+                data: PD2toCurrentPpm,
+                borderColor: ['rgba(255,30,205,1)'],
                 borderWidth: 1,
                 fill: false,
                 pointRadius: 0
