@@ -246,7 +246,7 @@ class Session:
         session.start()
         return session
 
-    def __init__(self, address, invoker, name=None):
+    def __init__(self, address, invoker, name=""):
         self.address = address
         self.name = name
         self.__running = True
