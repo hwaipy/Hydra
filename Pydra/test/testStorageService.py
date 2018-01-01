@@ -292,6 +292,10 @@ class StorageServiceTest(unittest.TestCase):
         self.assertEqual(hbtFile.readRow(3), [1, 2, 3, 4, 5, 6])
         self.assertEqual(hbtFile.readRow(4), [1, 2, 3, 4, 5.5, 6.6])
         self.assertEqual(hbtFile.readRow(5), [1, 2, 3, 4, 5.5, 6.6])
+        self.assertEqual(hbtFile.getColumnCount(), 6)
+        self.assertEqual(hbtFile.getRowCount(), 6)
+        self.assertEqual(hbtFile.getHeadNames(),
+                         ['Column 1', 'Column 2', 'Column 3', 'Column 4', 'Column 5', 'Column 6'])
         mc.stop()
 
     def tearDown(self):

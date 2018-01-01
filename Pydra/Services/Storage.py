@@ -66,6 +66,9 @@ class StorageService:
     def HBTFileReadAllRows(self, path):
         return self.blockingInvoker.HBTFileReadAllRows("", path)
 
+    def HBTFileMetaData(self, path):
+        return self.blockingInvoker.HBTFileMetaData("", path)
+
 
 class StorageElement:
     def __init__(self, storageService, path):
@@ -156,3 +159,18 @@ class HBTFileElement:
 
     def readAllRows(self):
         return self.storageElement.storageService.HBTFileReadAllRows(self.storageElement.path)
+
+    def readMetaData(self):
+        return self.storageElement.storageService.HBTFileMetaData(self.storageElement.path)
+
+    def getColumnCount(self):
+        return self.readMetaData()['ColumnCount']
+
+    def getRowCount(self):
+        return self.readMetaData()['RowCount']
+
+    def getHeads(self):
+        return self.readMetaData()['Heads']
+
+    def getHeadNames(self):
+        return [h[0] for h in self.readMetaData()['Heads']]
