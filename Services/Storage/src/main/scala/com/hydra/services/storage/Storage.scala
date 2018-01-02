@@ -1,4 +1,4 @@
-package com.hydra.storage
+package com.hydra.services.storage
 
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -8,16 +8,12 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.LinkOption
 import java.nio.file.attribute.BasicFileAttributes
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.WeakHashMap
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-
-import com.hydra.storage.HydraBinaryTableStorageElementExtension.HeadEntry
-
+import com.hydra.services.storage.HydraBinaryTableStorageElementExtension.HeadEntry
 import scala.collection.JavaConverters._
 import scala.math._
 

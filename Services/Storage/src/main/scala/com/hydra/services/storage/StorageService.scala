@@ -1,4 +1,4 @@
-package com.hydra.storage
+package com.hydra.services.storage
 
 import java.nio.file.Path
 

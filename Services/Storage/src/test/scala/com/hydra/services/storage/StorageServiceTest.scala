@@ -1,4 +1,4 @@
-package com.hydra.storage
+package com.hydra.services.storage
 
 import java.io.{File, IOException}
 import java.nio.file.Files
