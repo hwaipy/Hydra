@@ -23,6 +23,16 @@ $(document).ready(function () {
     }, updatePathInformation, onNodeSelect, [null, formatDateTime, formatDateTime, formatSize], rs)
 
     setInterval("refreshTrigger()", 1000)
+
+    context.init({preventDoubleContext: false});
+    var fileTableContext = [{
+        text: 'Export', action: function (e) {
+            exportData()
+        }
+    }]
+    context.attach('.branch', fileTableContext);
+    context.attach('.leaf', fileTableContext);
+
 })
 
 var refreshCount = 0
@@ -351,6 +361,9 @@ function TEMPStabilityChartPPM(ctx, heads, dataSets) {
     });
 }
 
+function exportData() {
+    console.log("Export: " + currentSelectedID)
+}
 
 //
 // function selectInHipTable() {
