@@ -42,22 +42,10 @@ object StorageService extends App {
     case e: Throwable => 20102
   }
   lazy val storageSpace = Configuration.getProperty("storagespace", "target/storagespace")
-  lazy val storageService = new StorageService(Paths.get(storageSpace))
 
   lazy val clientName = Configuration.getProperty("clientName", "StorageService")
+  lazy val storageService = new StorageService(Paths.get(storageSpace), clientName, "Storage.md")
   val client = MessageClient.newClient(serverAddress, serverPort, clientName, storageService)
-
-  //  val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "doc.md") {
-  //    override def getSummary() = {
-  //      (<html>
-  //        <h1>
-  //          {clientName}
-  //        </h1>
-  //        <p></p>
-  //        <p>running...</p>
-  //      </html>).toString
-  //    }
-  //  })
 
   println("Storage Service online.")
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
@@ -65,7 +53,17 @@ object StorageService extends App {
   client.stop
 }
 
-class StorageService(basePath: Path) {
+class StorageService(basePath: Path, clientName: String, descriptionFile: String) extends SydraAppHandler(clientName, descriptionFile) {
+  override def getSummary() = {
+    (<html>
+      <h1>
+        {clientName}
+      </h1>
+      <p></p>
+      <p>running...</p>
+    </html>).toString
+  }
+
   private val storage = new Storage(basePath)
 
   def listElements(user: String, path: String, withMetaData: Boolean = false) = {

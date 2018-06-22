@@ -3,6 +3,7 @@ __author__ = 'Hwaipy'
 import queue
 import threading
 import time
+import requests
 
 
 class Communicator:
@@ -106,3 +107,21 @@ class SingleThreadWarpper:
             return self.processor.invokeAndWait(method, *args, **kwargs)
 
         return action
+
+
+class SystemArguments:
+    def __init__(self, args):
+        self.arguments = {}
+        for arg in args[1:]:
+            sp = arg.split('=', 1)
+            self.arguments[sp[0]] = sp[1]
+
+    def get(self, key, default=None):
+        if self.arguments.__contains__(key):
+            return self.arguments[key]
+        return default
+
+
+def parseMarkdownToHTML(md, server, port):
+    r = requests.post("http://{}:{}/wydra/md2html".format(server, port), data=md.encode(encoding='UTF-8'))
+    return r.text

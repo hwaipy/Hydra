@@ -5,7 +5,10 @@ from Utils import SingleThreadProcessor
 from SCPI import SCPI
 
 
-class VISAInstrument:
+class Instrument:
+    pass
+
+class VISAInstrument(Instrument):
     manufacturer = 'USTC'
     model = 'VISAInstrument'
 

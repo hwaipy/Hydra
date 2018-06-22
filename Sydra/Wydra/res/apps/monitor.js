@@ -3,7 +3,7 @@ $(document).ready(function () {
         theme: 'blue',
         widthFixed: true,
     }, onClickTableData)
-    $('#refresh-frequency').val(5)
+    $('#refresh-frequency').val(1)
     $('#refresh-frequency').change(function () {
         var a = $("#refresh-frequency").val();
         refreshPeriod = a
@@ -14,7 +14,7 @@ $(document).ready(function () {
 });
 
 var refreshCount = 0
-var refreshPeriod = 5
+var refreshPeriod = 1
 
 function refreshTrigger() {
     refreshCount++
@@ -47,6 +47,8 @@ function onClickTableData(e) {
     var trID = tr.getAttribute('id')
     summaryClient = tr.childNodes[1].innerHTML
     doUpdateSummaryInformation()
+    // doUpdateProtocols()
+    doUpdateDocument()
 }
 
 var summaryClient = ""
@@ -58,6 +60,49 @@ function doUpdateSummaryInformation() {
             var converter = new showdown.Converter()
             var md2html = converter.makeHtml(msg)
             document.getElementById('summary').innerHTML = md2html
+        })
+    }
+}
+
+function doUpdateDocument() {
+    if (summaryClient != "") {
+        requestMessage({"Request": ["getDocument"], "To": summaryClient}, function (msg) {
+            msg = msg [0]
+            msg = applyExtendsRefs(msg)
+            var converter = new showdown.Converter()
+            var md2html = converter.makeHtml(msg)
+            document.getElementById('doc').innerHTML = md2html
+        })
+    }
+}
+
+function applyExtendsRefs(md) {
+    var regex1 = RegExp('@protocol\\((.+?)\\)', 'g');
+    var array1;
+    var protocols = new Array()
+    while ((array1 = regex1.exec(md)) !== null) {
+        protocols.push(array1)
+    }
+    protocols.forEach(function (e) {
+        md = md.replace(e[0], "[" + e[1] + "](/apps/protocols.html#" + e[1] + ")")
+    })
+    return md
+}
+
+function doUpdateProtocols() {
+    if (summaryClient != "") {
+        requestMessage({"Request": ["getProtocols"], "To": summaryClient}, function (msg) {
+            msg = msg [0]
+            if ((typeof msg) == "string") document.getElementById('protocols').innerHTML = "<b>Protocols</b>: None"
+            else {
+                ps = "<b>Protocols</b>: "
+                for (var i = 0; i < msg.length; i++) {
+                    p = msg[i]
+                    ps += "<a href=\"/apps/protocols.html#" + p + "\">" + p + "</a>"
+                    if (i != msg.length - 1) ps += ", "
+                }
+                document.getElementById('protocols').innerHTML = ps
+            }
         })
     }
 }

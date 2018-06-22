@@ -228,13 +228,13 @@ class StorageElement(private val storage: Storage, val path: String) {
   }
 
   def readNote = {
-    validationVerify(getType == Collection, "Path [" + path + "] is not content.")
+    validationVerify(getType == Collection, "Path [" + path + "] is not collection.")
     permissionVerify(this, Read)
     note.get.read
   }
 
   def writeNote(content: String) = {
-    validationVerify(getType == Collection, "Path [" + path + "] is not content.")
+    validationVerify(getType == Collection, "Path [" + path + "] is not collection.")
     permissionVerify(this, Modify)
     note.get.rewrite(content)
   }

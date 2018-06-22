@@ -2,7 +2,7 @@ function requestMessage(message, onResponse) {
     var buffer = msgpack.encode(message)
     var bytesArray = new Uint8Array(toArray(buffer))
     var xhr = new XMLHttpRequest()
-    xhr.open("POST", "/wydra/request/abc", true)
+    xhr.open("POST", "/wydra/request", true)
     xhr.responseType = "arraybuffer"
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')
     xhr.onload = function () {

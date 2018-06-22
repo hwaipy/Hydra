@@ -307,7 +307,7 @@ class Session:
                     self.blockingInvoker().ping()
 
         def communicatorControlLoop():
-            while True:
+            while self.__running:
                 if self.communicator.isRunning():
                     waitCommunicatorToStop()
                     if not self.__running:
@@ -325,6 +325,7 @@ class Session:
 
     def stop(self):
         self.__running = False
+        self.communicator.stop()
         self.socket.close()
 
     def toMessageInvoker(self, target=None):

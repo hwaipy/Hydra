@@ -7,22 +7,24 @@
     <script type="text/javascript" src="../lib/scripts/jquery.tablesorter.min.js"></script>
     <script type="text/javascript" src="../lib/scripts/msgpack.min.js"></script>
     <script type="text/javascript" src="../lib/scripts/showdown.min.js"></script>
-    <script type="text/javascript" src="../sup/Hydra.js"></script>
-    <script type="text/javascript" src="../sup/Util.js"></script>
+    <script type="text/javascript" src="../sup/Hydra.js?v=2018061901"></script>
+    <script type="text/javascript" src="../sup/Util.js?v=2018061901"></script>
     <script type="text/javascript" src="../sup/SortedTable.js"></script>
-    <script type="text/javascript" src="monitor.js"></script>
+    <script type="text/javascript" src="monitor.js?v=2018061901"></script>
     <link rel="stylesheet" href="../lib/styles/tablesorter/blue/style.css" type="text/css"/>
-    <link rel="stylesheet" href="monitor.css" type="text/css"/>
+    <link rel="stylesheet" href="monitor.css?v=2018061901" type="text/css"/>
+    <link rel="icon" type="image/png" href="/favicon.png">
 </head>
 <body>
 <!--<p id="debug-trigger" class="debug-trigger">Trigger</p>-->
-<p class="select-note">更新频率</p>
-<select id="refresh-frequency">
-    <option value="1">非常频繁 (1 s)</option>
-    <option value="2">频繁 (2 s)</option>
-    <option value="5">一般 (5 s)</option>
-    <option value="60">慢 (60 s)</option>
-</select>
+<!--<p class="select-note">更新频率</p>-->
+<!--<select id="refresh-frequency">-->
+<!--<option value="1">非常频繁 (1 s)</option>-->
+<!--<option value="2">频繁 (2 s)</option>-->
+<!--<option value="5">一般 (5 s)</option>-->
+<!--<option value="60">慢 (60 s)</option>-->
+<!--</select>-->
+<img src="/img/headlogo.png"/>
 <table id="client-table" border="1" class="tablesorter">
     <thead>
     <tr>
@@ -46,8 +48,13 @@
     </tr>
 </table>
 
-<div id="summary">
-
+<div id="details">
+    <HR style="FILTER: progid:DXImageTransform.Microsoft.Glow(color=#987cb9,strength=10)" width="100%" color=#987cb9
+        SIZE=5/>
+    <div id="summary"></div>
+    <HR style="FILTER: progid:DXImageTransform.Microsoft.Glow(color=#987cb9,strength=10)" width="100%" color=#987cb9
+        SIZE=5/>
+    <div id="doc" height="100%" overflow-y="scroll"></div>
 </div>
 
 </body>

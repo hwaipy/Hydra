@@ -2,6 +2,7 @@ package com.hydra.web
 
 import java.io.{File, FileInputStream, FileNotFoundException, IOException}
 import java.util.Properties
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import com.hydra.hap.SydraAppHandler
 import com.hydra.io.MessageClient
@@ -10,7 +11,10 @@ import org.eclipse.jetty.server.Handler
 import org.eclipse.jetty.server.handler.{HandlerList, ResourceHandler}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
+import scala.concurrent.Future
 import scala.io.Source
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object WydraApp extends App {
   val Configuration = {
@@ -33,6 +37,7 @@ object WydraApp extends App {
     System.setProperty("log4j.configurationFile", properties.getProperty("log4j.configurationFile", "./config/log4j.xml"))
     properties
   }
+  val debug = Configuration.getProperty("debug", "true").toBoolean
   val serverAddress = Configuration.getProperty("messageserver.address", "localhost")
   val serverPort = try {
     Configuration.getProperty("messageserver.port").toInt
@@ -40,7 +45,7 @@ object WydraApp extends App {
     case e: Throwable => 20102
   }
   val clientName = Configuration.getProperty("clientName", "Wydra")
-  val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "doc.md") {
+  val client = MessageClient.newClient(serverAddress, serverPort, clientName, new SydraAppHandler(clientName, "Wydra.md") {
     override def getSummary() = {
       (<html>
         <h1>
@@ -60,14 +65,14 @@ object WydraApp extends App {
   val webServer = new Server(webPort)
 
   val servletContext = new ServletContextHandler(ServletContextHandler.SESSIONS)
-  val clientDocumentServletHolder = new ServletHolder(new ClientDocumentServlet())
-  servletContext.addServlet(clientDocumentServletHolder, ClientDocumentServlet.path)
+  servletContext.addServlet(new ServletHolder(new ClientDocumentServlet()), ClientDocumentServlet.path)
   servletContext.addServlet(new ServletHolder(new MsgPackRequestServlet()), MsgPackRequestServlet.path)
+//  servletContext.addServlet(new ServletHolder(new MD2HTMLServlet()), MD2HTMLServlet.path)
   servletContext.setContextPath("/wydra")
 
   val fileContext = new ResourceHandler()
   fileContext.setResourceBase("res")
-  fileContext.setDirectoriesListed(false)
+  fileContext.setDirectoriesListed(debug)
   fileContext.setStylesheet("")
 
   val handlers = new HandlerList()
@@ -75,7 +80,13 @@ object WydraApp extends App {
   webServer.setHandler(handlers)
   webServer.start
   println(s"Wydra WebServer started on port $webPort.")
-  Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
+
+  val latch = new CountDownLatch(1)
+  Future {
+    Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
+    latch.countDown
+  }
+  latch.await(12, TimeUnit.HOURS)
   println("Stoping Wydra WebServer...")
   webServer.stop
   client.stop

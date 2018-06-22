@@ -17,17 +17,8 @@ object MsgPackRequestServlet {
 }
 
 class MsgPackRequestServlet extends AsyncHttpServlet {
-  println("Creating MsgPackRequestServlet")
-  val invokeCounter = new AtomicInteger()
 
-  new Thread(new Runnable {
-    override def run(): Unit = {
-      while (true) {
-        Thread.sleep(10000)
-        println(invokeCounter.get())
-      }
-    }
-  }).start()
+  val invokeCounter = new AtomicInteger()
 
   override def doPostAsync(req: HttpServletRequest, resp: HttpServletResponse) {
     invokeCounter.incrementAndGet()
