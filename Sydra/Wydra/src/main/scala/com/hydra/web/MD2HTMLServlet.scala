@@ -14,6 +14,7 @@ object MD2HTMLServlet {
 class MD2HTMLServlet extends AsyncHttpServlet {
 
   override def doPostAsync(req: HttpServletRequest, resp: HttpServletResponse) {
+    println("ahaha")
     val buffer = new Array[Byte](req.getContentLength)
     new DataInputStream(req.getInputStream()).readFully(buffer)
     try {

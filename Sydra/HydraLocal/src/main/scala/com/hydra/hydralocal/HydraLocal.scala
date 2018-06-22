@@ -1,7 +1,6 @@
 package com.hydra.web
 
 import java.io.{File, FileInputStream, FileNotFoundException, IOException}
-import java.nio.file.Paths
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
@@ -14,6 +13,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import scala.concurrent.Future
 import scala.io.Source
+
 import scala.concurrent.ExecutionContext.Implicits.global
 
 object WydraApp extends App {
@@ -67,7 +67,6 @@ object WydraApp extends App {
   val servletContext = new ServletContextHandler(ServletContextHandler.SESSIONS)
   servletContext.addServlet(new ServletHolder(new ClientDocumentServlet()), ClientDocumentServlet.path)
   servletContext.addServlet(new ServletHolder(new MsgPackRequestServlet()), MsgPackRequestServlet.path)
-  servletContext.addServlet(new ServletHolder(new HydraLocalServlet(Paths.get("res/hydralocal/"))), HydraLocalServlet.path)
   //  servletContext.addServlet(new ServletHolder(new MD2HTMLServlet()), "/")
   servletContext.setContextPath("/wydra")
 
