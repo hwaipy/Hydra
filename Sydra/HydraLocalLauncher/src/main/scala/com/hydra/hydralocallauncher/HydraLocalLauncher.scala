@@ -3,13 +3,11 @@ package com.hydra.hydralocallauncher
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.io.Source
-import scala.concurrent.ExecutionContext.Implicits.global
 import java.io.File
-import java.math.BigInteger
-import java.net.{HttpURLConnection, URL}
+import java.nio.ByteBuffer
 import java.nio.file._
-import java.security.MessageDigest
+import java.nio.file.attribute.FileTime
+import java.util.{Timer, TimerTask}
 
 import scala.collection.JavaConverters._
 import scalafx.application.{JFXApp, Platform}
@@ -18,7 +16,7 @@ import scalafx.geometry.{Dimension2D, Point2D}
 import scalafx.scene.Scene
 import scalafx.scene.control._
 import scalafx.scene.layout.AnchorPane
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 import java.util.prefs.Preferences
 import javafx.stage.Screen
 
@@ -32,9 +30,10 @@ import scalafx.scene.text.Font
 
 object HydraLocalLauncher extends JFXApp {
   val DEBUG = new File(".").getAbsolutePath.contains("GitHub")
+  System.setProperty("log4j.configurationFile", "./config/hydralocallauncher.debug.log4j.xml")
 
-  val root = Paths.get(System.getProperty("user.home"), "HydraLocal/")
-  if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) Files.createDirectories(root)
+  val localRoot = Paths.get(System.getProperty("user.home"), "HydraLocal/")
+  if (Files.notExists(localRoot, LinkOption.NOFOLLOW_LINKS)) Files.createDirectories(localRoot)
 
   val preferences = Preferences.userRoot.node("/Hydra/HydraLocalLauncher")
   val frameSize = new Dimension2D(500, 300)
@@ -42,6 +41,8 @@ object HydraLocalLauncher extends JFXApp {
   val framePosition = new Point2D(
     visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
     visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
+
+  val clientRef = new AtomicReference[MessageClient]
 
   val textFieldHost = new TextField() {
     font = Font.font("Ariel", 30)
@@ -52,11 +53,7 @@ object HydraLocalLauncher extends JFXApp {
   }
   val buttonLaunch = new Button("Launch") {
     font = Font.font("Ariel", 20)
-    disable = true
-    onAction = (action) => {
-      disable = true
-      launch(textFieldHost.text.value)
-    }
+    onAction = (action) => launch(textFieldHost.text.value)
   }
   val processBar = new ProgressBar() {
     visible = false
@@ -84,33 +81,13 @@ object HydraLocalLauncher extends JFXApp {
         AnchorPane.setBottomAnchor(processBar, 50.0)
         AnchorPane.setRightAnchor(processBar, 40.0)
         children = Seq(processBar, buttonLaunch, textFieldHost)
-
-        textFieldHost.text.onChange { (a, b, newText) => validateHost(newText)
-        }
       }
     }
-  }
-
-  private def validateHost(newText: String, moveFocus: Boolean = false) = {
-    def revealValidationResult(right: Boolean) {
-      Platform.runLater {
-        if (newText == textFieldHost.text.value) {
-          val colorCode = right match {
-            case true => "#90EE90"
-            case false => "#FFB6C1"
-          }
-          textFieldHost.style = s"-fx-base: ${colorCode};"
-          buttonLaunch.disable = !right
-          if (moveFocus) buttonLaunch.requestFocus
-        }
+    onCloseRequest = (window) => {
+      clientRef.get match {
+        case c if c != null => c.stop
+        case _ =>
       }
-    }
-
-    buttonLaunch.disable = true
-    textFieldHost.style = s"-fx-base: #FFFFFF;"
-    checkHostValidation(newText).onComplete {
-      case Success(suc) => revealValidationResult(suc)
-      case Failure(fai) => revealValidationResult(false)
     }
   }
 
@@ -124,19 +101,6 @@ object HydraLocalLauncher extends JFXApp {
     }
   }))
 
-  private def checkHostValidation(text: String) = {
-    Future {
-      //      val url = new URL(s"http://${text}/wydra/hydralocal?validate")
-      //      val connection = url.openConnection.asInstanceOf[HttpURLConnection]
-      //      connection.getResponseCode match {
-      //        case 200 => Source.fromInputStream(connection.getInputStream).getLines.toList.head == "This is HydraLocal."
-      //        case _ => false
-      //      }
-      val host = parseHost(text)
-      val client = MessageClient.newClient(host._1, host._2, "")
-    }(executionContext)
-  }
-
   private def launch(host: String) {
     preferences.put("Host", host)
     textFieldHost.editable = false
@@ -144,128 +108,151 @@ object HydraLocalLauncher extends JFXApp {
     processBar.visible = true
     processBar.progress = -1
     Future {
-      val url = new URL(s"http://${host}/wydra/hydralocal?list")
-      val connection = url.openConnection.asInstanceOf[HttpURLConnection]
-      connection.getResponseCode match {
-        case 200 => {
-          val lines = Source.fromInputStream(connection.getInputStream, "UTF-8").getLines.toList
-          val task = new UpdateFileTask(lines)
-
-          true
+      val parsedHost = parseHost(host)
+      val client = MessageClient.newClient(parsedHost._1, parsedHost._2)
+      clientRef.set(client)
+      val task = new UpdateFileTask(client)
+      val taskProcess = Future {
+        try {
+          task.process
+        } catch {
+          case e: Throwable => e.printStackTrace
         }
-        case _ => false
+      }(executionContext)
+      while (!taskProcess.isCompleted) {
+        Platform.runLater {
+          processBar.progress = task.progress
+        }
+        Thread.sleep(50)
       }
+      Platform.runLater {
+        processBar.progress = -1.0
+      }
+      true
     }(executionContext).onComplete {
-      case Success(suc) => afterLaunch(suc)
-      case Failure(fai) => afterLaunch(false); fai.printStackTrace();
+      case Success(suc) => println("suc!!!")
+      case Failure(fail) => shakeAnimation()
+    }(executionContext)
+  }
+
+  private def shakeAnimation() = {
+    processBar.visible = false
+    buttonLaunch.disable = false
+    textFieldHost.editable = true
+
+    val currentX = buttonLaunch.layoutX.value
+    val range = 16
+    val duration = 240.0
+    val period = 10
+    val startTime = System.nanoTime / 1000000
+
+    def calculatePosition(time: Long) = {
+      val deltaTime = time - startTime
+      val phi = (deltaTime / duration) * math.Pi * 4
+      val p = math.sin(phi)
+      range * p
     }
 
-    def afterLaunch(success: Boolean) = {
-      success match {
-        case true => Platform.exit()
-        case false => {
-
-
-          //          moveAnimation(true)
+    val timer = new Timer("Move Animation Timer", true)
+    timer.schedule(new TimerTask {
+      override def run(): Unit = {
+        val currentTime = System.nanoTime / 1000000
+        if (currentTime > startTime + duration) {
+          cancel()
+          AnchorPane.setLeftAnchor(buttonLaunch, 175.0)
+          AnchorPane.setRightAnchor(buttonLaunch, 175.0)
+        }
+        val x = calculatePosition(currentTime)
+        Platform.runLater {
+          AnchorPane.setLeftAnchor(buttonLaunch, 175.0 + x)
+          AnchorPane.setRightAnchor(buttonLaunch, 175.0 - x)
         }
       }
-    }
+    }, 0, period)
   }
 
-  private def moveAnimation(moveOut: Boolean) = {
-    //    textFieldHost.editable = !moveOut
-    //    buttonLaunch.disable = moveOut
-    //    val currentX = buttonLaunch.layoutX.value
-    //    val range = moveOut match {
-    //      case true => (0, -100)
-    //      case false => (-100, 0)
-    //    }
-    //    val duration = 500.0
-    //    val period = 10
-    //    val startTime = System.nanoTime / 1000000
-    //
-    //    def calculatePosition(time: Long) = {
-    //      val deltaTime = time - startTime
-    //      val phi = (deltaTime / duration) * math.Pi
-    //      val p = (1 - math.cos(phi)) / 2
-    //      range._1 + (range._2 - range._1) * p
-    //    }
-    //
-    //    val timer = new Timer("Move Animation Timer", true)
-    //    timer.schedule(new TimerTask {
-    //      override def run(): Unit = {
-    //        val currentTime = System.nanoTime / 1000000
-    //        if (currentTime > startTime + duration) cancel()
-    //        val x = calculatePosition(currentTime)
-    //        println(x)
-    //        Platform.runLater {
-    //          AnchorPane.setLeftAnchor(buttonLaunch, 175.0 + x)
-    //          AnchorPane.setRightAnchor(buttonLaunch, 175.0 - x)
-    //        }
-    //      }
-    //    }, 0, period)
+  class UpdateFileTask(client: MessageClient) {
+    val totalWork = new AtomicLong(0)
+    val doneWork = new AtomicLong(0)
 
-  }
-
-  validateHost(textFieldHost.text.value, true)
-
-  class UpdateFileTask(lines: List[String]) {
-    val totalWork = new AtomicInteger(0)
-    val doneWork = new AtomicInteger(0)
+    val invoker = client.blockingInvoker(target = "StorageService")
+    val remoteRoot = Paths.get("/apps/hydralocal/")
 
     def process = {
       val remoteMap = new mutable.HashMap[String, FileEntry]()
-      Range(0, lines.size / 4).foreach(i => remoteMap.put(lines(i * 4 + 0),
-        new FileEntry(Paths.get(lines(i * 4 + 0)), lines(i * 4 + 1).toLong, lines(i * 4 + 2).toLong, lines(i * 4 + 3))))
-      val remotePaths = remoteMap.keys.toList
 
-      val localPaths = Files.walk(root, FileVisitOption.FOLLOW_LINKS).iterator.asScala.toList
-        .filter(p => Files.isRegularFile(p)).map(p => root.relativize(p))
-      localPaths.filterNot(remotePaths.contains).foreach(p => Files.delete(root.resolve(p)))
+      def fetchRemoteFileMetaData(path: Path): Unit = {
+        val mds = invoker.listElements("", path.toString, true)
+        mds.asInstanceOf[List[Map[String, Any]]].foreach(md => {
+          md("Type") match {
+            case "Content" => {
+              val relativePath = remoteRoot.relativize(Paths.get(md("Path").toString))
+              remoteMap(relativePath.toString) =
+                new FileEntry(relativePath, md("LastModifiedTime").toString.toLong, md("Size").toString.toLong)
+            }
+            case "Collection" => fetchRemoteFileMetaData(Paths.get(md("Path").toString))
+          }
+        })
+      }
+
+      fetchRemoteFileMetaData(remoteRoot)
+
+      val remotePaths = remoteMap.keys.toList
+      val localPaths = Files.walk(localRoot, FileVisitOption.FOLLOW_LINKS).iterator.asScala.toList
+        .filter(p => Files.isRegularFile(p)).map(p => localRoot.relativize(p).toString)
+      localPaths.filterNot(remotePaths.contains).foreach(p => Files.delete(localRoot.resolve(p)))
 
       val todoList = ArrayBuffer[FileEntry]()
-      remoteMap.values.toList.foreach(entry => {
-        if (!localPaths.contains(entry.path.toString) || calculateMD5(entry.path) != entry.hash) {
-          todoList += entry
+      remoteMap.values.toList.foreach(remoteEntry => {
+        if (!localPaths.contains(remoteEntry.path.toString) ||
+          Files.isDirectory(localRoot.resolve(remoteEntry.path)) ||
+          remoteEntry.lastModified > Files.getLastModifiedTime(localRoot.resolve(remoteEntry.path), LinkOption.NOFOLLOW_LINKS).toMillis) {
+          todoList += remoteEntry
         }
       })
 
-      todoList.foreach(todo => println(todo.path))
+      totalWork.set(todoList.map(todo => todo.size).sum)
+
+      todoList.foreach(download)
     }
 
     def progress = totalWork.get match {
-      case 0 => -1
-      case _ => doneWork.get / totalWork.get
+      case 0 => -1.0
+      case _ => doneWork.get.toDouble / totalWork.get
     }
 
+    private val blockSize = 1000000;
 
-    //      val newKeys = paths.map(p => p.toString)
-    //      resources.keys.toList.foreach(key => if (!newKeys.contains(key)) {
-    //        resources.remove(key)
-    //      })
-    //      paths.foreach(path => {
-    //        val attributes = Files.readAttributes[BasicFileAttributes](path, classOf[BasicFileAttributes], LinkOption.NOFOLLOW_LINKS)
-    //        val size = attributes.size
-    //        val lastModified = attributes.lastModifiedTime.toMillis
-    //        val oldEntryOption = resources.get(path.toString)
-    //        if (oldEntryOption == None || oldEntryOption.get.lastModified < lastModified) {
-    //          resources(path.toString) = new FileEntry(path, lastModified, size, calculateMD5(path))
-    //        }
-    //      })
+    private def download(entry: FileEntry) = {
+      val localPath = localRoot.resolve(entry.path)
+      val remotePath = remoteRoot.resolve(entry.path)
+      if (Files.exists(localPath)) delete(localPath)
+      Files.createDirectories(localPath.getParent)
+      Files.createFile(localPath)
 
+      val channel = Files.newByteChannel(localPath, StandardOpenOption.WRITE)
+      val blocks = Math.ceil(entry.size.toDouble / blockSize).toInt
+      Range(0, blocks).foreach(block => {
+        val start = block * blockSize
+        val length = math.min(blockSize, entry.size - start)
+        val data = invoker.read("", remotePath.toString, start, length).asInstanceOf[Array[Byte]]
+        channel.write(ByteBuffer.wrap(data))
+        doneWork.addAndGet(length)
+      })
+      channel.close
+      Files.setLastModifiedTime(localPath, FileTime.fromMillis(entry.lastModified))
+    }
+
+    private def delete(path: Path): Unit = {
+      if (Files.isDirectory(path)) Files.list(path).iterator.asScala.foreach(delete)
+      Files.delete(path)
+    }
   }
 
-  case class FileEntry(val path: Path, val lastModified: Long, val size: Long, val hash: String)
-
-  private def calculateMD5(path: Path) = {
-    val bytes = Files.readAllBytes(path)
-    val md = MessageDigest.getInstance("MD5")
-    md.update(bytes)
-    new BigInteger(1, md.digest).toString(16)
-  }
+  case class FileEntry(val path: Path, val lastModified: Long, val size: Long)
 
   private def parseHost(text: String) = {
-    val split = text.split(":")
+    val split = text.trim.split(":")
     val server = split(0)
     val port = split.size match {
       case 1 => 20102
@@ -273,4 +260,8 @@ object HydraLocalLauncher extends JFXApp {
     }
     (server, port)
   }
+
+  val loadFuture = Future {
+    MessageClient.newClient("localhost", 12345, "Class Loader")
+  }(executionContext)
 }

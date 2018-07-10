@@ -67,7 +67,7 @@ object WydraApp extends App {
   val servletContext = new ServletContextHandler(ServletContextHandler.SESSIONS)
   servletContext.addServlet(new ServletHolder(new ClientDocumentServlet()), ClientDocumentServlet.path)
   servletContext.addServlet(new ServletHolder(new MsgPackRequestServlet()), MsgPackRequestServlet.path)
-  servletContext.addServlet(new ServletHolder(new HydraLocalServlet(Paths.get("res/hydralocal/"))), HydraLocalServlet.path)
+//  servletContext.addServlet(new ServletHolder(new HydraLocalServlet(Paths.get("res/hydralocal/"))), HydraLocalServlet.path)
   //  servletContext.addServlet(new ServletHolder(new MD2HTMLServlet()), "/")
   servletContext.setContextPath("/wydra")
 

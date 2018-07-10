@@ -199,17 +199,22 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 object MessageClient {
   def newClient(host: String, port: Int, name: String = "", invokeHandler: Any = None, timeout: Duration = 10 second) = {
     val client = new MessageClient(name, host, port, invokeHandler)
-    val f = client.start
-    f.await(timeout.toMillis)
-    if (f.isDone || f.isSuccess) {
-      client.blockingInvoker().connect(name)
-      client
-    } else {
-      if (f.cause() == null) {
-        throw new RuntimeException("Timeout on start client.")
+    try {
+      val f = client.start
+      f.await(timeout.toMillis)
+      if (f.isDone || f.isSuccess) {
+        client.blockingInvoker().connect(name)
+        client
       } else {
-        throw new RuntimeException(f.cause)
+        client.stop
+        if (f.cause() == null) {
+          throw new RuntimeException("Timeout on start client.")
+        } else {
+          throw new RuntimeException(f.cause)
+        }
       }
+    } catch {
+      case e: Throwable => client.stop; throw e
     }
   }
 }
