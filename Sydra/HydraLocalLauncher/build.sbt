@@ -10,3 +10,10 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
 fork := true
 scalacOptions ++= Seq("-feature")
 scalacOptions ++= Seq("-deprecation")
+
+excludeDependencies += "org.apache.logging.log4j"
+excludeDependencies += "org.pegdown"
+excludeDependencies += "io.spray"
+excludeDependencies += "org.jscience"
+excludeDependencies += "org.scalanlp"
+excludeDependencies += "javax.servlet"

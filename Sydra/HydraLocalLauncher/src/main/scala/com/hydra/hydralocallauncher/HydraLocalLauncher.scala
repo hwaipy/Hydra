@@ -133,7 +133,8 @@ object HydraLocalLauncher extends JFXApp {
     }(executionContext).onComplete {
       case Success(suc) => {
         println("Updated.")
-        val hydraLocalJar = Files.list(localRoot).iterator().asScala.filter(p =>
+        println(Files.exists(localRoot.resolve("sydra")))
+        val hydraLocalJar = Files.list(localRoot.resolve("sydra")).iterator().asScala.filter(p =>
           p.getFileName.toString.toLowerCase.startsWith("hydralocal")
             && p.getFileName.toString.toLowerCase.endsWith(".jar") && Files.isRegularFile(p)).toList.headOption
         hydraLocalJar match {

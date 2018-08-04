@@ -23,11 +23,17 @@
     Open <a href="/apps/monitor.html">Monitor</a>
     <p></p>
     Open <a href="/apps/dataviewer.html">DataViewer</a>
-    <p> </p>
-    <p> </p>
-    <p> </p>
-    Download <a href="/apps/dataviewer.html">HydraLocal</a>
+    <p></p>
+    <p></p>
+    <p></p>
+    <div id="launcher"> Download <a href="/apps/sydra/hydralocallauncher_2.12-0.1.0.jar">HydraLocal</a>
+    </div>
 </div>
-
+<script>
+    $(document).ready(function () {
+        var date = new Date()
+        var dateString = "" + date.getFullYear() + date.getMonth() + date.getDate() + date.getHours() + date.getMinutes() + date.getSeconds() + date.getMilliseconds()
+        document.getElementById('launcher').innerHTML = "Download <a href=\"/apps/sydra/hydralocallauncher_2.12-0.1.0.jar?" + dateString + "\">HydraLocal</a>"
+    });</script>
 </body>
 </html>
