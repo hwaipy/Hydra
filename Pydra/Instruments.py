@@ -8,6 +8,7 @@ from SCPI import SCPI
 class Instrument:
     pass
 
+
 class VISAInstrument(Instrument):
     manufacturer = 'USTC'
     model = 'VISAInstrument'
@@ -42,9 +43,18 @@ class VISAInstrument(Instrument):
             idns.append('')
         return idns[:4]
 
+    def getSerialNumber(self):
+        return self.getIdentity()[2]
+
+    def getManufacturer(self):
+        return self.getIdentity()[0]
+
+    def getModel(self):
+        return self.getIdentity()[1]
+
     def verifyIdentity(self):
         idns = self.getIdentity()
-        if ((idns[0] == self.__class__.manufacturer)) and ((idns[1] == self.__class__.model)):
+        if ((idns[0].strip() == self.__class__.manufacturer)) and ((idns[1].strip() == self.__class__.model)):
             self.serialNumber = idns[2]
             self.version = idns[3]
             self.maxChannelNum = 1

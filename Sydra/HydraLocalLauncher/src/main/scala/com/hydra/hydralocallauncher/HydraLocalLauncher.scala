@@ -32,7 +32,7 @@ object HydraLocalLauncher extends JFXApp {
   val DEBUG = new File(".").getAbsolutePath.contains("GitHub")
   System.setProperty("log4j.configurationFile", "./config/hydralocallauncher.debug.log4j.xml")
 
-  val localRoot = Paths.get(System.getProperty("user.home"), "HydraLocal/release/")
+  val localRoot = Paths.get(System.getProperty("user.home"), "HydraLocal/")
   if (Files.notExists(localRoot, LinkOption.NOFOLLOW_LINKS)) Files.createDirectories(localRoot)
 
   val preferences = Preferences.userRoot.node("/Hydra/HydraLocalLauncher")
@@ -107,8 +107,8 @@ object HydraLocalLauncher extends JFXApp {
     buttonLaunch.disable = true
     processBar.visible = true
     processBar.progress = -1
+    val parsedHost = parseHost(host)
     Future {
-      val parsedHost = parseHost(host)
       val client = MessageClient.newClient(parsedHost._1, parsedHost._2)
       clientRef.set(client)
       val task = new UpdateFileTask(client)
@@ -133,14 +133,14 @@ object HydraLocalLauncher extends JFXApp {
     }(executionContext).onComplete {
       case Success(suc) => {
         println("Updated.")
-        println(Files.exists(localRoot.resolve("sydra")))
-        val hydraLocalJar = Files.list(localRoot.resolve("sydra")).iterator().asScala.filter(p =>
+        println(Files.exists(localRoot.resolve("release/sydra")))
+        val hydraLocalJar = Files.list(localRoot.resolve("release/sydra")).iterator().asScala.filter(p =>
           p.getFileName.toString.toLowerCase.startsWith("hydralocal")
             && p.getFileName.toString.toLowerCase.endsWith(".jar") && Files.isRegularFile(p)).toList.headOption
         hydraLocalJar match {
           case Some(jar) => {
             println(jar)
-            Runtime.getRuntime.exec(s"java -jar ${jar.getFileName.toString}", null, jar.getParent.toFile)
+            Runtime.getRuntime.exec(s"java -jar ${jar.getFileName.toString} ${parsedHost._1} ${parsedHost._2}", null, jar.getParent.toFile)
           }
           case None => println("No launchable JAR.")
         }
@@ -193,7 +193,7 @@ object HydraLocalLauncher extends JFXApp {
     val doneWork = new AtomicLong(0)
 
     val invoker = client.blockingInvoker(target = "StorageService")
-    val remoteRoot = Paths.get("/apps/hydralocal/release/")
+    val remoteRoot = Paths.get("/apps/hydralocal/")
 
     def process = {
       val remoteMap = new mutable.HashMap[String, FileEntry]()
@@ -217,7 +217,7 @@ object HydraLocalLauncher extends JFXApp {
       val remotePaths = remoteMap.keys.toList
       val localPaths = Files.walk(localRoot, FileVisitOption.FOLLOW_LINKS).iterator.asScala.toList
         .filter(p => Files.isRegularFile(p)).map(p => localRoot.relativize(p).toString)
-      localPaths.filterNot(remotePaths.contains).foreach(p => Files.delete(localRoot.resolve(p)))
+      localPaths.filterNot(remotePaths.contains).filterNot(p => p.startsWith(".")).foreach(p => Files.delete(localRoot.resolve(p)))
 
       val todoList = ArrayBuffer[FileEntry]()
       remoteMap.values.toList.foreach(remoteEntry => {

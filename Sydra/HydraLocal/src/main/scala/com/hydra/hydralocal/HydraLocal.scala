@@ -3,7 +3,8 @@ package com.hydra.hydralocal
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.concurrent.{ExecutionContext, Future}
-import java.io.File
+import java.io.{File, PrintWriter}
+import java.net.InetAddress
 import java.nio.ByteBuffer
 import java.nio.file._
 import java.nio.file.attribute.FileTime
@@ -24,13 +25,14 @@ import com.hydra.io.MessageClient
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
 import scala.util.{Failure, Success}
 import scalafx.geometry.Pos
 import scalafx.scene.text.Font
 
 object HydraLocal extends JFXApp {
   val DEBUG = new File(".").getAbsolutePath.contains("GitHub")
-  System.setProperty("log4j.configurationFile", "./config/hydralocallauncher.debug.log4j.xml")
+//  System.setProperty("log4j.configurationFile", "./config/hydralocallauncher.debug.log4j.xml")
 
   val localRoot = Paths.get(System.getProperty("user.home"), "HydraLocal/")
 
@@ -40,6 +42,34 @@ object HydraLocal extends JFXApp {
   val framePosition = new Point2D(
     visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
     visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
+
+  val settingsPath = localRoot.resolve(".settings")
+  if (Files.notExists(settingsPath)) Files.createDirectories(settingsPath)
+
+  val clientName = {
+    val clientNameFile = settingsPath.resolve("clientName")
+    if (Files.notExists(clientNameFile)) {
+      var addr = InetAddress.getLocalHost
+      Files.createFile(clientNameFile)
+      Files.write(clientNameFile, addr.getHostAddress.getBytes("UTF-8"), StandardOpenOption.WRITE)
+    }
+    Source.fromFile(clientNameFile.toFile, "UTF-8").getLines.toList.head
+  }
+
+  val (serverAddress, serverPort) = {
+    val args = parameters.raw.toList
+    if (args.size >= 2) (args(0), args(1).toInt) else ("localhost", 20102)
+  }
+
+
+
+//  val client = MessageClient.newClient(serverAddress, serverPort, clientName)
+//  client.stop
+
+
+
+  //  val hostname = addr.getHostName
+  //  println("The computer name is: " + hostname)
 
   //  val clientRef = new AtomicReference[MessageClient]
   //

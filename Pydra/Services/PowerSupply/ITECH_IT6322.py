@@ -16,86 +16,100 @@ class IT6322(VISAInstrument):
     def __init__(self, resourceID):
         super().__init__(resourceID, 3)
         self.__remote()
-        self.voltageSetpoints = self.getVoltageSetpoints()
-        self.currentLimits = self.getCurrentLimits()
-        self.outputStatuses = self.getOutputStatuses()
+        self.voltageSetpoints = [float(v.strip()) for v in self.scpi.APP.VOLT.query().split(',')]
+        self.currentLimitSetpoints = [float(v.strip()) for v in self.scpi.APP.CURR.query().split(',')]
+        self.outputStatuses = [int(v.strip()) > 0 for v in self.scpi.APP.OUT.query().split(',')]
+        self.voltageRanges = [30, 30, 6]
+        self.currentLimitRanges = [3, 3, 3]
 
     def __remote(self):
         return self.scpi.SYSTem.REMote.write()
-        ##SYSTem:RWLock[:STATe]
 
-    # def getManufacturer(self):
-    #     return "Pydra"
-    #
-    # def getModel(self):
-    #     return "Virtual DC Voltage Source"
-    #
-    # def getSerialNumber(self):
-    #     return self.serialNumber
-    #
-    # def isAvailable(self):
-    #     return True
-    #
-    # def getChannelNumber(self):
-    #     return self.channelCount
-    #
-    # def getVoltageRange(self, channel):
-    #     self.__checkChannel(channel)
-    #     return self.voltageRanges[channel]
-    #
-    # def getCurrentLimitRange(self, channel):
-    #     self.__checkChannel(channel)
-    #     return self.currentLimitRange[channel]
-    #
-    # def setVoltage(self, channel, voltage):
-    #     self.__checkChannel(channel)
-    #     if voltage < 0:
-    #         voltage = 0
-    #     if voltage > self.voltageRanges[channel]:
-    #         voltage = self.voltageRanges[channel]
-    #     self.voltageSetpoints[channel] = voltage
-    #
-    # def setVoltages(self, voltages):
-    #     if len(voltages) != self.getChannelNumber():
-    #         raise DeviceException("voltages should have length of {}".format(self.getChannelNumber()))
-    #     for i in range(0, self.getChannelNumber()):
-    #         self.setVoltage(i, voltages[i])
-    #
-    # def getVoltageSetPoint(self, channel):
-    #     self.__checkChannel(channel)
-    #     return self.voltageSetpoints[channel]
-    #
-    # def setCurrentLimit(self, channel, current):
-    #     self.__checkChannel(channel)
-    #     if current < 0:
-    #         current = 0
-    #     if current > self.currentLimitRange[channel]:
-    #         current = self.currentLimitRange[channel]
-    #     self.currentLimits[channel] = current
-    #
-    # def setCurrentLimits(self, currents):
-    #     if len(currents) != self.getChannelNumber():
-    #         raise DeviceException("currents should have length of {}".format(self.getChannelNumber()))
-    #     for i in range(0, self.getChannelNumber()):
-    #         self.setCurrentLimit(i, currents[i])
-    #
-    # def getCurrentLimitSetPoint(self, channel):
-    #     self.__checkChannel(channel)
-    #     return self.currentLimits[channel]
-    #
-    # def setOutputStatus(self, channel, status):
-    #     self.__checkChannel(channel)
-    #     self.outputStatuses[channel] = status
-    #
-    # def setOutputStatuses(self, statuses):
-    #     if len(statuses) != self.getChannelNumber():
-    #         raise DeviceException("statuses should have length of {}".format(self.getChannelNumber()))
-    #     for i in range(0, self.getChannelNumber()):
-    #         self.setOutputStatus(i, statuses[i])
-    #
-    # def getOutputStatus(self, channel):
-    #     self.__checkChannel(channel)
-    #     return self.outputStatuses[channel]
+    def __checkChannel(self, channel):
+        if channel < 0 or channel >= self.channelCount:
+            raise DeviceException("channel can only be a Int in [0, {})".format(self.channelCount))
+
+    def isAvailable(self):
+        return True
+
+    def getChannelNumber(self):
+        return self.channelCount
+
+    def getVoltageRange(self, channel):
+        self.__checkChannel(channel)
+        return self.voltageRanges[channel]
+
+    def getCurrentLimitRange(self, channel):
+        self.__checkChannel(channel)
+        return self.currentLimitRanges[channel]
+
+    def __trimVoltage(self, channel, voltage):
+        if voltage < 0:
+            return 0
+        if voltage > self.voltageRanges[channel]:
+            return self.voltageRanges[channel]
+        return voltage
+
+    def setVoltage(self, channel, voltage):
+        self.__checkChannel(channel)
+        voltage = self.__trimVoltage(channel, voltage)
+        self.voltageSetpoints[channel] = voltage
+        self.scpi.INST.NSEL.write(channel + 1)
+        self.scpi.VOLT.write('{}V'.format(voltage))
+
+    def setVoltages(self, voltages):
+        if len(voltages) is not self.channelCount:
+            raise DeviceException('Length of voltages do not match the channel number.')
+        voltages = [self.__trimVoltage(c, voltages[c]) for c in range(0, self.channelCount)]
+        outputCodeString = ['{}'.format(v) for v in voltages]
+        outputCode = ', '.join(outputCodeString)
+        self.scpi.APP.VOLT.write(outputCode)
+        self.voltageSetpoints = voltages
+
+    def getVoltageSetPoint(self, channel):
+        self.__checkChannel(channel)
+        return self.voltageSetpoints[channel]
+
+    def __trimCurrent(self, channel, current):
+        if current < 0:
+            return 0
+        if current > self.currentLimitRanges[channel]:
+            return self.currentLimitRanges[channel]
+        return current
+
+    def setCurrentLimit(self, channel, current):
+        self.__checkChannel(channel)
+        current = self.__trimCurrent(channel, current)
+        self.currentLimitSetpoints[channel] = current
+        self.scpi.INST.NSEL.write(channel + 1)
+        self.scpi.CURR.write('{}A'.format(current))
+
+    def setCurrents(self, currents):
+        if len(currents) is not self.channelCount:
+            raise DeviceException('Length of voltages do not match the channel number.')
+        currents = [self.__trimCurrent(c, currents[c]) for c in range(0, self.channelCount)]
+        outputCodeString = ['{}'.format(v) for v in currents]
+        outputCode = ', '.join(outputCodeString)
+        self.scpi.APP.CURR.write(outputCode)
+        self.currentLimitSetpoints = currents
+
+    def getCurrentLimitSetpoints(self, channel):
+        self.__checkChannel(channel)
+        return self.voltageSetpoints[channel]
+
+    def setOutputStatus(self, channel, status):
+        self.__checkChannel(channel)
+        self.scpi.INST.NSEL.write(channel + 1)
+        self.scpi.OUTP.write(1 if status else 0)
+
+    def setOutputStatuses(self, outputStatuses):
+        if len(outputStatuses) != self.getChannelNumber():
+            raise DeviceException("statuses should have length of {}".format(self.getChannelNumber()))
+        outputCodeString = ['{}'.format(1 if v else 0) for v in outputStatuses]
+        outputCode = ', '.join(outputCodeString)
+        self.scpi.APP.OUT.write(outputCode)
+        self.outputStatuses = [True if v else False for v in outputStatuses]
+
     #
     # def __measure(self, channel):
     #     self.__checkChannel(channel)
@@ -122,11 +136,16 @@ class IT6322(VISAInstrument):
     # def measureCurrents(self):
     #     return [self.measureCurrent(c) for c in range(0, self.getChannelNumber())]
 
+    def beeper(self):
+        self.scpi.SYSTem.BEEPer.write()
+        self.getIdentity()
 
-if __name__ == '__main__':
+
+if __name__ == '__main_213123':
     import sys
     import Utils
     import Pydra
+
 
     # sysArgs = Utils.SystemArguments(sys.argv)
     # server = sysArgs.get('server', 'localhost')
@@ -158,7 +177,6 @@ if __name__ == '__main__':
     #         session.stop()
     #         break
 
-
     def getIdentity(self):
         idn = self.scpi._IDN.query()
         if idn is None:
@@ -171,22 +189,22 @@ if __name__ == '__main__':
             idns.append('')
         return idns[:4]
 
+
     def getVersion(self):
         return self.scpi.SYSTem.VERSion.query()
 
-    def beeper(self):
-        self.scpi.SYSTem.BEEPer.write()
-        self.getIdentity()
 
     def measureVoltages(self):
         voltageString = self.scpi.MEAS.VOLT.ALL.query().split(', ')
         voltages = [float(vs) for vs in voltageString]
         return voltages
 
+
     def measureCurrents(self):
         currentString = self.scpi.MEAS.CURR.ALL.query().split(', ')
         currents = [float(vs) for vs in currentString]
         return currents
+
 
     def getVoltageSetpoints(self):
         vs = self.scpi.APP.VOLT.query()
@@ -194,39 +212,13 @@ if __name__ == '__main__':
         self.voltageSetpoints = [float(v) for v in vs]
         return self.voltageSetpoints
 
+
     def getCurrentLimits(self):
         cs = self.scpi.APP.CURR.query()
         cs = cs.split(', ')
         self.currentLimits = [float(v) for v in cs]
         return self.currentLimits
 
-    def setVoltages(self, voltages):
-        if len(voltages) is not self.channelCount:
-            raise DeviceException('Length of voltages do not match the channel number.')
-        outputCodeString = ['{}'.format(v) for v in voltages]
-        outputCode = ', '.join(outputCodeString)
-        self.scpi.APP.VOLT.write(outputCode)
-        setted = self.getVoltageSetpoints()
-        same = [math.fabs(voltages[i] - setted[i]) < 0.001 for i in range(self.channelCount)]
-        if sum(same) is not self.channelCount:
-            raise DeviceException('Voltage out of range.')
-
-    def setVoltage(self, channel, voltage):
-        self.checkChannel(channel)
-        voltages = self.voltageSetpoints.copy()
-        voltages[channel] = voltage
-        self.setVoltages(voltages)
-
-    def setCurrentLimits(self, currents):
-        if len(currents) is not self.channelCount:
-            raise DeviceException('Length of currents do not match the channel number.')
-        outputCodeString = ['{}'.format(v) for v in currents]
-        outputCode = ', '.join(outputCodeString)
-        self.scpi.APP.CURR.write(outputCode)
-        setted = self.getCurrentLimits()
-        same = [math.fabs(currents[i] - setted[i]) < 0.001 for i in range(self.channelCount)]
-        if sum(same) is not self.channelCount:
-            raise DeviceException('Current out of range.')
 
     def setCurrentLimit(self, channel, currentLimit):
         self.checkChannel(channel)
@@ -234,40 +226,19 @@ if __name__ == '__main__':
         currentLimits[channel] = currentLimit
         self.setCurrentLimits(currentLimits)
 
-    def getOutputStatuses(self):
-        os = self.scpi.APP.OUT.query()
-        os = os.split(', ')
-        self.outputStatuses = [o == '1' for o in os]
-        return self.outputStatuses
-
-    def setOutputStatuses(self, outputStatuses):
-        if len(outputStatuses) is not self.channelCount:
-            raise DeviceException('Length of outputStatuses do not match the channel number.')
-        outputCodeString = ['{}'.format(1 if v else 0) for v in outputStatuses]
-        outputCode = ', '.join(outputCodeString)
-        self.scpi.APP.OUT.write(outputCode)
-        setted = self.getOutputStatuses()
-        same = [outputStatuses[i] == setted[i] for i in range(self.channelCount)]
-        if sum(same) is not self.channelCount:
-            raise DeviceException('OutputStatus error.')
-
-    def setOutputStatus(self, channel, outputStatus):
-        self.checkChannel(channel)
-        outputStatuses = self.outputStatuses.copy()
-        outputStatuses[channel] = outputStatus
-        self.setOutputStatuses(outputStatuses)
 
     def reset(self):
         self.scpi._RST.write()
 
-
-
 if __name__ == '__main__':
-    print('BKPrecision_IT6322')
-    pm = IT6322('ASRL11::INSTR')
+    import pyvisa
+
+    pm = IT6322('ASRL17::INSTR')
+
+    pm.setOutputStatuses([1, 1, 1])
     # pm.setCurrentLimits([1, 1, 1])
     # pm.setOutputStatuses([False]*3)
-    pm.beeper()
+
     import time
 
-    time.sleep(1000)
+    time.sleep(1)

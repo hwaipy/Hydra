@@ -128,7 +128,7 @@ if __name__ == '__main__':
     import Pydra
 
     sysArgs = Utils.SystemArguments(sys.argv)
-    server = sysArgs.get('server', 'localhost')
+    server = sysArgs.get('server', '192.168.25.27')
     port = sysArgs.get('port', '20102')
     wydraPort = sysArgs.get('wydraPort', '20080')
     clientName = sysArgs.get('clientName', 'test')

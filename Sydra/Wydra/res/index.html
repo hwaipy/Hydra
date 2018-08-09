@@ -33,7 +33,10 @@
     $(document).ready(function () {
         var date = new Date()
         var dateString = "" + date.getFullYear() + date.getMonth() + date.getDate() + date.getHours() + date.getMinutes() + date.getSeconds() + date.getMilliseconds()
-        document.getElementById('launcher').innerHTML = "Download <a href=\"/apps/sydra/hydralocallauncher_2.12-0.1.0.jar?" + dateString + "\">HydraLocal</a>"
+        document.getElementById('launcher').innerHTML =
+            "Download <a href=\"/apps/sydra/hydralocallauncher_2.12-0.1.0.jar?" + dateString + "\">HydraLocal</a>"
+            + "  (<a href=\"/apps/sydra/jre-8u181-windows-i586.exe?" + dateString + "\">Java</a>"
+            + " and <a href=\"/apps/sydra/Python37-32.rar?" + dateString + "\">Python3</a> required)"
     });</script>
 </body>
 </html>
