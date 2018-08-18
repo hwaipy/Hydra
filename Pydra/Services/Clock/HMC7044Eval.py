@@ -21,14 +21,16 @@ if __name__ == '__main__':
     sys.path.append("../../")
 
     sysArgs = Utils.SystemArguments(sys.argv)
-    server = sysArgs.get('server', 'localhost')
+    server = sysArgs.get('server', '192.168.25.27')
     port = sysArgs.get('port', '20102')
     wydraPort = sysArgs.get('wydraPort', '20080')
     clientName = sysArgs.get('clientName', 'test')
 
     invoker = HMC7044Eval()
 
+    print('c')
     session = Pydra.Session.newSession((server, int(port)), invoker, clientName)
+    print('d')
 
     while True:
         import time

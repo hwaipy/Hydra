@@ -304,7 +304,10 @@ class Session:
                 pingTimePast += loopStepDuration
                 if pingTimePast >= pingDuration:
                     pingTimePast = 0
-                    self.blockingInvoker().ping()
+                    try:
+                        self.blockingInvoker(timeout=5).ping()
+                    except Exception as e:
+                        return
 
         def communicatorControlLoop():
             while self.__running:
@@ -372,7 +375,7 @@ class Session:
                     self.__onComplete()
                 self.__metux.release()
 
-            def await(self, timeout=None):
+            def waitFor(self, timeout=None):
                 if self.__awaitSemaphore.acquire(timeout=timeout):
                     self.__awaitSemaphore.release()
                     return True
@@ -380,7 +383,7 @@ class Session:
                     return False
 
             def sync(self, timeout=None):
-                if self.await(timeout):
+                if self.waitFor(timeout):
                     if self.isSuccess():
                         return self.__result
                     elif isinstance(self.__exception, BaseException):
