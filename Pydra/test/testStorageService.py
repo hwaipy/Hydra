@@ -11,29 +11,30 @@ from Services.Storage import StorageService, HBTFileElement
 
 class StorageServiceTest(unittest.TestCase):
     port = 20102
-    testSpacePath = "/pydratest/testservicespace/"
+    addr = '192.168.25.27'
+    testSpacePath = u"/pydratest/testservicespace/"
 
     @classmethod
     def setUpClass(cls):
         pass
 
     def setUp(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
-        storage = mc.blockingInvoker("StorageService")
-        if storage.exists("", StorageServiceTest.testSpacePath):
-            storage.delete("", StorageServiceTest.testSpacePath)
-        storage.createDirectory("", StorageServiceTest.testSpacePath)
+        storage = mc.blockingInvoker(u"StorageService")
+        if storage.exists(u"", StorageServiceTest.testSpacePath):
+            storage.delete(u"", StorageServiceTest.testSpacePath)
+        storage.createDirectory(u"", StorageServiceTest.testSpacePath)
         for i in range(1, 6):
-            storage.createDirectory("", "{}a{}".format(StorageServiceTest.testSpacePath, i))
-        storage.createFile("", "{}_A1".format(StorageServiceTest.testSpacePath))
-        storage.createFile("", "{}_A2".format(StorageServiceTest.testSpacePath))
-        storage.write("", "{}_A1".format(StorageServiceTest.testSpacePath), b"1234567890abcdefghijklmnopqrstuvwxyz", 0)
-        storage.write("", "{}_A2".format(StorageServiceTest.testSpacePath), b"0123456789", 0)
+            storage.createDirectory(u"", u"{}a{}".format(StorageServiceTest.testSpacePath, i))
+        storage.createFile(u"", u"{}_A1".format(StorageServiceTest.testSpacePath))
+        storage.createFile(u"", u"{}_A2".format(StorageServiceTest.testSpacePath))
+        storage.write(u"", u"{}_A1".format(StorageServiceTest.testSpacePath), b"1234567890abcdefghijklmnopqrstuvwxyz", 0)
+        storage.write(u"", u"{}_A2".format(StorageServiceTest.testSpacePath), b"0123456789", 0)
         mc.stop()
 
     def testList(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
         a = service.listElements(StorageServiceTest.testSpacePath)
@@ -41,90 +42,90 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testMetaData(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
-        self.assertEqual(service.metaData("{}a1".format(StorageServiceTest.testSpacePath)),
-                         {"Name": "a1", "Path": "{}a1".format(StorageServiceTest.testSpacePath), "Type": "Collection"})
+        self.assertEqual(service.metaData(u"{}a1".format(StorageServiceTest.testSpacePath)),
+                         {u"Name": u"a1", u"Path": u"{}a1".format(StorageServiceTest.testSpacePath), u"Type": u"Collection"})
         mc.stop()
 
     def testListMetaData(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
         elements = service.listElements(StorageServiceTest.testSpacePath, True)
         expected = [
-            ["_A1", "_A1", "Content"],
-            ["_A2", "_A2", "Content"],
-            ["a1", "a1", "Collection"],
-            ["a2", "a2", "Collection"],
-            ["a3", "a3", "Collection"],
-            ["a4", "a4", "Collection"],
-            ["a5", "a5", "Collection"]]
+            [u"_A1", u"_A1", u"Content"],
+            [u"_A2", u"_A2", u"Content"],
+            [u"a1", u"a1", u"Collection"],
+            [u"a2", u"a2", u"Collection"],
+            [u"a3", u"a3", u"Collection"],
+            [u"a4", u"a4", u"Collection"],
+            [u"a5", u"a5", u"Collection"]]
         self.assertEqual(len(elements), len(expected))
         for i in range(0, len(expected)):
             exp = expected[i]
             res = elements[i]
-            self.assertEqual(res.get("Name"), exp[0])
-            self.assertEqual(res.get("Path"), StorageServiceTest.testSpacePath + exp[1])
-            self.assertEqual(res.get("Type"), exp[2])
-        self.assertEqual(elements[0].get("Size"), 36)
-        self.assertEqual(elements[1].get("Size"), 10)
+            self.assertEqual(res.get(u"Name"), exp[0])
+            self.assertEqual(res.get(u"Path"), StorageServiceTest.testSpacePath + exp[1])
+            self.assertEqual(res.get(u"Type"), exp[2])
+        self.assertEqual(elements[0].get(u"Size"), 36)
+        self.assertEqual(elements[1].get(u"Size"), 10)
         mc.stop()
 
     def testNote(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
-        self.assertEqual(service.readNote(StorageServiceTest.testSpacePath), "")
-        service.writeNote(StorageServiceTest.testSpacePath, "Test Note")
-        self.assertEqual(service.readNote(StorageServiceTest.testSpacePath), "Test Note")
+        self.assertEqual(service.readNote(StorageServiceTest.testSpacePath), u"")
+        service.writeNote(StorageServiceTest.testSpacePath, u"Test Note")
+        self.assertEqual(service.readNote(StorageServiceTest.testSpacePath), u"Test Note")
         mc.stop()
 
     def testRead(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
-        self.assertEqual(service.read("{}_A1".format(StorageServiceTest.testSpacePath), 1, 10), b"234567890a")
-        self.assertEqual(service.read("{}_A1".format(StorageServiceTest.testSpacePath), 30, 6), b"uvwxyz")
-        self.assertEqual(service.readAll("{}_A2".format(StorageServiceTest.testSpacePath)), b'0123456789')
+        self.assertEqual(service.read(u"{}_A1".format(StorageServiceTest.testSpacePath), 1, 10), b"234567890a")
+        self.assertEqual(service.read(u"{}_A1".format(StorageServiceTest.testSpacePath), 30, 6), b"uvwxyz")
+        self.assertEqual(service.readAll(u"{}_A2".format(StorageServiceTest.testSpacePath)), b'0123456789')
         mc.stop()
 
     def testAppend(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
-        service.append("{}_A1".format(StorageServiceTest.testSpacePath), b"ABCDE")
-        self.assertEqual(service.metaData("{}_A1".format(StorageServiceTest.testSpacePath)),
-                         {"Name": "_A1", "Path": "{}_A1".format(StorageServiceTest.testSpacePath), "Type": "Content",
-                          "Size": 41})
-        self.assertEqual(service.read("{}_A1".format(StorageServiceTest.testSpacePath), 35, 6), b"zABCDE")
+        service.append(u"{}_A1".format(StorageServiceTest.testSpacePath), b"ABCDE")
+        self.assertEqual(service.metaData(u"{}_A1".format(StorageServiceTest.testSpacePath)),
+                         {u"Name": u"_A1", u"Path": u"{}_A1".format(StorageServiceTest.testSpacePath), u"Type": u"Content",
+                          u"Size": 41})
+        self.assertEqual(service.read(u"{}_A1".format(StorageServiceTest.testSpacePath), 35, 6), b"zABCDE")
         mc.stop()
 
     def testWrite(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
-        service.write("{}_A1".format(StorageServiceTest.testSpacePath), b"ABCDE", 10)
-        self.assertEqual(service.metaData("{}_A1".format(StorageServiceTest.testSpacePath)),
-                         {"Name": "_A1", "Path": "{}_A1".format(StorageServiceTest.testSpacePath), "Type": "Content",
-                          "Size": 36})
-        self.assertEqual(service.readAsString("{}_A1".format(StorageServiceTest.testSpacePath), 0, 16),
-                         "1234567890ABCDEf")
-        self.assertEqual(service.readAllAsString("{}_A1".format(StorageServiceTest.testSpacePath)),
-                         "1234567890ABCDEfghijklmnopqrstuvwxyz")
-        service.write("{}_A1".format(StorageServiceTest.testSpacePath), b"defghi", 39)
-        self.assertEqual(service.metaData("{}_A1".format(StorageServiceTest.testSpacePath)),
-                         {"Name": "_A1", "Path": "{}_A1".format(StorageServiceTest.testSpacePath), "Type": "Content",
-                          "Size": 45})
-        self.assertEqual(service.readAsString("{}_A1".format(StorageServiceTest.testSpacePath), 35, 10),
-                         "z\0\0\0defghi")
-        self.assertEqual(service.readAsString("{}_A1".format(StorageServiceTest.testSpacePath), 0, 16),
-                         "1234567890ABCDEf")
+        service.write(u"{}_A1".format(StorageServiceTest.testSpacePath), b"ABCDE", 10)
+        self.assertEqual(service.metaData(u"{}_A1".format(StorageServiceTest.testSpacePath)),
+                         {u"Name": u"_A1", u"Path": u"{}_A1".format(StorageServiceTest.testSpacePath), u"Type": u"Content",
+                          u"Size": 36})
+        self.assertEqual(service.readAsString(u"{}_A1".format(StorageServiceTest.testSpacePath), 0, 16),
+                         u"1234567890ABCDEf")
+        self.assertEqual(service.readAllAsString(u"{}_A1".format(StorageServiceTest.testSpacePath)),
+                         u"1234567890ABCDEfghijklmnopqrstuvwxyz")
+        service.write(u"{}_A1".format(StorageServiceTest.testSpacePath), b"defghi", 39)
+        self.assertEqual(service.metaData(u"{}_A1".format(StorageServiceTest.testSpacePath)),
+                         {u"Name": u"_A1", u"Path": u"{}_A1".format(StorageServiceTest.testSpacePath), u"Type": u"Content",
+                          u"Size": 45})
+        self.assertEqual(service.readAsString(u"{}_A1".format(StorageServiceTest.testSpacePath), 35, 10),
+                         u"z\0\0\0defghi")
+        self.assertEqual(service.readAsString(u"{}_A1".format(StorageServiceTest.testSpacePath), 0, 16),
+                         u"1234567890ABCDEf")
         mc.stop()
 
     def testDelete(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
         self.assertEqual(
@@ -136,7 +137,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testCreateFile(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
         service.createFile("{}NewFile".format(StorageServiceTest.testSpacePath))
@@ -147,7 +148,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testCreateDirectory(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
         service.createDirectory("{}a2/NewDir".format(StorageServiceTest.testSpacePath))
@@ -155,7 +156,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testElementList(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
         element = service.getElement(StorageServiceTest.testSpacePath)
@@ -164,7 +165,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testElementMetaData(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         self.assertEqual(testRoot.resolve("a1").metaData(),
@@ -173,7 +174,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testElementListMetaData(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         elements = testRoot.listElements(True)
@@ -197,7 +198,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testElementNote(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         self.assertEqual(testRoot.readNote(), "")
@@ -206,7 +207,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testRead(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         self.assertEqual(testRoot.resolve('/_A1').read(1, 10), b"234567890a")
@@ -215,19 +216,19 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testAppend(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
-        service.append("{}_A1".format(StorageServiceTest.testSpacePath), b"ABCDE")
-        self.assertEqual(service.metaData("{}_A1".format(StorageServiceTest.testSpacePath)),
-                         {"Name": "_A1", "Path": "{}_A1".format(StorageServiceTest.testSpacePath),
-                          "Type": "Content",
-                          "Size": 41})
-        self.assertEqual(service.read("{}_A1".format(StorageServiceTest.testSpacePath), 35, 6), b"zABCDE")
+        service.append(u"{}_A1".format(StorageServiceTest.testSpacePath), b"ABCDE")
+        self.assertEqual(service.metaData(u"{}_A1".format(StorageServiceTest.testSpacePath)),
+                         {u"Name": u"_A1", u"Path": u"{}_A1".format(StorageServiceTest.testSpacePath),
+                          u"Type": u"Content",
+                          u"Size": 41})
+        self.assertEqual(service.read(u"{}_A1".format(StorageServiceTest.testSpacePath), 35, 6), b"zABCDE")
         mc.stop()
 
     def testWrite(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         A1 = testRoot.resolve('_A1')
@@ -245,7 +246,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testElementDelete(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         self.assertEqual(testRoot.listElements(), ["_A1", "_A2", "a1", "a2", "a3", "a4", "a5"])
@@ -256,7 +257,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testCreateFile(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         testRoot.resolve('NewFile').createFile()
@@ -267,7 +268,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testCreateDirectory(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         testRoot = StorageService(mc).getElement(StorageServiceTest.testSpacePath)
         testRoot.resolve('a2').resolve('NewDir').createDirectory()
@@ -275,7 +276,7 @@ class StorageServiceTest(unittest.TestCase):
         mc.stop()
 
     def testHBTFile(self):
-        mc = Session(("localhost", StorageServiceTest.port), None)
+        mc = Session((StorageServiceTest.addr, StorageServiceTest.port), None)
         mc.start()
         service = StorageService(mc)
         hbtFile = service.getElement(StorageServiceTest.testSpacePath).resolve('HBTFileTest.hbt').toHBTFileElement()

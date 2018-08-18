@@ -109,6 +109,11 @@ class MessagePackTest(unittest.TestCase):
         unpacker.feed(bytes)
         self.assertEqual(unpacker.__next__(), MessagePackTest.map)
         self.assertNotEqual(unpacker.__next__(), MessagePackTest.map)
+    #
+    # def testStringPack(self):
+    #     # uBytes = Message(u"Test").pack()
+    #     bytes = Message("Test").pack()
+    #     print([b for b in bytes])
 
     def tearDown(self):
         pass

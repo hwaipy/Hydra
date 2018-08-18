@@ -9,7 +9,6 @@ import random
 import struct
 import threading
 
-
 class ProtocolException(Exception):
     def __init__(self, description, message=None):
         Exception.__init__(self)
@@ -24,15 +23,15 @@ class ProtocolException(Exception):
 
 
 class Message:
-    KeyMessageID = "MessageID"
-    KeyResponseID = "ResponseID"
-    KeyObjectID = "ObjectID"
-    KeyRequest = "Request"
-    KeyResponse = "Response"
-    KeyError = "Error"
-    KeyFrom = "From"
-    KeyTo = "To"
-    KeyNoResponse = "NoResponse"
+    KeyMessageID = u"MessageID"
+    KeyResponseID = u"ResponseID"
+    KeyObjectID = u"ObjectID"
+    KeyRequest = u"Request"
+    KeyResponse = u"Response"
+    KeyError = u"Error"
+    KeyFrom = u"From"
+    KeyTo = u"To"
+    KeyNoResponse = u"NoResponse"
     Preserved = [KeyMessageID, KeyResponseID, KeyObjectID, KeyRequest, KeyResponse, KeyError, KeyFrom, KeyTo,
                  KeyNoResponse]
 
@@ -178,7 +177,7 @@ class MessageBuilder:
         return Message(self.__content)
 
     def to(self, target):
-        if isinstance(target, str):
+        if isinstance(target, str) or isinstance(target, unicode):
             self.__content.update({Message.KeyTo: target})
         else:
             raise TypeError("Target should be a String.")
@@ -248,7 +247,7 @@ class Session:
 
     def __init__(self, address, invoker, name=""):
         self.address = address
-        self.name = name
+        self.name = u'{}'.format(name)
         self.__running = True
         self.__waitingMap = {}
         self.__waitingMapLock = threading.Lock()
@@ -329,7 +328,7 @@ class Session:
     def stop(self):
         self.__running = False
         self.communicator.stop()
-        self.socket.close()
+        self.socket.shutdown(socket.SHUT_RDWR)
 
     def toMessageInvoker(self, target=None):
         return DynamicRemoteObject(self, toMessage=True, blocking=False, target=target, objectID=0, timeout=None)
@@ -376,11 +375,25 @@ class Session:
                 self.__metux.release()
 
             def waitFor(self, timeout=None):
-                if self.__awaitSemaphore.acquire(timeout=timeout):
-                    self.__awaitSemaphore.release()
-                    return True
-                else:
-                    return False
+                # For Python 3 only.
+                # if self.__awaitSemaphore.acquire(True, timeout):
+                #     self.__awaitSemaphore.release()
+                #     return True
+                # else:
+                #     return False
+
+                # For Python 2 & 3
+                timeStep = 0.1 if timeout is None else timeout/10
+                startTime = time.time()
+                while True:
+                    acq = self.__awaitSemaphore.acquire(False)
+                    if acq:
+                        return acq
+                    else:
+                        passedTime = time.time() - startTime
+                        if (timeout is not None) and (passedTime>=timeout):
+                            return False
+                        time.sleep(timeStep)
 
             def sync(self, timeout=None):
                 if self.waitFor(timeout):
@@ -391,7 +404,7 @@ class Session:
                     else:
                         raise ProtocolException('Error state in InvokeFuture.')
                 else:
-                    raise TimeoutError()
+                    raise ProtocolException('Time out!')
 
             def __onFinish(self):
                 self.__done = True
@@ -414,7 +427,11 @@ class Session:
         return future
 
     def __dataFetcher(self, socket):
-        data = self.socket.recv(10000000)
+        try:
+            data = self.socket.recv(10000000)
+        except Exception as e:
+            print(e)
+            data = []
         if len(data) == 0:
             raise RuntimeError('Connection closed.')
         self.unpacker.feed(data)
@@ -422,8 +439,9 @@ class Session:
             message = Message(packed)
             self.__messageDeal(message)
 
-    def __dataSender(self, socket, message):
-        s = self.socket.send(message.pack(self.__remoteObjectWarpper(message)))
+    def __dataSender(self, message):
+        mb = message.pack(self.__remoteObjectWarpper(message))
+        s = self.socket.send(mb)
 
     def __messageDeal(self, message):
         type = message.messageType()
@@ -436,7 +454,8 @@ class Session:
                 if not self.__remoteReferenceKeyMap.__contains__(objectID):
                     raise IndexError()
                 invoker = self.__remoteReferenceKeyMap[objectID][0]
-                method = invoker.__getattribute__(name)
+                # method = invoker.__getattribute__(name)
+                method = getattr(invoker,name)
                 noResponse = message.get(Message.KeyNoResponse)
                 if callable(method):
                     try:
@@ -524,7 +543,7 @@ class Session:
                 fin(id, target)
 
 
-class RemoteObject:
+class RemoteObject(object):
     def __init__(self, name, id):
         self.name = name
         self.id = id
@@ -535,7 +554,7 @@ class RemoteObject:
 
 class DynamicRemoteObject(RemoteObject):
     def __init__(self, session, toMessage, blocking, target, objectID, timeout):
-        super().__init__(target, objectID)
+        super(DynamicRemoteObject, self).__init__(target, objectID)
         self.__session = session
         self.__target = target
         self.__objectID = objectID
@@ -546,6 +565,7 @@ class DynamicRemoteObject(RemoteObject):
         self.id = objectID
 
     def __getattr__(self, item):
+        item = u'{}'.format(item)
         def invoke(*args, **kwargs):
             builder = Message.newBuilder().asRequest(item, args, kwargs)
             if self.__target is not None:

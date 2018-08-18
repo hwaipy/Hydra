@@ -15,8 +15,12 @@ class Communicator:
 
     def start(self):
         self.__running = True
-        threading.Thread(target=self.__receiveLoop, name="communicator_receive_loop", daemon=False).start()
-        threading.Thread(target=self.__sendLoop, name="communicator_send_loop", daemon=False).start()
+        t1 = threading.Thread(target=self.__receiveLoop, name="communicator_receive_loop")
+        t1.setDaemon(False)
+        t1.start()
+        t2 = threading.Thread(target=self.__sendLoop, name="communicator_send_loop")
+        t2.setDaemon(False)
+        t2.start()
 
     def __receiveLoop(self):
         try:
@@ -26,6 +30,7 @@ class Communicator:
             pass
         finally:
             self.__running = False
+        print('end rec')
 
     def sendLater(self, message):
         self.__sendQueue.put(message)
@@ -35,10 +40,12 @@ class Communicator:
             while self.__running:
                 try:
                     message = self.__sendQueue.get(timeout=0.5)
-                    self.__dataSender(self.__channel, message)
+                    self.__dataSender(message)
                 except queue.Empty:
                     pass
         except BaseException as e:
+            import traceback
+            traceback.print_exc(e)
             pass
         finally:
             self.__running = False
