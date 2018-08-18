@@ -30,7 +30,6 @@ class Communicator:
             pass
         finally:
             self.__running = False
-        print('end rec')
 
     def sendLater(self, message):
         self.__sendQueue.put(message)

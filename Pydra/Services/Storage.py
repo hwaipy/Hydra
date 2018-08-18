@@ -4,70 +4,70 @@ __author__ = 'Hwaipy'
 class StorageService:
     def __init__(self, session):
         self.session = session
-        self.blockingInvoker = self.session.blockingInvoker('StorageService')
+        self.blockingInvoker = self.session.blockingInvoker(u'StorageService')
 
     def getElement(self, path):
         return StorageElement(self, path)
 
     def listElements(self, path, withMetaData=False):
-        return self.blockingInvoker.listElements("", path, withMetaData)
+        return self.blockingInvoker.listElements(u"", path, withMetaData)
 
     def metaData(self, path, withTime=False):
-        return self.blockingInvoker.metaData("", path, withTime)
+        return self.blockingInvoker.metaData(u"", path, withTime)
 
     def read(self, path, start, length):
-        return self.blockingInvoker.read("", path, start, length)
+        return self.blockingInvoker.read(u"", path, start, length)
 
     def readAsString(self, path, start, length):
         return str(self.read(path, start, length), encoding="UTF-8")
 
     def readAll(self, path):
-        return self.blockingInvoker.readAll("", path)
+        return self.blockingInvoker.readAll(u"", path)
 
     def readAllAsString(self, path):
         return str(self.readAll(path), encoding="UTF-8")
 
     def append(self, path, data):
-        return self.blockingInvoker.append("", path, data)
+        return self.blockingInvoker.append(u"", path, data)
 
     def write(self, path, data, start):
-        return self.blockingInvoker.write("", path, data, start)
+        return self.blockingInvoker.write(u"", path, data, start)
 
     def clear(self, path):
-        return self.blockingInvoker.clear("", path)
+        return self.blockingInvoker.clear(u"", path)
 
     def delete(self, path):
-        return self.blockingInvoker.delete("", path)
+        return self.blockingInvoker.delete(u"", path)
 
     def readNote(self, path):
-        return self.blockingInvoker.readNote("", path).get("Note")
+        return self.blockingInvoker.readNote(u"", path).get(u"Note")
 
     def writeNote(self, path, data):
-        return self.blockingInvoker.writeNote("", path, data)
+        return self.blockingInvoker.writeNote(u"", path, data)
 
     def createFile(self, path):
-        return self.blockingInvoker.createFile("", path)
+        return self.blockingInvoker.createFile(u"", path)
 
     def createDirectory(self, path):
-        return self.blockingInvoker.createDirectory("", path)
+        return self.blockingInvoker.createDirectory(u"", path)
 
     def exists(self, path):
-        return self.blockingInvoker.exists("", path)
+        return self.blockingInvoker.exists(u"", path)
 
     def HBTFileInitialize(self, path, heads):
-        return self.blockingInvoker.HBTFileInitialize("", path, heads)
+        return self.blockingInvoker.HBTFileInitialize(u"", path, heads)
 
     def HBTFileAppendRows(self, path, rows):
-        return self.blockingInvoker.HBTFileAppendRows("", path, rows)
+        return self.blockingInvoker.HBTFileAppendRows(u"", path, rows)
 
     def HBTFileReadRows(self, path, start, count):
-        return self.blockingInvoker.HBTFileReadRows("", path, start, count)
+        return self.blockingInvoker.HBTFileReadRows(u"", path, start, count)
 
     def HBTFileReadAllRows(self, path):
-        return self.blockingInvoker.HBTFileReadAllRows("", path)
+        return self.blockingInvoker.HBTFileReadAllRows(u"", path)
 
     def HBTFileMetaData(self, path):
-        return self.blockingInvoker.HBTFileMetaData("", path)
+        return self.blockingInvoker.HBTFileMetaData(u"", path)
 
 
 class StorageElement:
@@ -77,7 +77,7 @@ class StorageElement:
 
     def resolve(self, subPath):
         p = self.path
-        if (not p.endswith('/')) and (not subPath.startswith('/')):
+        if (not p.endswith(u'/')) and (not subPath.startswith(u'/')):
             p = p + '/'
         p = p + subPath
         return StorageElement(self.storageService, p)
