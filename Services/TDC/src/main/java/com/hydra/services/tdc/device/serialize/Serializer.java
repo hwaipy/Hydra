@@ -1,4 +1,4 @@
-package com.hydra.services.tdc.TEMP.device.tdc.serialize;
+package com.hydra.services.tdc.device.serialize;
 
 import java.nio.ByteBuffer;
 import java.util.List;

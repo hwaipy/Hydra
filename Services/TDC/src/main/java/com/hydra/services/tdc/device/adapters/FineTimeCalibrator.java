@@ -1,4 +1,4 @@
-package com.hydra.services.tdc.TEMP.device.tdc.adapters;
+package com.hydra.services.tdc.device.adapters;
 
 import java.io.BufferedReader;
 import java.io.File;

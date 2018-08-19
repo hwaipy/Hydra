@@ -1,7 +1,7 @@
-package com.hydra.services.tdc.TEMP.device.tdc.adapters;
+package com.hydra.services.tdc.device.adapters;
 
-import com.hydra.services.tdc.TEMP.device.tdc.TDCDataAdapter;
-import com.hydra.services.tdc.TEMP.device.tdc.serialize.Deserializer;
+import com.hydra.services.tdc.device.TDCDataAdapter;
+import com.hydra.services.tdc.device.serialize.Deserializer;
 
 /**
  *
