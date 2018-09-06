@@ -2,6 +2,7 @@ package com.hydra.services.tdc.device;
 
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.util.Iterator;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.BlockingQueue;
@@ -22,6 +23,7 @@ public class TDCParser {
     private final TDCDataAdapter[] adapters;
     private final BlockingQueue<Object> dataQueue = new LinkedBlockingQueue<>();
     private boolean running = true;
+    private int bufferSize = 1000000000;
 
     public TDCParser(TDCDataProcessor processor, long flushTime, TDCDataAdapter... adapters) {
         this.processor = processor;
@@ -54,7 +56,20 @@ public class TDCParser {
     }
 
     public void offer(byte[] data) {
-        dataQueue.offer(data);
+        Iterator it = dataQueue.iterator();
+        int size = 0;
+        while (it.hasNext()) {
+            Object ne = it.next();
+            if (data instanceof byte[]) {
+                byte[] bs = (byte[]) ne;
+                size += bs.length;
+            }
+        }
+        if (size > bufferSize) {
+            System.out.println("Overflow!!!");
+        } else {
+            dataQueue.offer(data);
+        }
     }
 
     public void waitForFinish() throws InterruptedException {

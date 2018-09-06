@@ -10,7 +10,7 @@ class CTekQKDSystem(Instrument):
 
     def __init__(self, wait=0.2):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect(("192.168.25.107", int(35099)))
+        self.socket.connect(("192.168.25.71", int(35099)))
         self.wait = wait
         self.modulators = {
             "Decoy": CTekQKDSystem.Modulator(True, True),
@@ -226,12 +226,11 @@ if __name__ == '__main__':
     #        CTekQKDSystem.RND.SIGNAL_PHASE_0, CTekQKDSystem.RND.SIGNAL_PHASE_0, CTekQKDSystem.RND.SIGNAL_PHASE_0] * 51200
     # rnd = [CTekQKDSystem.RND.VACUUM_PHASE_0] + [CTekQKDSystem.RND.SIGNAL_PHASE_0] * 1195 + \
     #       [CTekQKDSystem.RND.VACUUM_PHASE_0] * 2 + [CTekQKDSystem.RND.SIGNAL_PHASE_0] * 2
-    # rnd = [CTekQKDSystem.RND.SIGNAL_PHASE_0, CTekQKDSystem.RND.VACUUM_PHASE_0] * 50000
-    rnd = ([CTekQKDSystem.RND.SIGNAL_TIME_1] * 1 + [CTekQKDSystem.RND.SIGNAL_TIME_0] * 1 +
-           [CTekQKDSystem.RND.SIGNAL_PHASE_1] * 1 + [CTekQKDSystem.RND.SIGNALd
-                                                     _PHASE_0] * 2) * 50000
+    rnd = [CTekQKDSystem.RND.DECOY_PHASE_0, CTekQKDSystem.RND.SIGNAL_TIME_0] * 50000
+    # rnd = ([CTekQKDSystem.RND.DECOY_TIME_1] * 1 + [CTekQKDSystem.RND.SIGNAL_TIME_0] * 1 +
+    #        [CTekQKDSystem.RND.SIGNAL_PHASE_1] * 1 + [CTekQKDSystem.RND.SIGNAL_PHASE_0] * 2) * 50000
     print(rnd[:10])
-    cTekQKDSystem.sendRandomNumbers(rnd[:51200])
+    cTekQKDSystem.sendRandomNumbers(rnd[:50000])
 
     # print(CTekQKDSystem.Modulator(False, True).bais)
     cTekQKDSystem.setDacVoltage(8, "Decoy", 1)
