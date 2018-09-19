@@ -1,124 +1,276 @@
 package com.hydra.services.tdc
 
+import java.io.File
+import java.util.concurrent.{Executors, ThreadFactory}
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.concurrent.{ExecutionContext, Future}
+import scalafx.application.{JFXApp, Platform}
+import scalafx.application.JFXApp.PrimaryStage
+import scalafx.geometry.Dimension2D
+import scalafx.scene.Scene
+import scalafx.scene.layout.AnchorPane
+import scalafx.stage.Screen
 import com.hydra.io.MessageClient
-import com.hydra.services.tdc.device.adapters.GroundTDCDataAdapter
 
-import scala.collection.mutable
-import scala.io.Source
+import scalafx.scene.control.{Label, TextField}
 
-class GroundTDCProcessService(port: Int) {
-  private val channelCount = 16
-  private val groundTDA = new GroundTDCDataAdapter(channelCount)
-  private val dataTDA = new LongBufferToDataBlockListTDCDataAdapter(channelCount)
-  private val server = new TDCProcessServer(channelCount, port, dataIncome, List(groundTDA, dataTDA))
-  private val analysers = mutable.HashMap[String, DataAnalyser]()
+object HydraLocalLauncher extends JFXApp {
+  val DEBUG = new File(".").getAbsolutePath.contains("GitHub")
+  System.setProperty("log4j.configurationFile", "./config/tdcviewer.debug.log4j.xml")
 
-  def stop() = server.stop
+  val visualBounds = Screen.primary.visualBounds
+  val frameSize = new Dimension2D(visualBounds.width * 0.6, visualBounds.height * 0.6)
+  //  val framePosition = new Point2D(
+  //    visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
+  //    visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
+  //
+  //  val clientRef = new AtomicReference[MessageClient]
 
-  private def dataIncome(data: Any) = {
-    if (!data.isInstanceOf[List[_]]) throw new IllegalArgumentException(s"Wrong type: ${data.getClass}")
-    data.asInstanceOf[List[DataBlock]].foreach(dataBlockIncome)
+  val counterFields = Range(0, 16).toList.map(i => new TextField())
+  val counterLabels = Range(0, 16).toList.map(i => new Label())
+  val counterPane = new AnchorPane()
+
+  //  val textFieldHost = new TextField() {
+  //    font = Font.font("Ariel", 30)
+  //    alignment = Pos.Center
+  //    promptText = "Server Address"
+  //    style = s"-fx-base: #FFFFFF;"
+  //    text = preferences.get("Host", "")
+  //  }
+  //  val buttonLaunch = new Button("Launch") {
+  //    font = Font.font("Ariel", 20)
+  //    onAction = (action) => launch(textFieldHost.text.value)
+  //  }
+  //  val processBar = new ProgressBar() {
+  //    visible = false
+  //  }
+  //
+  stage = new PrimaryStage {
+    title = "TDC Viewer"
+    //    x = framePosition.x
+    //    y = framePosition.y
+    resizable = true
+    scene = new Scene {
+      root = new AnchorPane {
+        //CounterLabels
+        counterLabels.zipWithIndex.foreach(z => {
+          AnchorPane.setTopAnchor(z._1, 40.0 * z._2)
+          AnchorPane.setLeftAnchor(z._1, 0.0)
+          //          AnchorPane.setRightAnchor(z._1, 0.0)
+          z._1.prefHeight = 35
+          z._1.prefWidth = 50
+          z._1.focusTraversable = false
+          z._1.text = "CH X"
+        })
+
+        //CounterFields
+        counterFields.zipWithIndex.foreach(z => {
+          AnchorPane.setTopAnchor(z._1, 40.0 * z._2)
+          AnchorPane.setLeftAnchor(z._1, 55.0)
+          z._1.prefHeight = 35
+          z._1.prefWidth = 60
+          z._1.editable = false
+          z._1.focusTraversable = false
+          z._1.text = "----"
+        })
+
+        //CounterPane
+        counterPane.children = counterFields ::: counterLabels
+        AnchorPane.setTopAnchor(counterPane, 0.0)
+        AnchorPane.setLeftAnchor(counterPane, 0.0)
+        //        counterPane.prefWidth = 100
+
+        children = Seq(counterPane)
+        prefWidth = frameSize.width
+        prefHeight = frameSize.height
+
+
+        //        counterPane.style = "-fx-background-color: rgb(255, 0, 0)"
+
+
+        //        AnchorPane.setTopAnchor(textFieldHost, 40.0)
+        //        AnchorPane.setLeftAnchor(textFieldHost, 40.0)
+        //        AnchorPane.setBottomAnchor(textFieldHost, 200.0)
+        //        AnchorPane.setRightAnchor(textFieldHost, 40.0)
+        //        AnchorPane.setTopAnchor(buttonLaunch, 145.0)
+        //        AnchorPane.setLeftAnchor(buttonLaunch, 175.0)
+        //        AnchorPane.setBottomAnchor(buttonLaunch, 105.0)
+        //        AnchorPane.setRightAnchor(buttonLaunch, 175.0)
+        //        AnchorPane.setTopAnchor(processBar, 235.0)
+        //        AnchorPane.setLeftAnchor(processBar, 40.0)
+        //        AnchorPane.setBottomAnchor(processBar, 50.0)
+        //        AnchorPane.setRightAnchor(processBar, 40.0)
+        //        children = Seq(processBar, buttonLaunch, textFieldHost)
+      }
+    }
+    //    onCloseRequest = (window) => {
+    //      clientRef.get match {
+    //        case c if c != null => c.stop
+    //        case _ =>
+    //      }
+    //    }
   }
 
-  private def dataBlockIncome(dataBlock: DataBlock) = analysers.values.foreach(_.dataIncome(dataBlock))
+  val executionContext = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor(new ThreadFactory {
+    val counter = new AtomicInteger(0)
 
-  def postInit(client: MessageClient) = {
-    val storageInvoker = client.blockingInvoker("StorageService")
-    analysers("Counter") = new CounterAnalyser(storageInvoker)
-  }
+    override def newThread(r: Runnable): Thread = {
+      val t = new Thread(r, s"CachedThreadPool-[HydraLocalLauncher]-${counter.getAndIncrement}")
+      t.setDaemon(true)
+      t
+    }
+  }))
+  Future {
+    val client = MessageClient.newClient(parameters.named.get("host") match {
+      case Some(host) => host
+      case None => "localhost"
+    }, parameters.named.get("port") match {
+      case Some(port) => port.toInt
+      case None => 20102
+    })
+    Platform.runLater(() => stage.onCloseRequest = (we) => client.stop)
+    val invoker = client.blockingInvoker("GroundTDCServer")
+    //    invoker.turnOffAllAnalysers()
+    //    invoker.turnOnAnalyser("Counter")
+    while (true) {
+      try {
+        val counterResult = invoker.fetchResults("Counter")
+        println(counterResult)
+      } catch {
+        case e: Throwable => println(e)
+      }
+      Thread.sleep(400)
+    }
+  }(executionContext)
 
-  def turnOnAnalyser(name: String, paras: Map[String, String]) = analysers.get(name) match {
-    case Some(analyser) => analyser.turnOn(paras)
-    case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
-  }
-
-  def turnOffAnalyser(name: String) = analysers.get(name) match {
-    case Some(analyser) => analyser.turnOff()
-    case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
-  }
-
-  def fetchResults(name: String) = analysers.get(name) match {
-    case Some(analyser) => analyser.fetchResult()
-    case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
-  }
+  //  private def shakeAnimation() = {
+  //    processBar.visible = false
+  //    buttonLaunch.disable = false
+  //    textFieldHost.editable = true
+  //
+  //    val currentX = buttonLaunch.layoutX.value
+  //    val range = 16
+  //    val duration = 240.0
+  //    val period = 10
+  //    val startTime = System.nanoTime / 1000000
+  //
+  //    def calculatePosition(time: Long) = {
+  //      val deltaTime = time - startTime
+  //      val phi = (deltaTime / duration) * math.Pi * 4
+  //      val p = math.sin(phi)
+  //      range * p
+  //    }
+  //
+  //    val timer = new Timer("Move Animation Timer", true)
+  //    timer.schedule(new TimerTask {
+  //      override def run(): Unit = {
+  //        val currentTime = System.nanoTime / 1000000
+  //        if (currentTime > startTime + duration) {
+  //          cancel()
+  //          AnchorPane.setLeftAnchor(buttonLaunch, 175.0)
+  //          AnchorPane.setRightAnchor(buttonLaunch, 175.0)
+  //        }
+  //        val x = calculatePosition(currentTime)
+  //        Platform.runLater {
+  //          AnchorPane.setLeftAnchor(buttonLaunch, 175.0 + x)
+  //          AnchorPane.setRightAnchor(buttonLaunch, 175.0 - x)
+  //        }
+  //      }
+  //    }, 0, period)
+  //  }
+  //
+  //  class UpdateFileTask(client: MessageClient) {
+  //    val totalWork = new AtomicLong(0)
+  //    val doneWork = new AtomicLong(0)
+  //
+  //    val invoker = client.blockingInvoker(target = "StorageService")
+  //    val remoteRoot = Paths.get("/apps/hydralocal/")
+  //
+  //    def process = {
+  //      val remoteMap = new mutable.HashMap[String, FileEntry]()
+  //
+  //      def fetchRemoteFileMetaData(path: Path): Unit = {
+  //        val mds = invoker.listElements("", path.toString, true)
+  //        mds.asInstanceOf[List[Map[String, Any]]].foreach(md => {
+  //          md("Type") match {
+  //            case "Content" => {
+  //              val relativePath = remoteRoot.relativize(Paths.get(md("Path").toString))
+  //              remoteMap(relativePath.toString) =
+  //                new FileEntry(relativePath, md("LastModifiedTime").toString.toLong, md("Size").toString.toLong)
+  //            }
+  //            case "Collection" => fetchRemoteFileMetaData(Paths.get(md("Path").toString))
+  //          }
+  //        })
+  //      }
+  //
+  //      fetchRemoteFileMetaData(remoteRoot)
+  //
+  //      val remotePaths = remoteMap.keys.toList
+  //      val localPaths = Files.walk(localRoot, FileVisitOption.FOLLOW_LINKS).iterator.asScala.toList
+  //        .filter(p => Files.isRegularFile(p)).map(p => localRoot.relativize(p).toString)
+  //      localPaths.filterNot(remotePaths.contains).filterNot(p => p.startsWith(".")).foreach(p => Files.delete(localRoot.resolve(p)))
+  //
+  //      val todoList = ArrayBuffer[FileEntry]()
+  //      remoteMap.values.toList.foreach(remoteEntry => {
+  //        if (!localPaths.contains(remoteEntry.path.toString) ||
+  //          Files.isDirectory(localRoot.resolve(remoteEntry.path)) ||
+  //          remoteEntry.lastModified > Files.getLastModifiedTime(localRoot.resolve(remoteEntry.path), LinkOption.NOFOLLOW_LINKS).toMillis) {
+  //          todoList += remoteEntry
+  //        }
+  //      })
+  //
+  //      totalWork.set(todoList.map(todo => todo.size).sum)
+  //
+  //      todoList.foreach(download)
+  //    }
+  //
+  //    def progress = totalWork.get match {
+  //      case 0 => -1.0
+  //      case _ => doneWork.get.toDouble / totalWork.get
+  //    }
+  //
+  //    private val blockSize = 1000000;
+  //
+  //    private def download(entry: FileEntry) = {
+  //      val localPath = localRoot.resolve(entry.path)
+  //      val remotePath = remoteRoot.resolve(entry.path)
+  //      if (Files.exists(localPath)) delete(localPath)
+  //      Files.createDirectories(localPath.getParent)
+  //      Files.createFile(localPath)
+  //
+  //      val channel = Files.newByteChannel(localPath, StandardOpenOption.WRITE)
+  //      val blocks = Math.ceil(entry.size.toDouble / blockSize).toInt
+  //      Range(0, blocks).foreach(block => {
+  //        val start = block * blockSize
+  //        val length = math.min(blockSize, entry.size - start)
+  //        val data = invoker.read("", remotePath.toString, start, length).asInstanceOf[Array[Byte]]
+  //        channel.write(ByteBuffer.wrap(data))
+  //        doneWork.addAndGet(length)
+  //      })
+  //      channel.close
+  //      Files.setLastModifiedTime(localPath, FileTime.fromMillis(entry.lastModified))
+  //    }
+  //
+  //    private def delete(path: Path): Unit = {
+  //      if (Files.isDirectory(path)) Files.list(path).iterator.asScala.foreach(delete)
+  //      Files.delete(path)
+  //    }
+  //  }
+  //
+  //  case class FileEntry(val path: Path, val lastModified: Long, val size: Long)
+  //
+  //  private def parseHost(text: String) = {
+  //    val split = text.trim.split(":")
+  //    val server = split(0)
+  //    val port = split.size match {
+  //      case 1 => 20102
+  //      case _ => split(1).toInt
+  //    }
+  //    (server, port)
+  //  }
+  //
+  //  val loadFuture = Future {
+  //    MessageClient.newClient("localhost", 12345, "Class Loader")
+  //  }(executionContext)
 }
-
-object TDCProcess extends App {
-  val port = 20156
-  val process = new GroundTDCProcessService(port)
-  val client = MessageClient.newClient("192.168.25.27", 20102, "GroundTDCServer", process)
-  process.postInit(client)
-  println("Ground TDC Process started on port 20156.")
-  Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
-  println("Stoping Ground TDC Process...")
-  client.stop
-  process.stop
-}
-
-
-//  //  private val SAMPLING_MODE_SAMPLING = "Sampling"
-//  //  private val SAMPLING_MODE_VISIBILITY = "Visibility"
-//  //  private val HISTOGRAM_MODE_BIN = "Bin"
-//  //  private val HISTOGRAM_MODE_PULSE = "Pulse"
-//  //  private val preferences = Preferences.userNodeForPackage(classOf[AppFrame])
-//  //  private var samplingChartPanel = null
-//  //  private var counterFields = null
-//  //  private var delayFields = null
-//  //  private var inputBoxs = null
-//  //  private var indexTrigger = 1
-//  //  private var indexSignal = 2
-//  //  private var viewFrom = -100
-//  //  private var viewTo = 100
-//  //  private var pulsePeriod = 13
-//  //  private var gateWidth = 4
-//  //  private var matrixFile = "."
-//  //  private var matrix = null
-//  //  private var doHistogram = true
-//  //  private var doSampling = false
-//  //  private var histogramMode = HISTOGRAM_MODE_BIN
-//  //  private var samplingMode = SAMPLING_MODE_SAMPLING
-//  //  private var samplingIntegrate = false
-//  //  private var triggerMode = false
-//  //  private val coincidences = new Array[Int](1 << 20)
-//  //  private var photonCounts = 0
-//  //  private var photonCountsTime = 0
-//  //  private val visibilities = new Array[Array[Double]](256, 4)
-//  //  private var permenents = null
-//  //  private var modes = null
-//  //  private var delayedPulse = 1
-//  //  private val infiniteCounters = new Array[Long](16)
-//  //  private var unitEndTime = 0
-//  //  private val delays = new Array[Double](16)
-//
-//  private var timeEvents = new Array[util.ArrayList[_]](16)
-//  var i = 0
-//  while (i < timeEvents.length) {
-//    timeEvents(i) = new util.ArrayList[Long] {
-//      i += 1;
-//      i - 1
-//    }
-//  }
-
-
-//  private var histogramChart = new Chart(100, 400)
-//  histogramChart.addSeries("Histogram", Array[Int](0), Array[Int](0))
-//  histogramChart.getStyleManager.setLegendVisible(false)
-//  histogramChart.getStyleManager.setMarkerSize(0)
-//  private var histogramChartPanel = new XChartPanel(histogramChart)
-//  private var samplingChart = new Chart(640, 360)
-//  samplingChart.getStyleManager.setChartType(StyleManager.ChartType.Bar)
-//  samplingChart.addSeries("SamplingExpect", Array[Int](0), Array[Int](0))
-//  samplingChart.addSeries("SamplingExperiment", Array[Int](0), Array[Int](0))
-//  samplingChart.getStyleManager.setLegendVisible(false)
-//  samplingChart.getStyleManager.setMarkerSize(0)
-//  private var samplingChartPanel = new XChartPanel(samplingChart)
-//  counterFields = Array[JTextField](jTextFieldCount0, jTextFieldCount1, jTextFieldCount2, jTextFieldCount3, jTextFieldCount4, jTextFieldCount5, jTextFieldCount6, jTextFieldCount7, jTextFieldCount8, jTextFieldCount9, jTextFieldCount10, jTextFieldCount11, jTextFieldCount12, jTextFieldCount13, jTextFieldCount14, jTextFieldCount15)
-//  delayFields = Array[JTextField](jTextFieldDelay1, jTextFieldDelay2, jTextFieldDelay3, jTextFieldDelay4, jTextFieldDelay5, jTextFieldDelay6, jTextFieldDelay7, jTextFieldDelay8, jTextFieldDelay9, jTextFieldDelay10, jTextFieldDelay11, jTextFieldDelay12, jTextFieldDelay13, jTextFieldDelay14, jTextFieldDelay15, jTextFieldDelay16)
-//  inputBoxs = Array[JCheckBox](jCheckBoxInputs1, jCheckBoxInputs2, jCheckBoxInputs3, jCheckBoxInputs4, jCheckBoxInputs5, jCheckBoxInputs6, jCheckBoxInputs7, jCheckBoxInputs8, jCheckBoxInputs9, jCheckBoxInputs10, jCheckBoxInputs11, jCheckBoxInputs12, jCheckBoxInputs13, jCheckBoxInputs14, jCheckBoxInputs15)
-//  for (inputBox <- inputBoxs) {
-//    inputBox.setVisible(false)
-//  }
-//  loadPreferences()
-//  connectPreferences()
-//  postInit()
-//

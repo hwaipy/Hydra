@@ -27,7 +27,7 @@ class GroundTDCProcessService(port: Int) {
     analysers("Counter") = new CounterAnalyser(storageInvoker)
   }
 
-  def turnOnAnalyser(name: String, paras: Map[String, String]) = analysers.get(name) match {
+  def turnOnAnalyser(name: String, paras: Map[String, String] = Map()) = analysers.get(name) match {
     case Some(analyser) => analyser.turnOn(paras)
     case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
   }
@@ -36,6 +36,8 @@ class GroundTDCProcessService(port: Int) {
     case Some(analyser) => analyser.turnOff()
     case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
   }
+
+  def turnOffAllAnalysers() = analysers.values.foreach(analyser => analyser.turnOff())
 
   def fetchResults(name: String) = analysers.get(name) match {
     case Some(analyser) => analyser.fetchResult()
@@ -46,7 +48,7 @@ class GroundTDCProcessService(port: Int) {
 object TDCProcess extends App {
   val port = 20156
   val process = new GroundTDCProcessService(port)
-  val client = MessageClient.newClient("192.168.25.27", 20102, "GroundTDCServer", process)
+  val client = MessageClient.newClient("localhost", 20102, "GroundTDCServer", process)
   process.postInit(client)
   println("Ground TDC Process started on port 20156.")
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
