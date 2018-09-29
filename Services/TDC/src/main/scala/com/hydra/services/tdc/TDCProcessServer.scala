@@ -3,14 +3,14 @@ package com.hydra.services.tdc
 import java.net.ServerSocket
 import java.nio.LongBuffer
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-
-import com.hydra.io.BlockingRemoteObject
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.concurrent.{ExecutionContext, Future}
 import com.hydra.services.tdc.device.{TDCDataAdapter, TDCParser}
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import com.hydra.`type`.NumberTypeConversions._
 
 class TDCProcessServer(val channelCount: Int, port: Int, dataIncome: Any => Unit, adapters: List[TDCDataAdapter]) {
   private val executionContext = ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor((r) => {
@@ -64,6 +64,18 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
 
   def flush(data: Any): AnyRef = offer(data)
 
+  def setDelays(delays: List[Long]) = {
+    if (delays.size != this.delays.size) throw new IllegalArgumentException(s"Delays should has length of ${this.delays.size}.")
+    delays.zipWithIndex.foreach(z => this.delays(z._2) = z._1)
+  }
+
+  def setDelay(channel: Int, delay: Long) = {
+    if (channel >= this.delays.size || channel < 0) throw new IllegalArgumentException(s"Channel $channel out of range.")
+    delays(channel) = delay
+  }
+
+  def getDelays() = delays.toList
+
   private def dataIncome(data: Any) = {
     if (!data.isInstanceOf[LongBuffer]) throw new IllegalArgumentException(s"LongBuffer expected, not ${data.getClass}")
     val buffer = data.asInstanceOf[LongBuffer]
@@ -87,57 +99,126 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
   }
 
   private def flush() {
-    val data = timeEvents.zipWithIndex.map(z => z._1.toList.map(t => t + delays(z._2)))
+    val data = timeEvents.zipWithIndex.map(z => z._1.toArray.map(t => t + delays(z._2))).toArray
     timeEvents.foreach(_.clear)
     dataBlocks += new DataBlock(data)
     unitEndTime += 1000000000000l
   }
 }
 
-class DataBlock(val content: List[List[Long]])
+class DataBlock(val content: Array[Array[Long]])
 
-abstract class DataAnalyser(protected val storageInvoker: BlockingRemoteObject) {
+abstract class DataAnalyser {
   protected val on = new AtomicBoolean(false)
-  protected val recentResults = new ListBuffer[Any]
+  protected val configuration = new mutable.HashMap[String, Any]()
 
-  def dataIncome(dataBlock: DataBlock) = if (on.get) analysis(dataBlock)
+  def dataIncome(dataBlock: DataBlock): Option[Any] = if (on.get) Some(analysis(dataBlock)) else None
 
   def turnOn(paras: Map[String, String]) {
     on.set(true)
-    reset(paras)
+    configure(paras)
   }
 
   def turnOff() = on.set(false)
 
-  protected def analysis(dataBlock: DataBlock)
+  protected def analysis(dataBlock: DataBlock): Any
 
-  protected def reset(paras: Map[String, String])
+  def configure(paras: Map[String, Any]): Unit = paras.foreach(e => if (configure(e._1, e._2)) configuration(e._1) = e._2)
 
-  def fetchResult() = {
-    val ret = recentResults.toList
-    recentResults.clear()
-    ret
-  }
+  protected def configure(key: String, value: Any) = true
+
+  def getConfiguration() = configuration.toMap
+
+  def isTurnedOn() = on.get
 }
 
-class CounterAnalyser(invoker: BlockingRemoteObject) extends DataAnalyser(invoker) {
-  private val storagePath = new AtomicReference[String]()
+class CounterAnalyser(channelCount: Int) extends DataAnalyser {
 
-  override protected def reset(paras: Map[String, String]) {
-    paras.get("StorageElement").foreach(path => {
-      storagePath.set(path)
-      //      if (!invoker.exists("", path).asInstanceOf[Boolean]) {
-      //      }
-    })
+  override protected def analysis(dataBlock: DataBlock) = dataBlock.content.map(list => list.size).toList
+}
+
+class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
+  private val binCount = new AtomicInteger(1000)
+  configuration("Sync") = 1
+  configuration("Signal") = 1
+  configuration("ViewStart") = -100000
+  configuration("ViewStop") = 100000
+
+  override def configure(key: String, value: Any) = key match {
+    case "Sync" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
+    case "Signal" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
+    case "ViewStart" => true
+    case "ViewStop" => true
+    case _ => false
   }
 
-  override protected def analysis(dataBlock: DataBlock) {
-    val r = dataBlock.content.map(list => list.size)
-    recentResults += r
+  override protected def analysis(dataBlock: DataBlock) = {
+    val deltas = new ArrayBuffer[Long]()
+    val syncChannel: Int = configuration("Sync")
+    val signalChannel: Int = configuration("Signal")
+    val viewStart: Long = configuration("ViewStart")
+    val viewStop: Long = configuration("ViewStop")
+    val tList = dataBlock.content(syncChannel)
+    val sList = dataBlock.content(signalChannel)
+    val viewFrom = viewStart
+    val viewTo = viewStop
+    if (tList.size > 0 && sList.size > 0) {
+      var preStartT = 0
+      val lengthT = tList.size
+      sList.foreach(s => {
+        var cont = true
+        while (preStartT < lengthT && cont) {
+          val t = tList(preStartT)
+          val delta = s - t
+          if (delta > viewTo) {
+            preStartT += 1
+          } else cont = false
+        }
+        var tIndex = preStartT
+        cont = true
+        while (tIndex < lengthT && cont) {
+          val t = tList(tIndex)
+          val delta = s - t
+          if (delta > viewFrom) {
+            deltas += delta
+            tIndex += 1
+          } else cont = false
+        }
+      })
+    }
+    val histo = new Histogram(deltas.toArray, binCount.get, viewFrom, viewTo)
+    Map[String, Any]("SyncChannel" -> syncChannel, "SignalChannel" -> signalChannel, "ViewFrom" -> viewFrom, "ViewTo" -> viewTo, "Histogram" -> histo.yData.toList)
   }
 
   override def turnOff() {
     super.turnOff()
-    storagePath.set(null)
   }
 }
+
+class Histogram(deltas: Array[Long], binCount: Int, viewFrom: Long, viewTo: Long) {
+  val min = viewFrom.toDouble
+  val max = viewTo.toDouble
+  val binSize = (max - min) / binCount
+  val xData = Range(0, binCount).map(i => ((i * (max - min)) / binCount + min) + binSize / 2).toArray
+  val yData = new Array[Int](binCount)
+  deltas.foreach(delta => {
+    val deltaDouble = delta.toDouble
+    val bin = ((deltaDouble - min) / binSize).toInt
+    if (bin < 0) {
+      /* this data is smaller than min */
+    } else if (deltaDouble == max) { // the value falls exactly on the max value
+      yData(bin - 1) += 1
+    } else if (bin > binCount || bin == binCount) {
+      /* this data point is bigger than max */
+    } else {
+      yData(bin) += 1
+    }
+  })
+}
+

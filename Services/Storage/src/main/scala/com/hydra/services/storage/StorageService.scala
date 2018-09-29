@@ -198,4 +198,41 @@ class StorageService(basePath: Path, clientName: String, descriptionFile: String
     storage.clearPermission
     data
   }
+
+  def FSFileInitialize(user: String, path: String) = {
+    storage.updatePermission(new Permission(user))
+    storage.FSFileInitialize(path)
+    storage.clearPermission
+  }
+
+  def FSFileAppendFrames(user: String, path: String, frames: List[Array[Byte]]) = {
+    storage.updatePermission(new Permission(user))
+    storage.FSFileAppendFrames(path, frames)
+    storage.clearPermission
+  }
+
+  def FSFileAppendFrame(user: String, path: String, frame: Array[Byte]) = {
+    FSFileAppendFrames(user, path, frame :: Nil)
+  }
+
+  def FSFileReadHeadFrames(user: String, path: String, from: Int, count: Int) = {
+    storage.updatePermission(new Permission(user))
+    val data = storage.FSFileReadHeadFrames(path, from, count)
+    storage.clearPermission
+    data
+  }
+
+  def FSFileReadTailFrames(user: String, path: String, from: Int, count: Int) = {
+    storage.updatePermission(new Permission(user))
+    val data = storage.FSFileReadTailFrames(path, from, count)
+    storage.clearPermission
+    data
+  }
+
+  def FSFileReadAllFrames(user: String, path: String) = {
+    storage.updatePermission(new Permission(user))
+    val data = storage.FSFileReadAllFrames(path)
+    storage.clearPermission
+    data
+  }
 }

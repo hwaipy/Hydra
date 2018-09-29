@@ -8,12 +8,14 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.LinkOption
 import java.nio.file.attribute.BasicFileAttributes
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.WeakHashMap
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, WeakHashMap}
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
+
 import com.hydra.services.storage.HydraBinaryTableStorageElementExtension.HeadEntry
+
 import scala.collection.JavaConverters._
 import scala.math._
 
@@ -91,6 +93,31 @@ class Storage(val basePath: Path) {
     val element = getStorageElement(path)
     val hbtExt = HydraBinaryTableStorageElementExtension.load(element)
     hbtExt.readAllRows
+  }
+
+  def FSFileInitialize(path: String) = {
+    val element = getStorageElement(path)
+    if (!element.exists) element.createFile
+  }
+
+  def FSFileAppendFrames(path: String, frames: List[Array[Byte]]) = {
+    val element = getStorageElement(path)
+    FrameStreamStorageElementExtension.load(element).appendFrames(frames)
+  }
+
+  def FSFileReadHeadFrames(path: String, from: Int, count: Int) = {
+    val element = getStorageElement(path)
+    FrameStreamStorageElementExtension.load(element).readHeadFrames(from, count)
+  }
+
+  def FSFileReadTailFrames(path: String, from: Int, count: Int) = {
+    val element = getStorageElement(path)
+    FrameStreamStorageElementExtension.load(element).readTailFrames(from, count)
+  }
+
+  def FSFileReadAllFrames(path: String) = {
+    val element = getStorageElement(path)
+    FrameStreamStorageElementExtension.load(element).readAllFrames()
   }
 
   private def doGetStorageElement(path: String, cacheable: Boolean): StorageElement = {
@@ -586,6 +613,115 @@ class HydraBinaryTableStorageElementExtension(val element: StorageElement, val h
         }
       }
     })
+  }
+}
+
+object FrameStreamStorageElementExtension {
+  def load(element: StorageElement) = {
+    if (!element.name.toLowerCase.endsWith(".fs")) throw new IOException(s"Invalid StorageElement. Should be .fs file.")
+    new FrameStreamStorageElementExtension(element)
+  }
+}
+
+class FrameStreamStorageElementExtension(val element: StorageElement) {
+  def appendFrames(frames: List[Array[Byte]]) = {
+    element.synchronized {
+      val frameCount = element.size match {
+        case 0 => 0
+        case size => {
+          val meta = element.read(element.size - 8, 8)
+          val buffer = ByteBuffer.wrap(meta)
+          buffer.getInt() + 1
+        }
+      }
+      val array = new Array[Byte](frames.map(f => f.size + 16).sum)
+      val buffer = ByteBuffer.wrap(array)
+      frames.zipWithIndex.foreach(z => {
+        buffer.putInt(frameCount + z._2)
+        buffer.putInt(z._1.size)
+        buffer.put(z._1)
+        buffer.putInt(frameCount + z._2)
+        buffer.putInt(z._1.size)
+      })
+      element.append(array)
+    }
+  }
+
+  def readHeadFrames(from: Int, count: Int) = {
+    val frames = ListBuffer[Array[Byte]]()
+    val position = new AtomicLong(0)
+    Range(0, from + count).foreach(i => {
+      val frameOption = readFrameForward(position.get)
+      frameOption match {
+        case Some(frame) => {
+          position.addAndGet(frame.size + 16)
+          if (i >= from) frames += frameOption.get
+        }
+        case None =>
+      }
+    })
+    frames.toList
+  }
+
+  def readTailFrames(from: Int, count: Int) = {
+    val frames = ListBuffer[Array[Byte]]()
+    val position = new AtomicLong(element.size)
+    Range(0, from + count).foreach(i => {
+      val frameOption = readFrameBackward(position.get)
+      frameOption match {
+        case Some(frame) => {
+          position.addAndGet(-frame.size - 16)
+          if (i >= from) frames += frameOption.get
+        }
+        case None =>
+      }
+    })
+    frames.toList
+  }
+
+  def readAllFrames() = {
+    val frames = ListBuffer[Array[Byte]]()
+    val position = new AtomicLong(0)
+    val cont = new AtomicBoolean(true)
+    while (cont.get) {
+      val frameOption = readFrameForward(position.get)
+      frameOption match {
+        case Some(frame) => {
+          position.addAndGet(frame.size + 16)
+          frames += frameOption.get
+        }
+        case None => cont.set(false)
+      }
+    }
+    frames.toList
+  }
+
+  private def readFrameForward(position: Long): Option[Array[Byte]] = {
+    if (position + 8 > element.size || position < 0) return None
+    element.synchronized {
+      val meta = element.read(position, 8)
+      val buffer = ByteBuffer.wrap(meta)
+      val frameIndex = buffer.getInt()
+      val frameSize = buffer.getInt()
+      (position + 16 + frameSize > element.size) match {
+        case true => None
+        case false => Some(element.read(position + 8, frameSize))
+      }
+    }
+  }
+
+  private def readFrameBackward(position: Long): Option[Array[Byte]] = {
+    if (position > element.size || position < 8) return None
+    element.synchronized {
+      val meta = element.read(position - 8, 8)
+      val buffer = ByteBuffer.wrap(meta)
+      val frameIndex = buffer.getInt()
+      val frameSize = buffer.getInt()
+      (position < 16 + frameSize) match {
+        case true => None
+        case false => Some(element.read(position - 8 - frameSize, frameSize))
+      }
+    }
   }
 }
 

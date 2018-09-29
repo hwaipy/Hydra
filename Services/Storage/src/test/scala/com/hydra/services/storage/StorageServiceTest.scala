@@ -2,16 +2,10 @@ package com.hydra.services.storage
 
 import java.io.{File, IOException}
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.LinkOption
-
 import org.scalatest._
-import PermissionLevel._
-import PermissionDecision._
-import ElementType._
-
-import scala.collection.mutable.ArrayBuffer
+import util.Random
 
 class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   val testSpace = Paths.get("target/testservicespace/")
@@ -38,13 +32,13 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test list") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     val a = service.listElements("", "/")
     assert(a == List("_A1", "_A2", "a1", "a2", "a3", "a4", "a5"))
   }
 
   test("Test metaData") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     assert(service.metaData("", "/a1") == Map("Name" -> "a1", "Path" -> "/a1", "Type" -> "Collection"))
     assert(service.metaData("", "/_A1") == Map("Name" -> "_A1", "Path" -> "/_A1", "Type" -> "Content", "Size" -> 36))
     assert(service.metaData("", "/_A2") == Map("Name" -> "_A2", "Path" -> "/_A2", "Type" -> "Content", "Size" -> 256))
@@ -52,7 +46,7 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test listMetaData") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     val listElements = service.listElements("", "/", true)
     val elements = listElements.asInstanceOf[List[Map[String, _]]]
     val expected = List(
@@ -74,7 +68,7 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test note") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     assert(service.readNote("", "/")("Note") == "")
     service.writeNote("", "/", "Test Note")
     assert(service.readNote("", "/")("Note") == "Test Note")
@@ -83,7 +77,7 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test read") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     assert(new String(service.read("", "/_A1", 1, 10)) == "234567890a")
     assert(new String(service.read("", "/_A1", 30, 6)) == "uvwxyz")
     intercept[IOException] {
@@ -93,14 +87,14 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test append") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     service.append("", "/_A1", new String("ABCDE").getBytes)
     assert(service.metaData("", "/_A1") == Map("Name" -> "_A1", "Path" -> "/_A1", "Type" -> "Content", "Size" -> 41))
     assert(new String(service.read("", "/_A1", 35, 6)) == "zABCDE")
   }
 
   test("Test write") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     service.write("", "/_A1", new String("ABCDE").getBytes, 10)
     assert(service.metaData("", "/_A1") == Map("Name" -> "_A1", "Path" -> "/_A1", "Type" -> "Content", "Size" -> 41))
     assert(new String(service.read("", "/_A1", 35, 6)) == "zABCDE")
@@ -112,7 +106,7 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test delete") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     assert(service.listElements("", "/") == List("_A1", "_A2", "a1", "a2", "a3", "a4", "a5"))
     service.delete("", "a1")
     assert(service.listElements("", "/") == List("_A1", "_A2", "a2", "a3", "a4", "a5"))
@@ -121,7 +115,7 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test createFile") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     service.createFile("", "/NewFile")
     service.createFile("", "/a2/NewFile")
     assert(service.listElements("", "/") == List("NewFile", "_A1", "a2", "a3", "a4", "a5"))
@@ -129,13 +123,13 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test createDirectory") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     service.createDirectory("", "/a2/NewDir")
     assert(service.listElements("", "/a2") == List("NewDir", "NewFile"))
   }
 
   test("Test HBTFile.") {
-    val service = new StorageService(testSpace)
+    val service = new StorageService(testSpace, "Test-StorageService", "")
     service.HBTFileInitialize("", "/HBTFileTest.hbt", List("Column 1", "Byte") :: List("Column 2", "Short") ::
       List("Column 3", "Int") :: List("Column 4", "Long") :: List("Column 5", "Float") :: List("Column 6", "Double") :: Nil)
     service.HBTFileAppendRow("", "/HBTFileTest.hbt", List(1, 2, 3, 4, 5, 6))
@@ -152,6 +146,29 @@ class StorageServiceTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     val metaExpect = Map("ColumnCount" -> 6, "RowDataLength" -> 27, "RowCount" -> 6,
       "Heads" -> List(List("Column 1", "Byte"), List("Column 2", "Short"), List("Column 3", "Int"), List("Column 4", "Long"), List("Column 5", "Float"), List("Column 6", "Double")))
     assert(service.HBTFileMetaData("", "/HBTFileTest.hbt") == metaExpect)
+  }
+
+
+  test("Test FSFile.") {
+    val service = new StorageService(testSpace, "Test-StorageService", "")
+    service.FSFileInitialize("", "/FSFileTest.fs")
+    val random = new Random()
+    val frames = Range(0, 100).toList.map(i => {
+      val size = random.nextInt(10) + 100
+      val frame = new Array[Byte](size)
+      random.nextBytes(frame)
+      frame
+    })
+    service.FSFileAppendFrame("", "/FSFileTest.fs", frames(0))
+    service.FSFileAppendFrames("", "/FSFileTest.fs", frames)
+    val firstFrame = service.FSFileReadHeadFrames("", "/FSFileTest.fs", 0, 1)
+    assert(firstFrame(0).toList == frames(0).toList)
+    val headFrames = service.FSFileReadHeadFrames("", "/FSFileTest.fs", 10, 40)
+    headFrames.zip((List(frames(0)) ::: frames).slice(10, 50)).foreach(z => assert(z._1.toList == z._2.toList))
+    val tailFrames = service.FSFileReadTailFrames("", "/FSFileTest.fs", 4, 30)
+    tailFrames.zip((List(frames(0)) ::: frames).reverse.slice(4, 34)).foreach(z => assert(z._1.toList == z._2.toList))
+    val allFrames = service.FSFileReadAllFrames("", "/FSFileTest.fs")
+    allFrames.zip((List(frames(0)) ::: frames)).foreach(z => assert(z._1.toList == z._2.toList))
   }
 
   after {

@@ -9,3 +9,4 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
 scalacOptions ++= Seq("-feature")
 scalacOptions ++= Seq("-deprecation")
 scalacOptions ++= Seq("-Xlint")
+//fork := true

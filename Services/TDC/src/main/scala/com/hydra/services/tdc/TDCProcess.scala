@@ -1,6 +1,9 @@
 package com.hydra.services.tdc
 
-import com.hydra.io.MessageClient
+import java.util.concurrent.atomic.AtomicReference
+
+import com.hydra.core.MessagePack
+import com.hydra.io.{BlockingRemoteObject, MessageClient}
 import com.hydra.services.tdc.device.adapters.GroundTDCDataAdapter
 
 import scala.collection.mutable
@@ -12,6 +15,10 @@ class GroundTDCProcessService(port: Int) {
   private val dataTDA = new LongBufferToDataBlockListTDCDataAdapter(channelCount)
   private val server = new TDCProcessServer(channelCount, port, dataIncome, List(groundTDA, dataTDA))
   private val analysers = mutable.HashMap[String, DataAnalyser]()
+  private val pathRef = new AtomicReference[String]("/test/tdc/default.fs")
+  private val storageRef = new AtomicReference[BlockingRemoteObject](null)
+  analysers("Counter") = new CounterAnalyser(channelCount)
+  analysers("Histogram") = new HistogramAnalyser(channelCount)
 
   def stop() = server.stop
 
@@ -20,15 +27,31 @@ class GroundTDCProcessService(port: Int) {
     data.asInstanceOf[List[DataBlock]].foreach(dataBlockIncome)
   }
 
-  private def dataBlockIncome(dataBlock: DataBlock) = analysers.values.foreach(_.dataIncome(dataBlock))
+  private def dataBlockIncome(dataBlock: DataBlock) = {
+    val result = new mutable.HashMap[String, Any]()
+    analysers.map(e => (e._1, e._2.dataIncome(dataBlock))).filter(e => e._2.isDefined).foreach(e => result(e._1) = e._2.get)
+    result("Time") = System.currentTimeMillis()
+    val bytes = MessagePack.pack(result)
+    storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
+  }
 
   def postInit(client: MessageClient) = {
-    val storageInvoker = client.blockingInvoker("StorageService")
-    analysers("Counter") = new CounterAnalyser(storageInvoker)
+    storageRef set client.blockingInvoker("StorageService")
+    storageRef.get.FSFileInitialize("", pathRef.get)
   }
 
   def turnOnAnalyser(name: String, paras: Map[String, String] = Map()) = analysers.get(name) match {
     case Some(analyser) => analyser.turnOn(paras)
+    case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
+  }
+
+  def configureAnalyser(name: String, paras: Map[String, String]) = analysers.get(name) match {
+    case Some(analyser) => analyser.configure(paras)
+    case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
+  }
+
+  def getAnalyserConfiguration(name: String) = analysers.get(name) match {
+    case Some(analyser) => analyser.getConfiguration()
     case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
   }
 
@@ -39,10 +62,11 @@ class GroundTDCProcessService(port: Int) {
 
   def turnOffAllAnalysers() = analysers.values.foreach(analyser => analyser.turnOff())
 
-  def fetchResults(name: String) = analysers.get(name) match {
-    case Some(analyser) => analyser.fetchResult()
-    case None => throw new IllegalArgumentException(s"Analyser ${name} not exists.")
-  }
+  def setDelays(delays: List[Long]) = dataTDA.setDelays(delays)
+
+  def setDelay(channel: Int, delay: Long) = dataTDA.setDelay(channel, delay)
+
+  def getDelays() = dataTDA.getDelays()
 }
 
 object TDCProcess extends App {
@@ -50,6 +74,10 @@ object TDCProcess extends App {
   val process = new GroundTDCProcessService(port)
   val client = MessageClient.newClient("localhost", 20102, "GroundTDCServer", process)
   process.postInit(client)
+
+  process.turnOnAnalyser("Counter")
+  process.turnOnAnalyser("Histogram", Map("Sync" -> "0", "Signal" -> "1", "ViewStart" -> "-100000", "ViewStop" -> "100000"))
+
   println("Ground TDC Process started on port 20156.")
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
   println("Stoping Ground TDC Process...")

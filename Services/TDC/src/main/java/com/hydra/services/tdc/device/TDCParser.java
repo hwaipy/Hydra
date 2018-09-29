@@ -23,7 +23,7 @@ public class TDCParser {
     private final TDCDataAdapter[] adapters;
     private final BlockingQueue<Object> dataQueue = new LinkedBlockingQueue<>();
     private boolean running = true;
-    private int bufferSize = 1000000000;
+    private int bufferSize = 50000000;
 
     public TDCParser(TDCDataProcessor processor, long flushTime, TDCDataAdapter... adapters) {
         this.processor = processor;
@@ -66,7 +66,7 @@ public class TDCParser {
             }
         }
         if (size > bufferSize) {
-            System.out.println("Overflow!!!");
+//            System.out.println("Overflow!!!");
         } else {
             dataQueue.offer(data);
         }
