@@ -1,9 +1,10 @@
 package com.hydra.services.tdc
 
+import java.io.PrintWriter
 import java.net.ServerSocket
 import java.nio.LongBuffer
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.{ExecutionContext, Future}
 import com.hydra.services.tdc.device.{TDCDataAdapter, TDCParser}
@@ -102,7 +103,7 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
     val data = timeEvents.zipWithIndex.map(z => z._1.toArray.map(t => t + delays(z._2))).toArray
     timeEvents.foreach(_.clear)
     dataBlocks += new DataBlock(data)
-    unitEndTime += 1000000000000l
+    unitEndTime += 10000000000l
   }
 }
 
@@ -133,29 +134,47 @@ abstract class DataAnalyser {
 }
 
 class CounterAnalyser(channelCount: Int) extends DataAnalyser {
+  //  val pw = new PrintWriter("counts-10ms.csv")
 
-  override protected def analysis(dataBlock: DataBlock) = dataBlock.content.map(list => list.size).toList
+  override protected def analysis(dataBlock: DataBlock) = {
+    val list = dataBlock.content.map(list => list.size).toList
+    //    pw.println(list)
+    //    pw.flush()
+    dataBlock.content(0).foreach(t => println(t / 1e12))
+    list
+  }
 }
 
 class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
-  private val binCount = new AtomicInteger(1000)
   configuration("Sync") = 1
   configuration("Signal") = 1
   configuration("ViewStart") = -100000
   configuration("ViewStop") = 100000
+  configuration("BinCount") = 1000
+  configuration("Divide") = 1
 
-  override def configure(key: String, value: Any) = key match {
-    case "Sync" => {
-      val sc: Int = value
-      sc >= 0 && sc < channelCount
+  override def configure(key: String, value: Any) = {
+    key match {
+      case "Sync" => {
+        val sc: Int = value
+        sc >= 0 && sc < channelCount
+      }
+      case "Signal" => {
+        val sc: Int = value
+        sc >= 0 && sc < channelCount
+      }
+      case "ViewStart" => true
+      case "ViewStop" => true
+      case "BinCount" => {
+        val sc: Int = value
+        sc > 0 && sc < 2000
+      }
+      case "Divide" => {
+        val sc: Int = value
+        sc > 0
+      }
+      case _ => false
     }
-    case "Signal" => {
-      val sc: Int = value
-      sc >= 0 && sc < channelCount
-    }
-    case "ViewStart" => true
-    case "ViewStop" => true
-    case _ => false
   }
 
   override protected def analysis(dataBlock: DataBlock) = {
@@ -164,6 +183,8 @@ class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
     val signalChannel: Int = configuration("Signal")
     val viewStart: Long = configuration("ViewStart")
     val viewStop: Long = configuration("ViewStop")
+    val binCount: Int = configuration("BinCount")
+    val divide: Int = configuration("Divide")
     val tList = dataBlock.content(syncChannel)
     val sList = dataBlock.content(signalChannel)
     val viewFrom = viewStart
@@ -192,8 +213,9 @@ class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
         }
       })
     }
-    val histo = new Histogram(deltas.toArray, binCount.get, viewFrom, viewTo)
-    Map[String, Any]("SyncChannel" -> syncChannel, "SignalChannel" -> signalChannel, "ViewFrom" -> viewFrom, "ViewTo" -> viewTo, "Histogram" -> histo.yData.toList)
+    val histo = new Histogram(deltas.toArray, binCount, viewFrom, viewTo, divide)
+    Map[String, Any]("SyncChannel" -> syncChannel, "SignalChannel" -> signalChannel,
+      "ViewFrom" -> viewFrom, "ViewTo" -> viewTo, "Divide" -> divide, "Histogram" -> histo.yData.toList)
   }
 
   override def turnOff() {
@@ -201,22 +223,22 @@ class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
   }
 }
 
-class Histogram(deltas: Array[Long], binCount: Int, viewFrom: Long, viewTo: Long) {
+class Histogram(deltas: Array[Long], binCount: Int, viewFrom: Long, viewTo: Long, divide: Int) {
   val min = viewFrom.toDouble
   val max = viewTo.toDouble
-  val binSize = (max - min) / binCount
-  val xData = Range(0, binCount).map(i => ((i * (max - min)) / binCount + min) + binSize / 2).toArray
+  val binSize = (max - min) / binCount / divide
+  val xData = Range(0, binCount).map(i => (i * binSize + min) + binSize / 2).toArray
   val yData = new Array[Int](binCount)
   deltas.foreach(delta => {
     val deltaDouble = delta.toDouble
-    val bin = ((deltaDouble - min) / binSize).toInt
-    if (bin < 0) {
+    if (deltaDouble < min) {
       /* this data is smaller than min */
     } else if (deltaDouble == max) { // the value falls exactly on the max value
-      yData(bin - 1) += 1
-    } else if (bin > binCount || bin == binCount) {
+      yData(binCount - 1) += 1
+    } else if (deltaDouble > max) {
       /* this data point is bigger than max */
     } else {
+      val bin = ((deltaDouble - min) / binSize).toInt % binCount
       yData(bin) += 1
     }
   })

@@ -164,7 +164,7 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
 
     private void parseToTimeEvent(int position) {
         byte[] array = dataBuffer.array();
-        int channel = array[position + 6] & 0x0F;
+        int channel = array[position + 6] - 0x40;
         for (int i = 0; i < 8; i++) {
             unitLong[i] = array[position + i];
             if (unitLong[i] < 0) {
@@ -176,6 +176,7 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
                 | (unitLong[2] << 16) | ((unitLong[3] & 0x0F) << 24);
         if (coarseTime < lastCoarseTime && (lastCoarseTime > COARSE_TIME_LIMIT / 2) && (coarseTime < COARSE_TIME_LIMIT / 2)) {
             carry++;
+//            System.out.println("We are now carrying to" + carry + ": lastCT=" + lastCoarseTime + ", currentCT=" + coarseTime);
         }
         lastCoarseTime = coarseTime;
         long time = -calibrator.calibration(channel, (int) fineTime)

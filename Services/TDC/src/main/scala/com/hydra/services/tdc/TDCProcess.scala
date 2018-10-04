@@ -32,7 +32,7 @@ class GroundTDCProcessService(port: Int) {
     analysers.map(e => (e._1, e._2.dataIncome(dataBlock))).filter(e => e._2.isDefined).foreach(e => result(e._1) = e._2.get)
     result("Time") = System.currentTimeMillis()
     val bytes = MessagePack.pack(result)
-    storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
+    if (storageRef.get != null) storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
   }
 
   def postInit(client: MessageClient) = {
@@ -72,11 +72,11 @@ class GroundTDCProcessService(port: Int) {
 object TDCProcess extends App {
   val port = 20156
   val process = new GroundTDCProcessService(port)
-  val client = MessageClient.newClient("localhost", 20102, "GroundTDCServer", process)
+  val client = MessageClient.newClient("localhost", 20102, "GroundTDCService", process)
   process.postInit(client)
 
   process.turnOnAnalyser("Counter")
-  process.turnOnAnalyser("Histogram", Map("Sync" -> "0", "Signal" -> "1", "ViewStart" -> "-100000", "ViewStop" -> "100000"))
+//  process.turnOnAnalyser("Histogram", Map("Sync" -> "0", "Signal" -> "1", "ViewStart" -> "-100000", "ViewStop" -> "100000"))
 
   println("Ground TDC Process started on port 20156.")
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
