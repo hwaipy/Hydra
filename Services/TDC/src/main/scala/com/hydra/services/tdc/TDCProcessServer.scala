@@ -1,14 +1,11 @@
 package com.hydra.services.tdc
 
-import java.io.PrintWriter
 import java.net.ServerSocket
 import java.nio.LongBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-
 import scala.concurrent.{ExecutionContext, Future}
 import com.hydra.services.tdc.device.{TDCDataAdapter, TDCParser}
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import com.hydra.`type`.NumberTypeConversions._
@@ -103,7 +100,7 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
     val data = timeEvents.zipWithIndex.map(z => z._1.toArray.map(t => t + delays(z._2))).toArray
     timeEvents.foreach(_.clear)
     dataBlocks += new DataBlock(data)
-    unitEndTime += 10000000000l
+    unitEndTime += 1000000000000l
   }
 }
 
@@ -134,15 +131,8 @@ abstract class DataAnalyser {
 }
 
 class CounterAnalyser(channelCount: Int) extends DataAnalyser {
-  //  val pw = new PrintWriter("counts-10ms.csv")
 
-  override protected def analysis(dataBlock: DataBlock) = {
-    val list = dataBlock.content.map(list => list.size).toList
-    //    pw.println(list)
-    //    pw.flush()
-    dataBlock.content(0).foreach(t => println(t / 1e12))
-    list
-  }
+  override protected def analysis(dataBlock: DataBlock) = dataBlock.content.map(list => list.size).toList
 }
 
 class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
