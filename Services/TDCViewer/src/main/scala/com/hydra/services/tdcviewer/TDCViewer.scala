@@ -59,7 +59,7 @@ object TDCViweer extends JFXApp {
   val tdcInvoker = client.blockingInvoker("GroundTDCService")
   val pyMathInvoker = client.blockingInvoker("PyMathService")
   val path = "/test/tdc/default.fs"
-  val recentSize = new AtomicInteger(0)
+  val recentSize = new AtomicLong(0)
 
   val visualBounds = Screen.primary.visualBounds
   val frameSize = new Dimension2D(visualBounds.width * 0.9, visualBounds.height * 0.6)
@@ -267,7 +267,7 @@ object TDCViweer extends JFXApp {
   def updateResults() = {
     assertThread("TDCViewer")
     val size: Long = storageInvoker.metaData("", path, false).asInstanceOf[Map[String, Any]]("Size")
-    if (size != recentSize) {
+    if (size != recentSize.get) {
       recentSize.set(size)
       val frameBytes = storageInvoker.FSFileReadTailFrames("", path, 0, 1).asInstanceOf[List[Array[Byte]]](0)
       val mg = new MessageGenerator()
