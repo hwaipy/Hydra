@@ -1,12 +1,10 @@
 package com.hydra.services.tdc.device.adapters;
 
 import com.hydra.services.tdc.device.TDCDataAdapter;
-
 import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
 
 /**

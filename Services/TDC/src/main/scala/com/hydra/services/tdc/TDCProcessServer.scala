@@ -112,7 +112,7 @@ abstract class DataAnalyser {
 
   def dataIncome(dataBlock: DataBlock): Option[Any] = if (on.get) Some(analysis(dataBlock)) else None
 
-  def turnOn(paras: Map[String, String]) {
+  def turnOn(paras: Map[String, Any]) {
     on.set(true)
     configure(paras)
   }
