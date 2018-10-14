@@ -1,32 +1,33 @@
-from Services.MultiMeter.KeySightMultiMeter import KeySight_MultiMeter_34465A, KeySight_MultiMeter_34470A, MeasureQuantity
+from Services.MultiMeter.KeySightMultiMeter import KeySight_MultiMeter_34465A, KeySight_MultiMeter_34470A, \
+    MeasureQuantity
 from Pydra import Session
 from Services.Storage import StorageService, HBTFileElement
 import time
 
 if __name__ == '__main__':
     session = Session.newSession(('192.168.25.27', 20102), None, "LaserStabilityTest")
-    dev1 = KeySight_MultiMeter_34465A('TCPIP0::192.168.25.103::inst0::INSTR')
-    dev1.setMeasureQuantity(MeasureQuantity.VoltageDC, autoRange=False, range=0.1, aperture=1)
-    dev2 = KeySight_MultiMeter_34465A('TCPIP0::192.168.25.107::inst0::INSTR')
-    dev2.setMeasureQuantity(MeasureQuantity.VoltageDC, autoRange=False, range=0.05, aperture=1)
-    dev3 = KeySight_MultiMeter_34470A('TCPIP0::192.168.25.52::inst0::INSTR')
-    dev3.setMeasureQuantity(MeasureQuantity.CurrentDC, autoRange=False, range=0.02, aperture=1)
+    dmm1 = session.asynchronousInvoker('KeySightMultiMeter_34470A_1')
+    dmm2 = session.asynchronousInvoker('KeySightMultiMeter_34470A_2')
+    dmm1.setDCVoltageMeasurement(range=1, autoRange=False, aperture=0.001).sync()
+    dmm2.setDCVoltageMeasurement(range=1, autoRange=False, aperture=0.001).sync()
 
-    service = StorageService(session)
-    timeStamp = time.strftime("%Y-%m-%d %H-%M-%S", time.localtime())
-    hbtFile = service.getElement(
-        '/Hwaipy/4K_EOE/20171230-LaserStability/{}.hip/VoltageRecord.hbt'.format(timeStamp)).toHBTFileElement()
-    hbtFile.initialize(
-        [["Time (ms)", HBTFileElement.LONG], ["PD1 (V)", HBTFileElement.DOUBLE], ["PD2 (V)", HBTFileElement.DOUBLE],
-         ["LD Current(A)", HBTFileElement.DOUBLE]])
 
+    def measure(count=1000):
+        f1 = dmm1.directMeasure(count)
+        f2 = dmm2.directMeasure(count)
+        r1 = f1.sync()
+        r2 = f2.sync()
+        ar1 = sum(r1) / len(r1)
+        ar2 = sum(r2) / len(r2)
+        return [ar1, ar2]
+
+
+
+    ref = measure(400)
     while True:
-        f1 = dev1.directMeasureAndFetchLater(count=1)
-        f2 = dev2.directMeasureAndFetchLater(count=1)
-        f3 = dev3.directMeasureAndFetchLater(count=1)
-        r1 = f1()[0]
-        r2 = f2()[0]
-        r3 = f3()[0]
-        currentTime = time.time()
-        hbtFile.appendRow([currentTime * 1000, r1, r2, r3])
-        print([currentTime * 1000, r1, r2, r3])
+        r = measure(400)
+        ratio = r[0] / r[1]
+        refRatio = ref[0] / ref[1]
+        ppm = 1e6 * (ratio / refRatio - 1)
+        print(ppm)
+    session.stop()

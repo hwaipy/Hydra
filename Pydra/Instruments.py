@@ -69,6 +69,9 @@ class VISAInstrument(Instrument):
     def getVersion(self):
         return self.scpi.System.Version.query()
 
+    def close(self):
+        self.resource.close()
+
     @classmethod
     def connect(cls, resourceID):
         wrapper = VISAInstrumentWrapper(cls(resourceID))
