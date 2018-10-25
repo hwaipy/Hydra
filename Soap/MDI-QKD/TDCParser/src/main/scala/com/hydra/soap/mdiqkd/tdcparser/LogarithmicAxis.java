@@ -1,4 +1,5 @@
-package com.hydra.services.tdcviewer;
+package com.hydra.soap.mdiqkd.tdcparser;
+
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
