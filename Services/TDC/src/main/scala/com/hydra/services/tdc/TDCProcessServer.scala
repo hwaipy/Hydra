@@ -1,11 +1,14 @@
 package com.hydra.services.tdc
 
+import java.io.{FileOutputStream, PrintWriter}
 import java.net.ServerSocket
 import java.nio.LongBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.concurrent.{ExecutionContext, Future}
 import com.hydra.services.tdc.device.{TDCDataAdapter, TDCParser}
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import com.hydra.`type`.NumberTypeConversions._
@@ -132,7 +135,13 @@ abstract class DataAnalyser {
 
 class CounterAnalyser(channelCount: Int) extends DataAnalyser {
 
-  override protected def analysis(dataBlock: DataBlock) = dataBlock.content.map(list => list.size).toList
+  override protected def analysis(dataBlock: DataBlock) = {
+    val r = dataBlock.content.map(list => list.size).toList
+    val pw = new PrintWriter(new FileOutputStream("o.csv", true))
+    pw.println(r)
+    pw.close()
+    r
+  }
 }
 
 class HistogramAnalyser(channelCount: Int) extends DataAnalyser {

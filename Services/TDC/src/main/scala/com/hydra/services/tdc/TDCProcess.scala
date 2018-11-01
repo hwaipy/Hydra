@@ -23,7 +23,7 @@ object TDCProcess extends App {
 
   val port = 20156
   val process = new TDCProcessService(port)
-  val client = MessageClient.newClient(parameters.get("server").getOrElse("localhost"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
+  val client = MessageClient.newClient(parameters.get("server").getOrElse("10.1.1.11"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
   process.postInit(client)
 
   process.turnOnAnalyser("Counter")

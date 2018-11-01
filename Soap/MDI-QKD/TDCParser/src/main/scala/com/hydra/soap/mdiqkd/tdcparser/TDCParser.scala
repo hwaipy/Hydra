@@ -18,6 +18,7 @@ import com.hydra.`type`.NumberTypeConversions._
 import com.hydra.core.MessageGenerator
 import com.hydra.soap.mdiqkd.tdcparser.LogarithmicAxis
 import org.python.core.PyException
+import org.python.google.common.util.concurrent.AtomicDouble
 import org.python.util.PythonInterpreter
 
 import scala.collection.mutable
@@ -48,18 +49,18 @@ object TDCParser extends JFXApp {
     }
   }))
 
-  //  val client = MessageClient.newClient(parameters.named.get("host") match {
-  //    case Some(host) => host
-  //    case None => "localhost"
-  //  }, parameters.named.get("port") match {
-  //    case Some(port) => port.toInt
-  //    case None => 20102
-  //  })
-  //  val storageInvoker = client.blockingInvoker("StorageService")
-  //  val tdcInvoker = client.blockingInvoker("GroundTDCService")
-  //  val pyMathInvoker = client.blockingInvoker("PyMathService")
-  //  val path = "/test/tdc/default.fs"
-  //  val recentSize = new AtomicInteger(0)
+  val client = MessageClient.newClient(parameters.named.get("host") match {
+    case Some(host) => host
+    case None => "10.1.1.11"
+  }, parameters.named.get("port") match {
+    case Some(port) => port.toInt
+    case None => 20102
+  })
+  val storageInvoker = client.blockingInvoker("StorageService")
+  val tdcInvoker = client.blockingInvoker("GroundTDCService")
+  val pyMathInvoker = client.blockingInvoker("PyMathService")
+  val path = "/test/tdc/default.fs"
+  val recentSize = new AtomicInteger(0)
 
   val visualBounds = Screen.primary.visualBounds
   val frameSize = new Dimension2D(visualBounds.width * 0.9, visualBounds.height * 0.6)
@@ -67,23 +68,6 @@ object TDCParser extends JFXApp {
     visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
     visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
 
-  //  val syncChannelFieldRef = new AtomicReference[TextField]()
-  //  val signalChannelFieldRef = new AtomicReference[TextField]()
-  //  val viewFromFieldRef = new AtomicReference[TextField]()
-  //  val viewToFieldRef = new AtomicReference[TextField]()
-  //  val binCountFieldRef = new AtomicReference[TextField]()
-  //  val divideFieldRef = new AtomicReference[TextField]()
-  //  val configurationFields: List[Region] =
-  //    createHistogramChannelSetter("Sync") :: createHistogramChannelSetter("Signal") ::
-  //      createHistogramViewSetter("ViewFrom") :: createHistogramViewSetter("ViewTo") ::
-  //      createHistogramBinCountSetter() :: createHistogramDivideSetter() ::
-  //      createIntegrateCheckSetter() :: createHistogramLogYCheckSetter() ::
-  //      createGaussianFitChecker() :: createYAxisAutoRangeCheckSetter() ::
-  //      createYAxisManualSetter("Min") :: createYAxisManualSetter("Max") ::
-  //      Nil
-  //  val configurationPane = new AnchorPane()
-  //  //TODO bad code
-  //
   //  val regionsRef = new AtomicReference[Map[String, List[Tuple2[Double, Double]]]]()
   //  val regionColorMap = new mutable.HashMap[String, Color]()
   //
@@ -94,8 +78,20 @@ object TDCParser extends JFXApp {
   //  simpleCalcResult.editable = false
   //  val simpleCalcResultTitle = new Label()
   //
+
+  val histogramStrategyAllPulse = (rnd: Int) => true
+  val histogramStrategies = List(
+    histogramStrategyAllPulse,
+    histogramStrategyAllPulse,
+    histogramStrategyAllPulse,
+    histogramStrategyAllPulse,
+    histogramStrategyAllPulse,
+    histogramStrategyAllPulse,
+    histogramStrategyAllPulse,
+    histogramStrategyAllPulse)
+
   val grid = new GridPane()
-  val chartTextRegeons = Range(0, 8).toArray.map(_ => new ChartTextRegeon())
+  val chartTextRegeons = histogramStrategies.map(stra => new ChartTextRegeon(stra))
 
   stage = new PrimaryStage {
     title = "MDI-QKD Data Parser"
@@ -163,78 +159,35 @@ object TDCParser extends JFXApp {
         prefHeight = frameSize.height
       }
     }
-    //    onCloseRequest = (we) => client.stop
+    onCloseRequest = (we) => client.stop
   }
 
-  //  val recentViewStart = new AtomicLong(-1)
-  //  val recentViewStop = new AtomicLong(-1)
-  //  val recentDivide = new AtomicLong(-1)
-  //  val recentXData = new AtomicReference[Array[Double]](new Array[Double](0))
-  //  val recentHistogram = new AtomicReference[Array[Double]](new Array[Double](0))
-  //  val integrated = new AtomicBoolean(false)
+  val integrated = new AtomicBoolean(false)
 
   def updateResults() = {
-    //    assertThread("TDCParser")
-    //    val size: Long = storageInvoker.metaData("", path, false).asInstanceOf[Map[String, Any]]("Size")
-    //    if (size != recentSize.get) {
-    //      recentSize.set(size)
-    //      val frameBytes = storageInvoker.FSFileReadTailFrames("", path, 0, 1).asInstanceOf[List[Array[Byte]]](0)
-    //      val mg = new MessageGenerator()
-    //      mg.feed(frameBytes)
-    //      val item = mg.next().get.content
-    //
-    //      val mdiqkdEncoding = item("MDIQKDEncoding").asInstanceOf[Map[String, Any]]
-    //      println(mdiqkdEncoding)
-    //      //counts
-    //      val counts = item("Counter").asInstanceOf[List[Int]]
-    //      displayCounterResult(counts)
-    //
-    //      //histogram
-    //      val histogram = item("Histogram").asInstanceOf[Map[String, Any]]
-    //      //      val syncChannel: Int = histogram("SyncChannel")
-    //      //      val signalChannel: Int = histogram("SignalChannel")
-    //      val viewStart: Long = histogram("ViewFrom")
-    //      val viewStop: Long = histogram("ViewTo")
-    //      val divide: Int = histogram("Divide")
-    //      val histo = histogram("Histogram").asInstanceOf[List[Int]].toArray
-    //      if (integrated.get && recentViewStart.get == viewStart && recentViewStop.get == viewStop && recentHistogram.get.size == histo.size) {
-    //        recentHistogram set recentHistogram.get.zip(histo).map(z => z._1 + z._2)
-    //      } else recentHistogram set histo.map(i => i.toDouble)
-    //      val binWidth = (viewStop - viewStart) / 1000.0 / histo.size / divide
-    //      recentXData set Range(0, recentHistogram.get.size).map(i => (xAxis.lowerBound.value + binWidth * (i + 0.5))).toArray
-    //      recentViewStart set viewStart
-    //      recentViewStop set viewStop
-    //      recentDivide set divide
-    //      val xTick = calcTick(viewStart / 1000.0, (viewStart + (viewStop - viewStart) / divide) / 1000.0)
-    //      Platform.runLater(() => {
-    //        xAxis.lowerBound = xTick._1
-    //        xAxis.upperBound = xTick._2
-    //        xAxis.tickUnit = xTick._3
-    //        xAxisLog.lowerBound = xTick._1
-    //        xAxisLog.upperBound = xTick._2
-    //        xAxisLog.tickUnit = xTick._3
-    //        series.data = recentHistogram.get.zipWithIndex.map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
-    //        seriesLog.data = recentHistogram.get.zipWithIndex.filter(z => z._1 > 0).map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
-    //        yValueMin <= recentHistogram.get.min
-    //        yValueMax <= recentHistogram.get.max
-    //        updateYAxisRange()
-    //      })
-    //      updateGaussianFit()
-    //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
-    //      updateRegions()
-    //    }
+    assertThread("TDCParser")
+    val size: Long = storageInvoker.metaData("", path, false).asInstanceOf[Map[String, Any]]("Size")
+    if (size != recentSize.get) {
+      recentSize.set(size)
+      val frameBytes = storageInvoker.FSFileReadTailFrames("", path, 0, 1).asInstanceOf[List[Array[Byte]]](0)
+      val mg = new MessageGenerator()
+      mg.feed(frameBytes)
+      val item = mg.next().get.content
+      val mdiqkdEncoding = item("MDIQKDEncoding").asInstanceOf[Map[String, Any]]
+
+      val channel: Int = mdiqkdEncoding("Channel")
+      val startTime: Long = mdiqkdEncoding("StartTime")
+      val period: Double = mdiqkdEncoding("Period")
+
+      val histograms = mdiqkdEncoding.keys.filter(key => key.startsWith("Histogram With RandomNumber"))
+        .map(key => (key.replace("Histogram With RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[List[Int]])).toMap
+      chartTextRegeons.foreach(_.updateHistogram(startTime, period, integrated.get, histograms))
+      //      updateGaussianFit()
+      //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
+      //      updateRegions()
+    }
   }
 
-  //  def updateYAxisRange() = {
-  //    assertThread("JavaFX")
-  //    val yTick = if (autoRangingYAxis.value) calcTick(recentHistogram.get.min.toDouble, recentHistogram.get.max.toDouble) else calcTick(yAxisManualMin.value, yAxisManualMax.value)
-  //    yAxis.lowerBound = yTick._1
-  //    yAxis.upperBound = yTick._2
-  //    yAxis.tickUnit = yTick._3
-  //    yAxisLog.lowerBound = Math.max(yTick._1, 1)
-  //    yAxisLog.upperBound = yTick._2
-  //  }
-  //
   //  def updateDelays() = {
   //    assertThread("TDCViewer")
   //    val delays = tdcInvoker.getDelays().asInstanceOf[List[Any]].map(i => {
@@ -451,24 +404,7 @@ object TDCParser extends JFXApp {
   //    pane.prefHeight = 30
   //    pane
   //  }
-  //
-  //  private def calcTick(min: Double, max: Double) = {
-  //    val tickEstimated = (max - min) / 20
-  //    val tens = math.log10(tickEstimated).toInt
-  //    val tickEstRem = tickEstimated / math.pow(10, tens)
-  //    val tickBase = tickEstRem match {
-  //      case ter if ter < 1.6 => 1
-  //      case ter if ter < 3.6 => 2
-  //      case ter if ter < 8.6 => 5
-  //      case _ => 10
-  //    }
-  //    val tickUnit = tickBase * math.pow(10, tens)
-  //    val viewMin = math.floor(min / tickUnit) * tickUnit
-  //    val viewMax = math.ceil(max / tickUnit) * tickUnit
-  //    val r = (viewMin, viewMax, tickUnit)
-  //    r
-  //  }
-  //
+
   //  def timeDomainNotation(timeInNs: Double) = {
   //    val formatter = new DecimalFormat("#,##0.000")
   //    val values = {
@@ -582,14 +518,18 @@ object TDCParser extends JFXApp {
   assertThread("JavaFX")
   new Timer(true).schedule(new TimerTask {
     override def run() = Future {
-      updateResults()
-      //        updateDelays()
-      //        updateHistogramConfiguration()
+      try {
+        updateResults()
+        //        updateDelays()
+        //        updateHistogramConfiguration()
+      } catch {
+        case e: Throwable => e.printStackTrace()
+      }
     }(executionContext)
   }, 1000, 400)
 }
 
-class ChartTextRegeon extends VBox {
+class ChartTextRegeon(strategy: (Int) => Boolean) extends VBox {
   val xAxis = NumberAxis("Time (ns)", 0, 10, 1)
   val xAxisLog = NumberAxis("Time (ns)", 0, 10, 1)
   val yAxis = NumberAxis("Count", 0, 100, 10)
@@ -655,6 +595,66 @@ class ChartTextRegeon extends VBox {
 
   //  style = "-fx-background-color: red;"
   //  -fx-background-color: rgb(230, 230, 230);
+
+  val recentStartTime = new AtomicLong(0)
+  val recentPeriod = new AtomicDouble(0)
+  val recentXData = new AtomicReference[Array[Double]](new Array[Double](0))
+  val recentHistogram = new AtomicReference[Array[Double]](new Array[Double](0))
+
+  def updateHistogram(startTime: Long, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]]) = {
+    val histogramViewed = histograms.filter(entry => strategy(entry._1)).map(his => his._2).reduce((a, b) => a.zip(b).map(z => z._1 + z._2))
+    if (integrated && recentStartTime.get == startTime && recentPeriod.get == period) {
+      recentHistogram set recentHistogram.get.zip(histogramViewed).map(z => z._1 + z._2)
+    } else {
+      recentHistogram set histogramViewed.toArray.map(i => i.toDouble)
+    }
+    val binWidth = period / 1000.0 / histogramViewed.size
+    recentXData set Range(0, recentHistogram.get.size).map(i => (xAxis.lowerBound.value + binWidth * (i + 0.5))).toArray
+    recentStartTime set startTime
+    recentPeriod set period
+    val xTick = calcTick(startTime / 1000.0, (startTime + period) / 1000.0)
+    Platform.runLater(() => {
+      xBoundAndTick(xTick._1, xTick._2, xTick._3)
+      series.data = recentHistogram.get.zipWithIndex.map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
+      seriesLog.data = recentHistogram.get.zipWithIndex.filter(z => z._1 > 0).map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
+      updateYAxisRange()
+    })
+  }
+
+  private def updateYAxisRange() = {
+    val yTick = calcTick(recentHistogram.get.min, recentHistogram.get.max)
+    yAxis.lowerBound = yTick._1
+    yAxis.upperBound = yTick._2
+    yAxis.tickUnit = yTick._3
+    yAxisLog.lowerBound = Math.max(yTick._1, 1)
+    yAxisLog.upperBound = yTick._2
+  }
+
+  private def calcTick(min: Double, max: Double) = {
+    val tickEstimated = (max - min) / 20
+    val tens = math.log10(tickEstimated).toInt
+    val tickEstRem = tickEstimated / math.pow(10, tens)
+    val tickBase = tickEstRem match {
+      case ter if ter < 1.6 => 1
+      case ter if ter < 3.6 => 2
+      case ter if ter < 8.6 => 5
+      case _ => 10
+    }
+    val tickUnit = tickBase * math.pow(10, tens)
+    val viewMin = math.floor(min / tickUnit) * tickUnit
+    val viewMax = math.ceil(max / tickUnit) * tickUnit
+    val r = (viewMin, viewMax, tickUnit)
+    r
+  }
+
+  private def xBoundAndTick(lowerBound: Double, upperBound: Double, tickUnit: Double) = {
+    xAxis.lowerBound = lowerBound
+    xAxisLog.lowerBound = lowerBound
+    xAxis.upperBound = upperBound
+    xAxisLog.upperBound = upperBound
+    xAxis.tickUnit = tickUnit
+    xAxisLog.tickUnit = tickUnit
+  }
 }
 
 object JythonBridge {

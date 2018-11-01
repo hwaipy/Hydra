@@ -23,7 +23,7 @@ object SimpleTDCDataGenerator {
   val pulsePeriod = 10000
 
   var DEBUG_TIME_RESTED = 0l
-  val DEBUG_SAVE_AS = ""
+  val DEBUG_SAVE_AS = "delayed1"
   val DEBUG_SAVE_STREAM = if (DEBUG_SAVE_AS == "") None else Some(new BufferedOutputStream(new FileOutputStream(new File(DEBUG_SAVE_AS)), 10000000))
 
   def launch(port: Int, delay: Long) = Future {
@@ -71,9 +71,9 @@ object SimpleTDCDataGenerator {
 
   def generate(startTime: Long, stopTime: Long) = {
     val arrayBuffer = ArrayBuffer[Array[Long]]()
-    arrayBuffer += timeEventsPulse(startTime, stopTime, 0, 100000000, pulseShapeGaussian(20), 1) markeChannel 0 //CH0 10k period
+    arrayBuffer += timeEventsPulse(startTime, stopTime, 23000000, 100000000, pulseShapeGaussian(1000), 1) markeChannel 0 //CH0 10k period
     arrayBuffer += timeEventsRandom(startTime, stopTime, 1, 1) markeChannel 1 //CH1 darkcounts
-    arrayBuffer += timeEventsSparsePulse(startTime, stopTime, 0, pulsePeriod, 100, 1, pulseShapeGaussian(400)) modulate modulations markeChannel 1 //CH1 laserpulse
+    arrayBuffer += timeEventsSparsePulse(startTime, stopTime, 3000, pulsePeriod, 100, 1, pulseShapeGaussian(400)) modulate modulations markeChannel 1 //CH1 laserpulse
 
     val merged = merge(arrayBuffer.toArray)
     val buffer = ByteBuffer.allocate(merged.size * 8)
@@ -83,8 +83,8 @@ object SimpleTDCDataGenerator {
 
   def generateModulation(delay: Long, period: Long, randomNumbers: Array[RandomNumber]) = {
     val modulationBuffer = ListBuffer[Array[Long] => Array[Long]]()
-    modulationBuffer += modulationLaser(delay, period, randomNumbers, "")
-    //    modulationBuffer += modulationLaser(delay, period, randomNumbers, "FIRST_PULSE")
+        modulationBuffer += modulationLaser(delay, period, randomNumbers, "")
+//    modulationBuffer += modulationLaser(delay, period, randomNumbers, "FIRST_PULSE")
     //    modulationBuffer += modulationLaser(delay, period, randomNumbers, "RANDOM_NUMBER:4")
 
     (timeList: Array[Long]) => modulationBuffer.foldLeft(timeList)((A, B) => B(A))
