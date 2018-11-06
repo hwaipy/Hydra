@@ -80,16 +80,17 @@ object TDCParser extends JFXApp {
   //  val simpleCalcResultTitle = new Label()
   //
 
-  val regionDefination = Map("pulse1" -> (2.0, 4.0), "pulse2" -> (5.0, 7.0), "vacumn" -> (8.0, 10.0))
-  val histogramStrategyAllPulses = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.map(_.RN), regionDefination, (v, rndc) => ("Pulse Extinction Ratio", (v("pulse1") + v("pulse2")) / v("vacumn") / 2))
+  val regionDefination = Map("Pulse1" -> (2.0, 4.0), "Pulse2" -> (5.0, 7.0), "Vacuum" -> (8.0, 10.0))
 
-  val histogramStrategyTimeSignals = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isTime).map(_.RN), regionDefination, (v, rndc) => ("Signal Pulses (Time)", (v("pulse1") + v("pulse2")) / 2 / rndc))
-  val histogramStrategyPhaseSignals = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isPhase).map(_.RN), regionDefination, (v, rndc) => ("Signal Pulses (Phase)", (v("pulse1") + v("pulse2")) / 2 / rndc))
-  val histogramStrategyTimeDecoy = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isTime).map(_.RN), regionDefination, (v, rndc) => ("Decoy Pulses (Time)", (v("pulse1") + v("pulse2")) / 2 / rndc))
-  val histogramStrategyPhaseDecoy = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isPhase).map(_.RN), regionDefination, (v, rndc) => ("Decoy Pulses (Phase)", (v("pulse1") + v("pulse2")) / 2 / rndc))
-  val histogramStrategyVacuum = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isVacuum).map(_.RN), regionDefination, (v, rndc) => ("Vacuum Pulses", (v("pulse1") + v("pulse2")) / 2 / rndc))
-  val histogramStrategyTime0 = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 0).map(_.RN), regionDefination, (v, rndc) => ("Time State 0", v("pulse1") / v("pulse2")))
-  val histogramStrategyTime1 = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 1).map(_.RN), regionDefination, (v, rndc) => ("Time State 1", v("pulse1") / v("pulse2")))
+  val histogramStrategyAllPulses = new HistogramStrategy("All Pulses", RandomNumber.ALL_RANDOM_NUMBERS.map(_.RN), regionDefination)
+  val histogramStrategyTimeSignals = new HistogramStrategy("Time Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isTime).map(_.RN), regionDefination)
+  val histogramStrategyPhaseSignals = new HistogramStrategy("Phase Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isPhase).map(_.RN), regionDefination)
+  val histogramStrategyTimeDecoy = new HistogramStrategy("Time Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isTime).map(_.RN), regionDefination)
+  val histogramStrategyPhaseDecoy = new HistogramStrategy("Phase Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isPhase).map(_.RN), regionDefination)
+  val histogramStrategyVacuum = new HistogramStrategy("Vacuum", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isVacuum).map(_.RN), regionDefination)
+  val histogramStrategyTime0 = new HistogramStrategy("Time 0", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 0).map(_.RN), regionDefination)
+  val histogramStrategyTime1 = new HistogramStrategy("Time 1", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 1).map(_.RN), regionDefination)
+
   val histogramStrategies = List(
     histogramStrategyAllPulses,
     histogramStrategyVacuum,
@@ -101,14 +102,36 @@ object TDCParser extends JFXApp {
     histogramStrategyPhaseDecoy,
   )
 
-  def updateReport(reports: Map[String, Double]) = {
-    println(reports)
-    val report = f"Pulse Extinction Ratio: ${10 * math.log10(reports("Pulse Extinction Ratio"))}%.3f dB" + System.lineSeparator() +
-      f"Vacuum Intensity: ${-10 * math.log10(reports("Vacuum Pulses") / (reports("Signal Pulses (Time)") + reports("Signal Pulses (Phase)")))}%.2f dB" + System.lineSeparator() +
-      f"Decoy Intensity (Time): ${reports("Decoy Pulses (Time)") / reports("Signal Pulses (Time)")}%.3f" + System.lineSeparator() +
-      f"Decoy Intensity (Phase): ${reports("Decoy Pulses (Phase)") / reports("Signal Pulses (Phase)")}%.3f" + System.lineSeparator() +
-      f"Time / Phase (Signal): ${reports("Signal Pulses (Time)") / reports("Signal Pulses (Phase)")}%.3f" + System.lineSeparator() +
-      f"Time / Phase (Decoy): ${reports("Decoy Pulses (Time)") / reports("Decoy Pulses (Phase)")}%.3f" + System.lineSeparator() +
+  def updateReport(reports: Map[String, Map[String, Double]]) = {
+    def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
+
+    val vAllPulses = getV(histogramStrategyAllPulses.title)
+    val vTimeSignals = getV(histogramStrategyTimeSignals.title)
+    val vPhaseSignals = getV(histogramStrategyPhaseSignals.title)
+    val vTimeDecoys = getV(histogramStrategyTimeDecoy.title)
+    val vPhaseDecoys = getV(histogramStrategyPhaseDecoy.title)
+    val vVacuums = getV(histogramStrategyVacuum.title)
+    val vTime0 = getV(histogramStrategyTime0.title)
+    val vTime1 = getV(histogramStrategyTime1.title)
+
+    val pulseExtinctionRatio = (vAllPulses(0) + vAllPulses(1)) / vAllPulses(2) / 2
+    val timeSignalsCount = (vTimeSignals(0) + vTimeSignals(1)) / 2 / vTimeSignals(3)
+    val phaseSignalsCount = (vPhaseSignals(0) + vPhaseSignals(1)) / 2 / vPhaseSignals(3)
+    val timeDecoysCount = (vTimeDecoys(0) + vTimeDecoys(1)) / 2 / vTimeDecoys(3)
+    val phaseDecoysCount = (vPhaseDecoys(0) + vPhaseDecoys(1)) / 2 / vPhaseDecoys(3)
+    val vacuumsCount = (vVacuums(0) + vVacuums(1)) / 2 / vVacuums(3)
+    val time0Ratio = vTime0(0) / vTime0(1)
+    val time1Ratio = vTime1(1) / vTime1(0)
+
+    val report = f"Pulse Extinction Ratio: ${10 * math.log10(pulseExtinctionRatio)}%.3f dB" + System.lineSeparator() +
+      f"Vacuum Intensity: ${10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount))}%.2f dB" + System.lineSeparator() +
+      f"Decoy Intensity (Time): ${timeDecoysCount / timeSignalsCount}%.3f" + System.lineSeparator() +
+      f"Decoy Intensity (Phase): ${phaseDecoysCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
+      f"Time / Phase (Signal): ${timeSignalsCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
+      f"Time / Phase (Decoy): ${timeDecoysCount / phaseDecoysCount}%.3f" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"Time 0 Error Rate: ${1 / time0Ratio * 100}%.3f" + "%" + System.lineSeparator() +
+      f"Time 1 Error Rate: ${1 / time1Ratio * 100}%.3f" + "%" + System.lineSeparator() +
       ""
     reportArea.text = report
   }
@@ -216,300 +239,9 @@ object TDCParser extends JFXApp {
         .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
       val reports = chartTextRegeons.map(_.updateHistogram(startTime, period, integrated.get, histograms, rndCounts)).toMap
       updateReport(reports)
-      //      updateGaussianFit()
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
-      //      updateRegions()
     }
   }
-
-  //  def updateDelays() = {
-  //    assertThread("TDCViewer")
-  //    val delays = tdcInvoker.getDelays().asInstanceOf[List[Any]].map(i => {
-  //      val d: Long = i
-  //      d
-  //    })
-  //    Platform.runLater(() => delayFields.zip(delays).foreach(z => if (!z._1.focused.value) z._1.text = s"${z._2 / 1000.0}"))
-  //  }
-  //
-  //  def updateHistogramConfiguration() = {
-  //    assertThread("TDCViewer")
-  //    try {
-  //      val conf = tdcInvoker.getAnalyserConfiguration("Histogram").asInstanceOf[Map[String, Any]]
-  //      val syncChannel: Int = conf("Sync")
-  //      val signalChannel: Int = conf("Signal")
-  //      val viewStart: Long = conf("ViewStart")
-  //      val viewStop: Long = conf("ViewStop")
-  //      val divide: Int = conf("Divide")
-  //      Platform.runLater(() => {
-  //        if (!syncChannelFieldRef.get.focused.value) syncChannelFieldRef.get.text = (syncChannel + 1).toString
-  //        if (!signalChannelFieldRef.get.focused.value) signalChannelFieldRef.get.text = (signalChannel + 1).toString
-  //        if (!viewFromFieldRef.get.focused.value) viewFromFieldRef.get.text = (viewStart / 1000.0).toString
-  //        if (!viewToFieldRef.get.focused.value) viewToFieldRef.get.text = (viewStop / 1000.0).toString
-  //        if (!divideFieldRef.get.focused.value) divideFieldRef.get.text = divide.toString
-  //      })
-  //    } catch {
-  //      case e: Throwable => e.printStackTrace()
-  //    }
-  //  }
-  //
-  //  def displayCounterResult(counterResult: List[Int]) = Platform.runLater(() => counterResult.zip(counterFields).foreach(z => z._2.text = s"${z._1}"))
-  //
-  //  def createHistogramChannelSetter(title: String) = {
-  //    assertThread("JavaFX")
-  //    val r = createLabelFieldSetter(title, (s) => {
-  //      val dv = s.toInt
-  //      Future {
-  //        tdcInvoker.configureAnalyser("Histogram", Map(title -> (dv - 1)))
-  //        updateHistogramConfiguration()
-  //      }(executionContext)
-  //    }, if (title == "Sync") "1" else "2")
-  //    val fieldRef = if (title == "Sync") syncChannelFieldRef else signalChannelFieldRef
-  //    fieldRef.set(r._3)
-  //    r._1
-  //  }
-  //
-  //  def createHistogramViewSetter(title: String) = {
-  //    assertThread("JavaFX")
-  //    val r = createLabelFieldSetter(title, (s) => {
-  //      val dv = (s.toDouble * 1000).toLong
-  //      Future {
-  //        tdcInvoker.configureAnalyser("Histogram", Map((if (title == "ViewFrom") "ViewStart" else "ViewStop") -> (dv)))
-  //        updateHistogramConfiguration()
-  //      }(executionContext)
-  //    }, if (title == "ViewFrom") "-10" else "10")
-  //    val fieldRef = if (title == "ViewFrom") viewFromFieldRef else viewToFieldRef
-  //    fieldRef.set(r._3)
-  //    r._1
-  //  }
-  //
-  //  def createHistogramBinCountSetter() = {
-  //    assertThread("JavaFX")
-  //    val r = createLabelFieldSetter("BinCount", (s) => {
-  //      val dv = s.toInt
-  //      Future {
-  //        tdcInvoker.configureAnalyser("Histogram", Map("BinCount" -> (dv)))
-  //        updateHistogramConfiguration()
-  //      }(executionContext)
-  //    }, "1000")
-  //    binCountFieldRef.set(r._3)
-  //    r._1
-  //  }
-  //
-  //  def createHistogramDivideSetter() = {
-  //    assertThread("JavaFX")
-  //    val r = createLabelFieldSetter("Divide", (s) => {
-  //      val dv = s.toInt
-  //      Future {
-  //        tdcInvoker.configureAnalyser("Histogram", Map("Divide" -> (dv)))
-  //        updateHistogramConfiguration()
-  //      }(executionContext)
-  //    }, "1")
-  //    divideFieldRef.set(r._3)
-  //    r._1
-  //  }
-  //
-  //  def createLabelFieldSetter(title: String, onFocusLost: (String) => Unit, defaultValue: String) = {
-  //    assertThread("JavaFX")
-  //    val label = new Label(title)
-  //    val field = new TextField()
-  //    field.focused.onChange((a, b, c) => if (!field.focused.value) onFocusLost(field.text.value))
-  //    field.text = defaultValue
-  //
-  //    val pane = new AnchorPane()
-  //    pane.children = Seq(label, field)
-  //    AnchorPane.setLeftAnchor(label, 0.0)
-  //    AnchorPane.setTopAnchor(label, 0.0)
-  //    AnchorPane.setBottomAnchor(label, 0.0)
-  //    AnchorPane.setRightAnchor(label, 70.0)
-  //    AnchorPane.setLeftAnchor(field, 65.0)
-  //    AnchorPane.setTopAnchor(field, 0.0)
-  //    AnchorPane.setBottomAnchor(field, 0.0)
-  //    AnchorPane.setRightAnchor(field, 0.0)
-  //    pane.prefHeight = 30
-  //    (pane, label, field)
-  //  }
-  //
-  //  def createIntegrateCheckSetter() = {
-  //    assertThread("JavaFX")
-  //    createCheckButtonSetter("Integrated", false, (s) => integrated.set(s), Some(("Clear", () => recentHistogram.set(new Array[Double](0)))))
-  //  }
-  //
-  //  def createHistogramLogYCheckSetter() = {
-  //    assertThread("JavaFX")
-  //    createCheckButtonSetter("LogY", false, (s) => {
-  //      assertThread("JavaFX")
-  //      lineChart.visible = !s
-  //      lineChartLog.visible = s
-  //    }, None)
-  //  }
-  //
-  //  def createYAxisAutoRangeCheckSetter() = {
-  //    assertThread("JavaFX")
-  //    createCheckButtonSetter("AutoRange", true, (s) => {
-  //      assertThread("JavaFX")
-  //      autoRangingYAxis.value = s
-  //      yAxisManualMinFieldRef.get.disable = s
-  //      yAxisManualMaxFieldRef.get.disable = s
-  //      updateYAxisRange()
-  //    }, None)
-  //  }
-  //
-  //  def createYAxisManualSetter(title: String) = {
-  //    assertThread("JavaFX")
-  //    val property = if (title == "Min") yAxisManualMin else yAxisManualMax
-  //    val ref = if (title == "Min") yAxisManualMinFieldRef else yAxisManualMaxFieldRef
-  //    val r = createLabelFieldSetter(title, (s) => {
-  //      try {
-  //        property.value = s.toDouble
-  //      } catch {
-  //        case e: Throwable =>
-  //      } finally {
-  //        updateYAxisManualSettersValue()
-  //      }
-  //    }, property.value.toString)
-  //    ref.set(r._3)
-  //    r._3.disable = true
-  //    r._1
-  //  }
-  //
-  //  def updateYAxisManualSettersValue() {
-  //    yAxisManualMinFieldRef.get.text = yAxisManualMin.value.toString
-  //    yAxisManualMaxFieldRef.get.text = yAxisManualMax.value.toString
-  //  }
-  //
-  //  def createGaussianFitChecker() = {
-  //    assertThread("JavaFX")
-  //    createCheckButtonSetter("Gaussian Fit", false, (s) => {
-  //      autoGaussianFit.value = s
-  //      fitResult.visible = s
-  //      if (s) {
-  //        lineChart.data.getValue.add(fitSeries)
-  //        lineChartLog.data.getValue.add(fitSeriesLog)
-  //      } else {
-  //        lineChart.data.getValue.remove(fitSeries)
-  //        lineChartLog.data.getValue.remove(fitSeriesLog)
-  //        fitResult.text = ""
-  //      }
-  //      if (autoGaussianFit.value) {
-  //        Future {
-  //          updateGaussianFit()
-  //        }(executionContext)
-  //      }
-  //    }, None)
-  //  }
-  //
-  //  def updateGaussianFit() = {
-  //    assertThread("TDCViewer")
-  //    val fit = pyMathInvoker.singlePeakGaussianFit(recentXData.get, recentHistogram.get).asInstanceOf[List[Any]]
-  //    val a: Double = fit(0)
-  //    val x0: Double = fit(1)
-  //    val sigma: Double = fit(2)
-  //    val fittedYData = recentXData.get.map(x => a * math.exp(-math.pow((x - x0), 2) / (2 * math.pow(sigma, 2))))
-  //    Platform.runLater(() => {
-  //      fitSeries.data = (recentXData.get zip fittedYData).map(toChartData)
-  //      fitSeriesLog.data = (recentXData.get zip fittedYData).map(toChartData)
-  //      fitResult.text = s"Peak: ${timeDomainNotation(x0)}, FWHM: ${timeDomainNotation(sigma * 2.35)}"
-  //    })
-  //  }
-  //
-  //  def createCheckButtonSetter(title: String, selected: Boolean, onChange: (Boolean) => Unit, buttonAction: Option[Tuple2[String, () => Unit]]) = {
-  //    assertThread("JavaFX")
-  //    val check = new CheckBox(title)
-  //    check.selected = selected
-  //    check.selected.onChange(onChange(check.selected.value))
-  //
-  //    val buttonOption = buttonAction.map(ba => {
-  //      val button = new Button(ba._1)
-  //      button.onAction = (a) => ba._2()
-  //      button
-  //    })
-  //    val pane = new AnchorPane()
-  //    pane.children = List(check) ::: buttonOption.toList
-  //    AnchorPane.setLeftAnchor(check, 0.0)
-  //    AnchorPane.setTopAnchor(check, 0.0)
-  //    AnchorPane.setBottomAnchor(check, 0.0)
-  //    AnchorPane.setRightAnchor(check, 55.0)
-  //    buttonOption.foreach(button => {
-  //      AnchorPane.setLeftAnchor(button, 120.0)
-  //      AnchorPane.setTopAnchor(button, 0.0)
-  //      AnchorPane.setBottomAnchor(button, 0.0)
-  //      AnchorPane.setRightAnchor(button, 0.0)
-  //    })
-  //    pane.prefHeight = 30
-  //    pane
-  //  }
-
-  //  def timeDomainNotation(timeInNs: Double) = {
-  //    val formatter = new DecimalFormat("#,##0.000")
-  //    val values = {
-  //      if (timeInNs < 0.5) (timeInNs * 1e3, "ps")
-  //      else if (timeInNs < 1e3) (timeInNs, "ns")
-  //      else if (timeInNs < 1e6) (timeInNs / 1e3, "µs")
-  //      else if (timeInNs < 1e9) (timeInNs / 1e6, "ms")
-  //      else (timeInNs, "s")
-  //    }
-  //    s"${formatter.format(values._1)} ${values._2}"
-  //  }
-  //
-  //    //Update color
-  //    newColorMap.foreach(e => regionColorMap.put(s"Region-${e._1}", e._2))
-  //    series.asScala.foreach(s => regionColorMap.get(s.getName).foreach(color => {
-  //      val fill = s.getNode.lookup(".chart-series-area-fill")
-  //      val line = s.getNode.lookup(".chart-series-area-line")
-  //      val rgb = s"${(color.getRed() * 255).toInt}, ${(color.getGreen() * 255).toInt}, ${(color.getBlue() * 255).toInt}"
-  //      fill.setStyle("-fx-fill: rgba(" + rgb + ", 0.15);")
-  //      line.setStyle("-fx-stroke: rgba(" + rgb + ", 1.0);")
-  //    }))
-  //  }
-  //
-  //  val jythonInitProperties = new Properties()
-  //  jythonInitProperties.setProperty("python.import.site", "false")
-  //  PythonInterpreter.initialize(System.getProperties, jythonInitProperties, new Array[String](0))
-  //  val interpreter = new PythonInterpreter()
-  //
-  //  def evalJython(counts: Array[Int], xData: Array[Double], yData: Array[Double], divide: Int) = {
-  //    assertThread("TDCViewer")
-  //    JythonBridge.counts = counts
-  //    JythonBridge.histogramX = xData
-  //    JythonBridge.histogramY = yData
-  //    JythonBridge.histogramDivide = divide
-  //    JythonBridge.title = "Untitled"
-  //    JythonBridge.display = ""
-  //    JythonBridge.regions.clear()
-  //    try {
-  //      val pre =
-  //        """
-  //          |from com.hydra.services.tdc.JythonBridge import *
-  //          |from scalafx.scene.paint.Color import *
-  //        """.stripMargin
-  //      val logi = Source.fromFile("scripts/default.jy").getLines().toList.mkString(System.lineSeparator())
-  //      val post =
-  //        """
-  //        """.stripMargin
-  //      val code = List(pre, logi, post).mkString(System.lineSeparator())
-  //      interpreter.exec(code)
-  //      val evalResults = (JythonBridge.title, JythonBridge.display)
-  //      regionsRef set JythonBridge.regions.toMap
-  //      Platform.runLater(() => {
-  //        simpleCalcResultTitle.text = evalResults._1
-  //        simpleCalcResult.text = evalResults._2
-  //      })
-  //    }
-  //    catch {
-  //      case e: PyException => {
-  //        val out = new ByteArrayOutputStream()
-  //        e.printStackTrace(new PrintStream(out))
-  //        e.printStackTrace(new PrintStream(out))
-  //        out.close()
-  //        val errorMsg = new String(out.toByteArray)
-  //        Platform.runLater(() => {
-  //          simpleCalcResultTitle.text = JythonBridge.title + " [Error]"
-  //          simpleCalcResult.text = errorMsg
-  //        })
-  //      }
-  //      case e: Throwable => e.printStackTrace()
-  //    }
-  //  }
 
   def assertThread(start: String) = if (!Thread.currentThread.getName.toLowerCase.startsWith(start.toLowerCase)) {
     val msg = s"Thread Error: current Thread[${Thread.currentThread.getName}] is not start with [${start}]"
@@ -549,6 +281,7 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   lineChart.setAnimated(false)
   lineChart.setLegendVisible(false)
   lineChart.setCreateSymbols(false)
+  lineChart.title = strategy.title
 
   val seriesLog = new XYChart.Series[Number, Number] {
     name = "HistogramLog"
@@ -559,6 +292,7 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   lineChartLog.setLegendVisible(false)
   lineChartLog.setCreateSymbols(false)
   lineChartLog.visible = false
+  lineChartLog.title = strategy.title
 
   val fitSeries = new XYChart.Series[Number, Number] {
     name = "GaussianFit"
@@ -583,23 +317,8 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
     children = Seq(logCheck, textField)
   }
 
-  children = Seq(stackPane, hBox)
-  //  this.
-  //  AnchorPane.setTopAnchor(lineChart, 0)
-  //  AnchorPane.setLeftAnchor(lineChart, 0)
-  //  AnchorPane.setRightAnchor(lineChart, 0)
-  //  AnchorPane.setBottomAnchor(lineChart, 100)
-  //  AnchorPane.setTopAnchor(lineChartLog, 0)
-  //  AnchorPane.setLeftAnchor(lineChartLog, 0)
-  //  AnchorPane.setRightAnchor(lineChartLog, 0)
-  //  AnchorPane.setBottomAnchor(lineChartLog, 100)
-  //  AnchorPane.setTopAnchor(textField, 120)
-  //  AnchorPane.setLeftAnchor(textField, 0)
-  //  AnchorPane.setRightAnchor(textField, 0)
-  //  AnchorPane.setBottomAnchor(textField, 0)
-
-  //  style = "-fx-background-color: red;"
-  //  -fx-background-color: rgb(230, 230, 230);
+  //  children = Seq(stackPane, hBox)
+  children = Seq(stackPane)
 
   val recentStartTime = new AtomicLong(0)
   val recentPeriod = new AtomicDouble(0)
@@ -620,16 +339,17 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
     recentPeriod set period
     val xTick = calcTick(startTime / 1000.0, (startTime + period) / 1000.0)
     val regionValues = calculateRegionValues
-    val report = strategy.result(regionValues, randomNumberValid)
+    //    val report = strategy.result(regionValues, randomNumberValid)
     Platform.runLater(() => {
       xBoundAndTick(xTick._1, xTick._2, xTick._3)
       series.data = recentHistogram.get.zipWithIndex.map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
       seriesLog.data = recentHistogram.get.zipWithIndex.filter(z => z._1 > 0).map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
       updateYAxisRange()
-      textField.text = f"${report._1}: ${report._2}%.3f"
     })
-    report
+    (strategy.title, regionValues ++ Map("RandomNumberCount" -> randomNumberValid.toDouble))
   }
+
+  def updateReport(report: String) = textField.text = report
 
   doUpdateRegions(lineChart)
   doUpdateRegions(lineChartLog)
@@ -693,13 +413,13 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   }
 }
 
-class HistogramStrategy(acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]], report: ((Map[String, Double], Int) => Tuple2[String, Double])) {
+class HistogramStrategy(val title: String, acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]]) {
   def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
 
-  def result(regionValues: Map[String, Double], validRandomNumberCount: Int) = {
-    val regionAverages = regionValues.map(e => (e._1, e._2 / (regions(e._1)._2 - regions(e._1)._1)))
-    report(regionAverages, validRandomNumberCount)
-  }
+  //  def result(regionValues: Map[String, Double], validRandomNumberCount: Int) = {
+  //    val regionAverages = regionValues.map(e => (e._1, e._2 / (regions(e._1)._2 - regions(e._1)._1)))
+  //    report(regionAverages, validRandomNumberCount)
+  //  }
 }
 
 //object JythonBridge {

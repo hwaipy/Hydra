@@ -93,6 +93,7 @@ object SimpleTDCDataGenerator {
     modulationBuffer += modulationDecoy(delay, period, randomNumbers)
     modulationBuffer += modulationInterferometer(delay, period, diff, randomNumbers)
     modulationBuffer += modulationTimeEncoding(delay, period, diff, randomNumbers)
+    modulationBuffer += modulationNorm(delay, period, diff, randomNumbers)
 
     (timeList: Array[Long]) => modulationBuffer.foldLeft(timeList)((A, B) => B(A))
   }
@@ -154,9 +155,14 @@ object SimpleTDCDataGenerator {
       val encoding = rnd.encode == 0
       val timeRem = time % period
       val position = timeRem - delay - diff / 2 < 0 //0 for left
-//      println(s"time is ${time},       timeRem is $timeRem,         position is ${timeRem - delay - diff / 2}")
       position == encoding
     }
+  })
+
+  def modulationNorm(delay: Long, period: Long, diff: Long, rns: Array[RandomNumber]) = (timeList: Array[Long]) => timeList.filter(time => {
+    val rnd = rns(((time / period) % rns.size).toInt)
+    if (rnd.isTime) true
+    else random.nextInt(2) == 0
   })
 
   //  def poissonCDF(lambda: Double, relativeUpperBound: Double = 3) = {
