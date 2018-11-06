@@ -4,6 +4,7 @@ import com.hydra.services.tdc.{DataAnalyser, DataBlock, Histogram}
 import com.hydra.`type`.NumberTypeConversions._
 
 import scala.collection.mutable
+import scala.util.Random
 
 class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("RandomNumbers") = List(1)
@@ -38,7 +39,7 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
   }
 
   override protected def analysis(dataBlock: DataBlock) = {
-    val randomNumbers = configuration("RandomNumbers").asInstanceOf[List[Int]].map(r => new RandomNumber(r))
+    val randomNumbers = configuration("RandomNumbers").asInstanceOf[List[Int]].map(r => new RandomNumber(r)).toArray
     val period: Double = configuration("Period")
     val startTime: Long = configuration("StartTime")
     val channel: Int = configuration("Channel")
@@ -59,6 +60,7 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
       val validMeta = meta.filter(z => z._1 == rn)
       val histoPulse = new Histogram(validMeta.map(_._2), binCount, 0, period.toLong, 1)
       map.put(s"Histogram With RandomNumber[${rn.RN}]", histoPulse.yData.toList)
+      map.put(s"Count of RandomNumber[${rn.RN}]", randomNumbers.map(_.RN).count(_ == rn.RN))
     })
     map.toMap
   }
@@ -68,6 +70,18 @@ object RandomNumber {
   def apply(rn: Int) = new RandomNumber(rn)
 
   val ALL_RANDOM_NUMBERS = Array(0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15).map(RandomNumber(_))
+
+  private val random = new Random()
+
+  def generateRandomNumbers(length: Int, signalRatio: Double, decoyRatio: Double) = Range(0, length).map(_ => {
+    val amp = random.nextDouble() match {
+      case d if d < signalRatio => 0xC
+      case d if d < signalRatio + decoyRatio => 0x8
+      case _ => 0x0
+    }
+    val encode = random.nextInt(4)
+    new RandomNumber(amp | encode)
+  }).toArray
 }
 
 class RandomNumber(val RN: Int) {
@@ -75,7 +89,11 @@ class RandomNumber(val RN: Int) {
 
   def isSignal = (RN & 0x4) > 0
 
+  def isDecoy = (!isSignal) && (!isVacuum)
+
   def isTime = (RN & 0x2) > 0
+
+  def isPhase = !isTime
 
   def encode = RN & 0x1
 

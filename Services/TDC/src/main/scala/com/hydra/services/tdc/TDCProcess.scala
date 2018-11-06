@@ -35,6 +35,7 @@ object TDCProcess extends App {
   if (DEBUG) {
     println("DEBUG mode, starting SimpleTDCDataGenerator.")
     SimpleTDCDataGenerator.launch(port, 1000)
+    process.configureAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> SimpleTDCDataGenerator.randomNumbers.map(_.RN).toList))
   }
 
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next

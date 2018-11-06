@@ -19,8 +19,12 @@ object SimpleTDCDataGenerator {
   val socketRef = new AtomicReference[Socket]()
   val random = new Random(100)
 
-  val randomNumbers = Range(0, 10000).toArray.map(_ => 1).map(i => RandomNumber(i))
+  //  val randomNumbers = Range(0, 10000).toArray.map(_ => 0).map(i => RandomNumber(i))
+  //  randomNumbers(2300) = RandomNumber(1)
+  val randomNumbers = RandomNumber.generateRandomNumbers(10000, 0.5, 0.3)
   val pulsePeriod = 10000
+  val pulseDiff = 3000
+  val pulseDelay = 3000
 
   var DEBUG_TIME_RESTED = 0l
   val DEBUG_SAVE_AS = "delayed1"
@@ -67,13 +71,13 @@ object SimpleTDCDataGenerator {
     DEBUG_SAVE_STREAM.foreach(o => o.close())
   }
 
-  val modulations = generateModulation(-pulsePeriod / 2, pulsePeriod, randomNumbers)
+  val modulations = generateModulation(pulseDelay, pulsePeriod, pulseDiff, randomNumbers)
 
   def generate(startTime: Long, stopTime: Long) = {
     val arrayBuffer = ArrayBuffer[Array[Long]]()
-    arrayBuffer += timeEventsPulse(startTime, stopTime, 23000000, 100000000, pulseShapeGaussian(1000), 1) markeChannel 0 //CH0 10k period
+    arrayBuffer += timeEventsPulse(startTime, stopTime, 0, 100000000, pulseShapeGaussian(1000), 1) markeChannel 0 //CH0 10k period
     arrayBuffer += timeEventsRandom(startTime, stopTime, 1, 1) markeChannel 1 //CH1 darkcounts
-    arrayBuffer += timeEventsSparsePulse(startTime, stopTime, 3000, pulsePeriod, 100, 1, pulseShapeGaussian(400)) modulate modulations markeChannel 1 //CH1 laserpulse
+    arrayBuffer += timeEventsSparsePulse(startTime, stopTime, pulseDelay, pulsePeriod, 100, pulseShapeGaussian(400)) modulate modulations markeChannel 1 //CH1 laserpulse
 
     val merged = merge(arrayBuffer.toArray)
     val buffer = ByteBuffer.allocate(merged.size * 8)
@@ -81,11 +85,14 @@ object SimpleTDCDataGenerator {
     buffer.array()
   }
 
-  def generateModulation(delay: Long, period: Long, randomNumbers: Array[RandomNumber]) = {
+  def generateModulation(delay: Long, period: Long, diff: Long, randomNumbers: Array[RandomNumber]) = {
     val modulationBuffer = ListBuffer[Array[Long] => Array[Long]]()
-        modulationBuffer += modulationLaser(delay, period, randomNumbers, "")
-//    modulationBuffer += modulationLaser(delay, period, randomNumbers, "FIRST_PULSE")
-    //    modulationBuffer += modulationLaser(delay, period, randomNumbers, "RANDOM_NUMBER:4")
+    modulationBuffer += modulationLaser(delay, period, randomNumbers, "")
+    //    modulationBuffer += modulationLaser(delay, period, randomNumbers, "FIRST_PULSE")
+    //        modulationBuffer += modulationLaser(delay, period, randomNumbers, "RANDOM_NUMBER:1")
+    modulationBuffer += modulationDecoy(delay, period, randomNumbers)
+    modulationBuffer += modulationInterferometer(delay, period, diff, randomNumbers)
+    modulationBuffer += modulationTimeEncoding(delay, period, diff, randomNumbers)
 
     (timeList: Array[Long]) => modulationBuffer.foldLeft(timeList)((A, B) => B(A))
   }
@@ -98,7 +105,7 @@ object SimpleTDCDataGenerator {
     Range(0, count).map(i => firstPulseTime + i * period).filter(_ => random.nextDouble() < efficiency).map(t => t + pulseShapeRandom()).filter(t => t >= startTime && t < stopTime).toArray
   }
 
-  def timeEventsSparsePulse(startTime: Long, stopTime: Long, delay: Long, period: Long, realCount: Int, channel: Int, pulseShapeRandom: () => Int) = {
+  def timeEventsSparsePulse(startTime: Long, stopTime: Long, delay: Long, period: Long, realCount: Int, pulseShapeRandom: () => Int) = {
     val firstPulseTime = startTime + delay % period - 10 * period
     val pulseCount = ((stopTime - firstPulseTime) / period).toInt + 10
     Range(0, realCount).map(i => random.nextInt(pulseCount)).sorted.map(i => firstPulseTime + i * period).map(t => t + pulseShapeRandom()).filter(t => t >= startTime && t < stopTime).toArray
@@ -125,8 +132,32 @@ object SimpleTDCDataGenerator {
       }
       case _ => throw new RuntimeException("Unsupported")
     }
-    (timeList: Array[Long]) => timeList.filter(time => laserPulseStatuses((((time - delay) / period) % rns.size).toInt))
+    (timeList: Array[Long]) => timeList.filter(time => laserPulseStatuses(((time / period) % rns.size).toInt))
   }
+
+  def modulationDecoy(delay: Long, period: Long, rns: Array[RandomNumber]) = (timeList: Array[Long]) =>
+    timeList.filter(time => {
+      val rnd = rns(((time / period) % rns.size).toInt)
+      val p = if (rnd.isVacuum) 0.001 else if (rnd.isDecoy) 0.6 else 1
+      random.nextDouble() < p
+    })
+
+  def modulationInterferometer(delay: Long, period: Long, diff: Long, rns: Array[RandomNumber]) = (timeList: Array[Long]) => timeList.map(time => {
+    val delta = if (random.nextInt(2) == 0) 0 else 3000
+    time + delta
+  })
+
+  def modulationTimeEncoding(delay: Long, period: Long, diff: Long, rns: Array[RandomNumber]) = (timeList: Array[Long]) => timeList.filter(time => {
+    val rnd = rns(((time / period) % rns.size).toInt)
+    if (rnd.isPhase) true
+    else {
+      val encoding = rnd.encode == 0
+      val timeRem = time % period
+      val position = timeRem - delay - diff / 2 < 0 //0 for left
+//      println(s"time is ${time},       timeRem is $timeRem,         position is ${timeRem - delay - diff / 2}")
+      position == encoding
+    }
+  })
 
   //  def poissonCDF(lambda: Double, relativeUpperBound: Double = 3) = {
   //    val upperBound = (relativeUpperBound * lambda).toInt

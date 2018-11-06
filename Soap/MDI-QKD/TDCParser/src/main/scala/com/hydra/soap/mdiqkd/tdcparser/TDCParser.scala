@@ -33,6 +33,7 @@ import collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scalafx.scene.chart.XYChart.Series
 import scalafx.scene.paint.Color
+import com.hydra.services.tdc.application.RandomNumber
 
 object TDCParser extends JFXApp {
   val DEBUG = new File(".").getAbsolutePath.contains("GitHub")
@@ -79,19 +80,43 @@ object TDCParser extends JFXApp {
   //  val simpleCalcResultTitle = new Label()
   //
 
-  val histogramStrategyAllPulse = (rnd: Int) => true
+  val regionDefination = Map("pulse1" -> (2.0, 4.0), "pulse2" -> (5.0, 7.0), "vacumn" -> (8.0, 10.0))
+  val histogramStrategyAllPulses = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.map(_.RN), regionDefination, (v, rndc) => ("Pulse Extinction Ratio", (v("pulse1") + v("pulse2")) / v("vacumn") / 2))
+
+  val histogramStrategyTimeSignals = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isTime).map(_.RN), regionDefination, (v, rndc) => ("Signal Pulses (Time)", (v("pulse1") + v("pulse2")) / 2 / rndc))
+  val histogramStrategyPhaseSignals = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isPhase).map(_.RN), regionDefination, (v, rndc) => ("Signal Pulses (Phase)", (v("pulse1") + v("pulse2")) / 2 / rndc))
+  val histogramStrategyTimeDecoy = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isTime).map(_.RN), regionDefination, (v, rndc) => ("Decoy Pulses (Time)", (v("pulse1") + v("pulse2")) / 2 / rndc))
+  val histogramStrategyPhaseDecoy = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isPhase).map(_.RN), regionDefination, (v, rndc) => ("Decoy Pulses (Phase)", (v("pulse1") + v("pulse2")) / 2 / rndc))
+  val histogramStrategyVacuum = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isVacuum).map(_.RN), regionDefination, (v, rndc) => ("Vacuum Pulses", (v("pulse1") + v("pulse2")) / 2 / rndc))
+  val histogramStrategyTime0 = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 0).map(_.RN), regionDefination, (v, rndc) => ("Time State 0", v("pulse1") / v("pulse2")))
+  val histogramStrategyTime1 = new HistogramStrategy(RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 1).map(_.RN), regionDefination, (v, rndc) => ("Time State 1", v("pulse1") / v("pulse2")))
   val histogramStrategies = List(
-    histogramStrategyAllPulse,
-    histogramStrategyAllPulse,
-    histogramStrategyAllPulse,
-    histogramStrategyAllPulse,
-    histogramStrategyAllPulse,
-    histogramStrategyAllPulse,
-    histogramStrategyAllPulse,
-    histogramStrategyAllPulse)
+    histogramStrategyAllPulses,
+    histogramStrategyVacuum,
+    histogramStrategyTime0,
+    histogramStrategyTime1,
+    histogramStrategyTimeSignals,
+    histogramStrategyPhaseSignals,
+    histogramStrategyTimeDecoy,
+    histogramStrategyPhaseDecoy,
+  )
+
+  def updateReport(reports: Map[String, Double]) = {
+    println(reports)
+    val report = f"Pulse Extinction Ratio: ${10 * math.log10(reports("Pulse Extinction Ratio"))}%.3f dB" + System.lineSeparator() +
+      f"Vacuum Intensity: ${-10 * math.log10(reports("Vacuum Pulses") / (reports("Signal Pulses (Time)") + reports("Signal Pulses (Phase)")))}%.2f dB" + System.lineSeparator() +
+      f"Decoy Intensity (Time): ${reports("Decoy Pulses (Time)") / reports("Signal Pulses (Time)")}%.3f" + System.lineSeparator() +
+      f"Decoy Intensity (Phase): ${reports("Decoy Pulses (Phase)") / reports("Signal Pulses (Phase)")}%.3f" + System.lineSeparator() +
+      f"Time / Phase (Signal): ${reports("Signal Pulses (Time)") / reports("Signal Pulses (Phase)")}%.3f" + System.lineSeparator() +
+      f"Time / Phase (Decoy): ${reports("Decoy Pulses (Time)") / reports("Decoy Pulses (Phase)")}%.3f" + System.lineSeparator() +
+      ""
+    reportArea.text = report
+  }
+
 
   val grid = new GridPane()
   val chartTextRegeons = histogramStrategies.map(stra => new ChartTextRegeon(stra))
+  val reportArea = new TextArea()
 
   stage = new PrimaryStage {
     title = "MDI-QKD Data Parser"
@@ -99,11 +124,17 @@ object TDCParser extends JFXApp {
     scene = new Scene {
       stylesheets.add(ClassLoader.getSystemClassLoader.getResource("com/hydra/soap/mdiqkd/tdcparser/TDCParser.css").toExternalForm)
       root = new AnchorPane {
+        //ReportArea
+        reportArea.prefWidth = 250
+        AnchorPane.setTopAnchor(reportArea, 0)
+        AnchorPane.setBottomAnchor(reportArea, 0)
+        AnchorPane.setRightAnchor(reportArea, 0)
+
         //Grid
         AnchorPane.setTopAnchor(grid, 0)
-        AnchorPane.setBottomAnchor(grid, 100)
+        AnchorPane.setBottomAnchor(grid, 0)
         AnchorPane.setLeftAnchor(grid, 0)
-        AnchorPane.setRightAnchor(grid, 0)
+        AnchorPane.setRightAnchor(grid, reportArea.prefWidth.value)
 
         //Charts
         chartTextRegeons.zipWithIndex.foreach { z => grid.add(z._1, z._2 % 4, z._2 / 4) }
@@ -154,7 +185,7 @@ object TDCParser extends JFXApp {
         //        AnchorPane.setTopAnchor(simpleCalcResultTitle, top + 30)
         //        AnchorPane.setLeftAnchor(simpleCalcResultTitle, 0)
         //
-        children = Seq(grid)
+        children = Seq(grid, reportArea)
         prefWidth = frameSize.width
         prefHeight = frameSize.height
       }
@@ -181,7 +212,10 @@ object TDCParser extends JFXApp {
 
       val histograms = mdiqkdEncoding.keys.filter(key => key.startsWith("Histogram With RandomNumber"))
         .map(key => (key.replace("Histogram With RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[List[Int]])).toMap
-      chartTextRegeons.foreach(_.updateHistogram(startTime, period, integrated.get, histograms))
+      val rndCounts = mdiqkdEncoding.keys.filter(key => key.startsWith("Count of RandomNumber"))
+        .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
+      val reports = chartTextRegeons.map(_.updateHistogram(startTime, period, integrated.get, histograms, rndCounts)).toMap
+      updateReport(reports)
       //      updateGaussianFit()
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
       //      updateRegions()
@@ -417,38 +451,6 @@ object TDCParser extends JFXApp {
   //    s"${formatter.format(values._1)} ${values._2}"
   //  }
   //
-  //  def updateRegions() = {
-  //    val newRegions = regionsRef.get
-  //    val newColorMap = JythonBridge.regionColorMap.toMap
-  //    Platform.runLater(() => {
-  //      doUpdateRegions(lineChart, newRegions, newColorMap)
-  //      doUpdateRegions(lineChartLog, newRegions, newColorMap)
-  //    })
-  //  }
-  //
-  //  def doUpdateRegions(chart: AreaChart[Number, Number], newRegions: Map[String, List[Tuple2[Double, Double]]], newColorMap: Map[String, Color]) = {
-  //    val series = chart.data.getValue
-  //    val seriesExists = series.asScala.toList
-  //    val seriesToBeAdded = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
-  //    newRegions.foreach(e => seriesToBeAdded.put(e._1, e._2))
-  //    seriesExists.filter(s => s.getName.startsWith("Region-")).foreach(s => if (seriesToBeAdded.contains(s.getName.substring(7))) {
-  //      seriesToBeAdded.remove(s.getName.substring(7))
-  //    } else series.remove(s))
-  //    seriesToBeAdded.foreach(e => series.add(new XYChart.Series[Number, Number] {
-  //      name = s"Region-${e._1}"
-  //      data = Seq((0.0, 0.0)).map(toChartData)
-  //    }.delegate))
-  //    series.asScala.filter(s => s.getName.startsWith("Region-")).foreach(s => regionsRef.get.get(s.getName.substring(7)).foreach(newSeriesData => {
-  //      val data = ListBuffer[Tuple2[Double, Double]]()
-  //      newSeriesData.foreach(reg => {
-  //        data += Tuple2(reg._1 - 0.001, -1)
-  //        data += Tuple2(reg._1, Integer.MAX_VALUE.toDouble)
-  //        data += Tuple2(reg._2, Integer.MAX_VALUE.toDouble)
-  //        data += Tuple2(reg._2 + 0.001, -1)
-  //      })
-  //      new Series[Number, Number](s).data = data.map(toChartData)
-  //    }))
-  //
   //    //Update color
   //    newColorMap.foreach(e => regionColorMap.put(s"Region-${e._1}", e._2))
   //    series.asScala.foreach(s => regionColorMap.get(s.getName).foreach(color => {
@@ -520,22 +522,22 @@ object TDCParser extends JFXApp {
     override def run() = Future {
       try {
         updateResults()
-        //        updateDelays()
-        //        updateHistogramConfiguration()
       } catch {
+        case e: RuntimeException => println(e.getMessage)
         case e: Throwable => e.printStackTrace()
       }
     }(executionContext)
   }, 1000, 400)
 }
 
-class ChartTextRegeon(strategy: (Int) => Boolean) extends VBox {
+class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   val xAxis = NumberAxis("Time (ns)", 0, 10, 1)
   val xAxisLog = NumberAxis("Time (ns)", 0, 10, 1)
   val yAxis = NumberAxis("Count", 0, 100, 10)
   val yAxisLogUnderlying = new LogarithmicAxis(1, 100)
   val yAxisLog = new ValueAxis(yAxisLogUnderlying) {}
   yAxisLog.label = "Count (Log)"
+  val regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
 
   val toChartData = (xy: (Double, Double)) => XYChart.Data[Number, Number](xy._1, xy._2)
 
@@ -570,6 +572,9 @@ class ChartTextRegeon(strategy: (Int) => Boolean) extends VBox {
   textField.editable = false
   textField.focusTraversable = false
   val logCheck = new CheckBox("log")
+  lineChart.visible <== !logCheck.selected
+  lineChartLog.visible <== logCheck.selected
+  val regionsRef = new AtomicReference[Map[String, List[Tuple2[Double, Double]]]]()
 
   val stackPane = new StackPane() {
     children = Seq(lineChart, lineChartLog)
@@ -601,8 +606,9 @@ class ChartTextRegeon(strategy: (Int) => Boolean) extends VBox {
   val recentXData = new AtomicReference[Array[Double]](new Array[Double](0))
   val recentHistogram = new AtomicReference[Array[Double]](new Array[Double](0))
 
-  def updateHistogram(startTime: Long, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]]) = {
-    val histogramViewed = histograms.filter(entry => strategy(entry._1)).map(his => his._2).reduce((a, b) => a.zip(b).map(z => z._1 + z._2))
+  def updateHistogram(startTime: Long, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]], randomNumberCounts: Map[Int, Int]) = {
+    val histogramViewed = histograms.filter(entry => strategy.isAcceptedRND(entry._1)).map(his => his._2).reduce((a, b) => a.zip(b).map(z => z._1 + z._2))
+    val randomNumberValid = randomNumberCounts.filter(entry => strategy.isAcceptedRND(entry._1)).map(_._2).sum
     if (integrated && recentStartTime.get == startTime && recentPeriod.get == period) {
       recentHistogram set recentHistogram.get.zip(histogramViewed).map(z => z._1 + z._2)
     } else {
@@ -613,16 +619,46 @@ class ChartTextRegeon(strategy: (Int) => Boolean) extends VBox {
     recentStartTime set startTime
     recentPeriod set period
     val xTick = calcTick(startTime / 1000.0, (startTime + period) / 1000.0)
+    val regionValues = calculateRegionValues
+    val report = strategy.result(regionValues, randomNumberValid)
     Platform.runLater(() => {
       xBoundAndTick(xTick._1, xTick._2, xTick._3)
       series.data = recentHistogram.get.zipWithIndex.map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
       seriesLog.data = recentHistogram.get.zipWithIndex.filter(z => z._1 > 0).map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
       updateYAxisRange()
+      textField.text = f"${report._1}: ${report._2}%.3f"
     })
+    report
+  }
+
+  doUpdateRegions(lineChart)
+  doUpdateRegions(lineChartLog)
+
+  private def doUpdateRegions(chart: AreaChart[Number, Number]) = {
+    val series = chart.data.getValue
+    strategy.regions.foreach(e => series.add(new XYChart.Series[Number, Number] {
+      name = s"Region-${e._1}"
+      val seriesData = ListBuffer[Tuple2[Double, Double]]()
+      seriesData += Tuple2(e._2._1 - 0.001, 0.001)
+      seriesData += Tuple2(e._2._1, Integer.MAX_VALUE.toDouble)
+      seriesData += Tuple2(e._2._2, Integer.MAX_VALUE.toDouble)
+      seriesData += Tuple2(e._2._2 + 0.001, 0.001)
+      data = seriesData.map(toChartData)
+    }.delegate))
+  }
+
+  private def calculateRegionValues = {
+    val histogramData = recentXData.get.zip(recentHistogram.get)
+    val regionValues = strategy.regions.map(e => {
+      val range = e._2
+      val sum = histogramData.filter(z => z._1 >= range._1 && z._1 <= range._2).map(_._2).sum
+      (e._1, sum)
+    })
+    regionValues
   }
 
   private def updateYAxisRange() = {
-    val yTick = calcTick(recentHistogram.get.min, recentHistogram.get.max)
+    val yTick = calcTick(recentHistogram.get.min, recentHistogram.get.max, estimate = 8)
     yAxis.lowerBound = yTick._1
     yAxis.upperBound = yTick._2
     yAxis.tickUnit = yTick._3
@@ -630,8 +666,8 @@ class ChartTextRegeon(strategy: (Int) => Boolean) extends VBox {
     yAxisLog.upperBound = yTick._2
   }
 
-  private def calcTick(min: Double, max: Double) = {
-    val tickEstimated = (max - min) / 20
+  private def calcTick(min: Double, max: Double, estimate: Int = 20) = {
+    val tickEstimated = (max - min) / estimate
     val tens = math.log10(tickEstimated).toInt
     val tickEstRem = tickEstimated / math.pow(10, tens)
     val tickBase = tickEstRem match {
@@ -657,37 +693,46 @@ class ChartTextRegeon(strategy: (Int) => Boolean) extends VBox {
   }
 }
 
-object JythonBridge {
-  var title = ""
-  var counts = new Array[Int](0)
-  var histogramX = new Array[Double](0)
-  var histogramY = new Array[Double](0)
-  var histogramDivide = 0
-  var display = ""
-  var regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
-  val regionColorMap = new mutable.HashMap[String, Color]()
+class HistogramStrategy(acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]], report: ((Map[String, Double], Int) => Tuple2[String, Double])) {
+  def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
 
-  def title(t: String): Unit = {
-    title = t
+  def result(regionValues: Map[String, Double], validRandomNumberCount: Int) = {
+    val regionAverages = regionValues.map(e => (e._1, e._2 / (regions(e._1)._2 - regions(e._1)._1)))
+    report(regionAverages, validRandomNumberCount)
   }
-
-  def display(t: String): Unit = {
-    display = t
-  }
-
-  def region(name: String, start: Double, stop: Double) = {
-    val list = regions.getOrElseUpdate(name, List[Tuple2[Double, Double]]())
-    regions(name) = list ::: List((start, stop))
-  }
-
-  def region(name: String, color: Color) = {
-    regionColorMap.put(name, color)
-  }
-
-  def region(name: String) = regions.get(name) match {
-    case None => 0.0
-    case Some(reg) => histogramX.zip(histogramY).filter(z => !reg.map(range => z._1 < range._1 || z._1 > range._2).forall(b => b)).map(_._2).sum
-  }
-
-  Thread.setDefaultUncaughtExceptionHandler((t, e) => e.printStackTrace())
 }
+
+//object JythonBridge {
+//  var title = ""
+//  var counts = new Array[Int](0)
+//  var histogramX = new Array[Double](0)
+//  var histogramY = new Array[Double](0)
+//  var histogramDivide = 0
+//  var display = ""
+//  var regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
+//  val regionColorMap = new mutable.HashMap[String, Color]()
+//
+//  def title(t: String): Unit = {
+//    title = t
+//  }
+//
+//  def display(t: String): Unit = {
+//    display = t
+//  }
+//
+//  def region(name: String, start: Double, stop: Double) = {
+//    val list = regions.getOrElseUpdate(name, List[Tuple2[Double, Double]]())
+//    regions(name) = list ::: List((start, stop))
+//  }
+//
+//  def region(name: String, color: Color) = {
+//    regionColorMap.put(name, color)
+//  }
+//
+//  def region(name: String) = regions.get(name) match {
+//    case None => 0.0
+//    case Some(reg) => histogramX.zip(histogramY).filter(z => !reg.map(range => z._1 < range._1 || z._1 > range._2).forall(b => b)).map(_._2).sum
+//  }
+//
+//  Thread.setDefaultUncaughtExceptionHandler((t, e) => e.printStackTrace())
+//}

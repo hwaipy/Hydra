@@ -24,6 +24,7 @@ class AWGWaveformCreator {
   private var ampSignalPhase = 127.toByte
   private var ampDecoyTime = 100.toByte
   private var ampDecoyPhase = 40.toByte
+  private var ampPM = 200.toByte
   private var interferometerDiff = 3e-9
   private val channels = List(
     new Channel("Laser") {
@@ -66,7 +67,7 @@ class AWGWaveformCreator {
       override def amplitude(randomNumber: RandomNumber, timeInPulse: Double, pulseIndex: Int) =
         if (firstModulationPulseMode && pulseIndex > 0) 0 else {
           val inPulse1 = (timeInPulse >= 0) && (timeInPulse < pulseWidth)
-          if (inPulse1 && randomNumber.encode == 0 && !randomNumber.isVacuum && !randomNumber.isTime) 255.toByte else 0
+          if (inPulse1 && randomNumber.encode == 0 && !randomNumber.isVacuum && !randomNumber.isTime) ampPM else 0
         }
     }
   )
@@ -101,6 +102,8 @@ class AWGWaveformCreator {
   def setAmplituteDecoyTime(ampDT: Double) = ampDecoyTime = ((ampDT + 1) / 2 * 255.99).toByte
 
   def setAmplituteDecoyPhase(ampDP: Double) = ampDecoyPhase = ((ampDP + 1) / 2 * 255.99).toByte
+
+  def setAmplitutePM(ampPM: Double) = this.ampPM = ((ampPM + 1) / 2 * 255.99).toByte
 
   def setFirstModulationPulseMode(fpm: Boolean) = firstModulationPulseMode = fpm
 
@@ -205,6 +208,7 @@ object AWGWaveformCreator extends App {
   paras.get("amplituteSignalPhase").foreach(w => awgwc.setAmplituteSignalPhase(w.toDouble))
   paras.get("amplituteDecoyTime").foreach(w => awgwc.setAmplituteDecoyTime(w.toDouble))
   paras.get("amplituteDecoyPhase").foreach(w => awgwc.setAmplituteDecoyPhase(w.toDouble))
+  paras.get("amplitutePM").foreach(w => awgwc.setAmplitutePM(w.toDouble))
   paras.get("interferometerDiff").foreach(w => awgwc.setInterferometerDiff(w.toDouble))
 
   val startTime = System.nanoTime()
