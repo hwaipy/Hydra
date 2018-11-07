@@ -1,6 +1,6 @@
 name := "TDC"
-version := "0.1.0"
-scalaVersion := "2.12.4"
+version := "0.2.0"
+scalaVersion := "2.12.7"
 organization := "com.hydra"
 libraryDependencies += "com.hydra" %% "sydra" % "0.6.0"
 libraryDependencies += "org.pegdown" % "pegdown" % "1.6.0"

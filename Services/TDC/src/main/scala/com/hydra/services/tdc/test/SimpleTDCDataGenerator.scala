@@ -27,8 +27,8 @@ object SimpleTDCDataGenerator {
   val pulseDelay = 3000
 
   var DEBUG_TIME_RESTED = 0l
-  val DEBUG_SAVE_AS = "delayed1"
-  val DEBUG_SAVE_STREAM = if (DEBUG_SAVE_AS == "") None else Some(new BufferedOutputStream(new FileOutputStream(new File(DEBUG_SAVE_AS)), 10000000))
+//  val DEBUG_SAVE_AS = "delayed1"
+//  val DEBUG_SAVE_STREAM = if (DEBUG_SAVE_AS == "") None else Some(new BufferedOutputStream(new FileOutputStream(new File(DEBUG_SAVE_AS)), 10000000))
 
   def launch(port: Int, delay: Long) = Future {
     Thread.sleep(delay)
@@ -43,7 +43,7 @@ object SimpleTDCDataGenerator {
         val stop = start + timeUnit
         val data = generate(start, stop)
         out.write(data)
-        DEBUG_SAVE_STREAM.foreach(_.write(data))
+//        DEBUG_SAVE_STREAM.foreach(_.write(data))
         if (timeUnitIndex.get % 1000 == 0) {
           val realPastTimeMillis = System.currentTimeMillis() - realStartTime
           val pastTimeMillis = (start - startTime) / 1000000000l
@@ -68,7 +68,7 @@ object SimpleTDCDataGenerator {
 
   def shutdown() = {
     if (socketRef.get() != null) socketRef.get.close()
-    DEBUG_SAVE_STREAM.foreach(o => o.close())
+//    DEBUG_SAVE_STREAM.foreach(o => o.close())
   }
 
   val modulations = generateModulation(pulseDelay, pulsePeriod, pulseDiff, randomNumbers)

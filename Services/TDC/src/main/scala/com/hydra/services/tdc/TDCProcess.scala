@@ -13,17 +13,17 @@ import scala.collection.mutable
 import scala.io.Source
 
 object TDCProcess extends App {
-  val DEBUG = true
   val parameters = mutable.HashMap[String, String]()
   args.foreach(arg => {
     val splitted = arg.split("=", 2)
-    println(splitted.toList)
-    if (splitted.size == 2) parameters.put(splitted(0), splitted(1))
+\    if (splitted.size == 2) parameters.put(splitted(0), splitted(1))
   })
+
+  val DEBUG = parameters.get("debug").getOrElse("false").toBoolean
 
   val port = 20156
   val process = new TDCProcessService(port)
-  val client = MessageClient.newClient(parameters.get("server").getOrElse("10.1.1.11"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
+  val client = MessageClient.newClient(parameters.get("server").getOrElse("192.168.25.27"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
   process.postInit(client)
 
   process.turnOnAnalyser("Counter")
@@ -54,7 +54,7 @@ class TDCProcessService(port: Int) {
   private val dataTDA = new LongBufferToDataBlockListTDCDataAdapter(channelCount)
   private val server = new TDCProcessServer(channelCount, port, dataIncome, List(if (TDCProcess.DEBUG) simpleTDA else groundTDA, dataTDA))
   private val analysers = mutable.HashMap[String, DataAnalyser]()
-  private val pathRef = new AtomicReference[String]("/test/tdc/default.fs")
+  private val pathRef = new AtomicReference[String]("/test/tdc/testservice.fs")
   private val storageRef = new AtomicReference[BlockingRemoteObject](null)
   analysers("Counter") = new CounterAnalyser(channelCount)
   analysers("Histogram") = new HistogramAnalyser(channelCount)
