@@ -1,0 +1,8 @@
+table.treetable span.hip {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKUlEQVR42mNgGEzg/6Ax4D+5FlDdgP8kWkA7A/6PGkC6ARSlRFIwdQAAbcE8xI4Sh+8AAAAASUVORK5CYII=');
+}
+
+#hip-table {
+    border-collapse: collapse;
+    /*border: 0px solid white;*/
+}

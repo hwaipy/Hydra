@@ -1,0 +1,254 @@
+.root {
+    /*-fx-background-color: cornsilk;*/
+    /*-fx-padding: 10;*/
+}
+
+.htoolbar {
+    -fx-background-color: rgb(230, 230, 230);
+}
+
+.htoolbar-button {
+    -fx-background-color: rgb(255, 255, 255);
+    -fx-background-insets: 0 0 1 0;
+    -fx-border-color: rgb(230, 230, 230);
+    -fx-border-radius: 3;
+    -fx-border-width: 1;
+}
+
+.htoolbar-button:pressed {
+    -fx-background-color: rgb(230, 230, 230);
+    -fx-background-insets: 0 0 1 0;
+    -fx-border-color: rgb(230, 230, 230);
+    -fx-border-radius: 3;
+    -fx-border-width: 1;
+}
+
+.htoolbar-label {
+    -fx-font-size: 12;
+    -fx-font-family: Arial;
+}
+
+.hsidebar {
+    -fx-background-color: rgb(201, 201, 201);
+}
+
+.hsidebar-togglebutton {
+    -fx-background-color: rgb(201, 201, 201);
+}
+
+.hsidebar-togglebutton:pressed {
+    -fx-background-color: rgb(241, 241, 241);
+    -fx-background-radius: 0;
+}
+
+.hsidebar-togglebutton:selected {
+    -fx-background-radius: 0;
+}
+
+.hsidebar-semiborder {
+    -fx-background-color: rgb(140, 140, 140);
+}
+
+#hsidebar-togglebutton-Project:selected {
+    -fx-background-color: rgb(231, 235, 241);
+}
+
+#hsidebar-togglebutton-Nexts:selected {
+    -fx-background-color: rgb(230, 230, 240);
+}
+
+#hsidebar-togglebutton-C:selected {
+    -fx-background-color: rgb(180, 180, 10);
+}
+
+#projectview {
+    -fx-border-width: 0;
+}
+
+#project-treeview {
+    -fx-border-width: 0;
+    -fx-background-color: rgb(231, 235, 241);
+}
+
+#project-treeview .tree-cell:selected {
+    -fx-background-color: rgb(180, 205, 241);
+}
+
+#project-treeview:focused {
+}
+
+#nextview {
+    -fx-border-width: 0;
+}
+
+#nexts-treeview {
+    -fx-border-width: 0;
+    -fx-background-color: rgb(230, 230, 240);
+}
+
+#project-action-treeview {
+    -fx-border-width: 0;
+    -fx-background-color: white;
+}
+
+#project-action-treeview .tree-cell:selected {
+    -fx-background-color: rgb(180, 205, 241);
+}
+
+.project-view-tree-cell {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+
+.project-view-tree-cell-graphic {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+
+.project-view-tree-cell:focused {
+    -fx-background-color: gray;
+    -fx-border-width: 0;
+}
+
+#project-view-split {
+    -fx-background-color: green;
+    -fx-border-width: 0;
+    -fx-indent: 0;
+}
+
+.split-pane > .split-pane-divider {
+    -fx-padding: 0 0.0em 0 0.0em;
+}
+
+.project-action-view-tree-cell-graphic-title-text-field {
+    -fx-background-color: transparent;
+    -fx-font-size: 15;
+    -fx-font-family: Arial;
+}
+
+.project-action-view-tree-cell-graphic-context-text-field {
+    -fx-background-color: transparent;
+    -fx-font-size: 12;
+    -fx-font-family: Arial;
+}
+
+.project-action-view-tree-cell-graphic-due-text-field {
+    -fx-background-color: transparent;
+    -fx-font-size: 12;
+    -fx-font-family: Arial;
+    -fx-alignment: center-right;
+}
+
+.project-action-view-tree-cell-graphic-priority-text-field {
+    -fx-background-color: transparent;
+    -fx-font-size: 12;
+    -fx-font-family: Arial;
+}
+
+.project-view-tree-cell-graphic-title-text-field {
+    -fx-background-color: transparent;
+    -fx-font-size: 12;
+    -fx-font-family: Arial;
+}
+
+.project-action-view-tree-cell-graphic-split-line {
+    -fx-background-color: rgb(230, 230, 230);
+}
+
+.due-status-far-away {
+    -fx-text-fill: black;
+}
+
+.due-status-nearly {
+    -fx-text-fill: rgb(238, 190, 56);
+}
+
+.due-status-already {
+    -fx-text-fill: rgb(200, 90, 100);
+}
+
+.project-view-tree-cell-graphic-due-label {
+    -fx-background-color: rgb(222, 180, 180);
+    -fx-background-radius: 3;
+    -fx-text-alignment: center;
+}
+
+.project-view-tree-cell-graphic-almost-due-label {
+    -fx-background-color: rgb(238, 190, 56);
+    -fx-background-radius: 3;
+    -fx-text-alignment: center;
+}
+
+.project-action-view-tree-cell-graphic-done-checkbox {
+    -fx-border-radius: 16;
+    -fx-border-width: 4;
+    -fx-background-radius: 16;
+}
+
+.project-action-view-tree-cell-graphic-done-checkbox:pressed {
+    -fx-border-radius: 16;
+    -fx-border-width: 4;
+    -fx-background-radius: 16;
+}
+
+/*.project-action-view-tree-cell-graphic-done-checkbox:selected {*/
+/*-fx-border-radius: 16;*/
+/*-fx-border-width: 4;*/
+/*-fx-background-radius: 16;*/
+/*}*/
+
+.done-check-status-far-away {
+    -fx-border-color: rgb(206, 206, 206);
+    -fx-background-color: transparent;
+}
+
+.done-check-status-almost {
+    -fx-border-color: rgb(238, 190, 56);
+    -fx-background-color: transparent;
+}
+
+.done-check-status-due {
+    -fx-border-color: rgb(222, 180, 180);
+    -fx-background-color: transparent;
+}
+
+.done-check-status-done {
+    -fx-border-color: rgb(236, 236, 236);
+    -fx-background-color: rgb(236, 236, 236);
+}
+
+.nexts-view-tree-cell {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+
+.nexts-view-tree-cell-graphic {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+
+.nexts-view-tree-cell:focused {
+    -fx-background-color: gray;
+    -fx-border-width: 0;
+}
+
+#nexts-treeview .tree-cell:selected {
+    -fx-background-color: rgb(180, 205, 241);
+}
+
+.project-action-view-tree-cell-graphic-project-label {
+    -fx-background-color: transparent;
+    -fx-font-size: 12;
+    -fx-font-family: Arial;
+}
+
+.chart-symbol { /* solid circle */
+    -fx-background-color: #f9d900;
+    -fx-background-radius: 1px;
+    -fx-padding: 5px;
+}
+
+.default-color1.chart-symbol { /* solid square */
+    -fx-background-color: #a9e200;
+    -fx-background-radius: 0;
+}

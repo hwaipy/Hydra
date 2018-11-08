@@ -1,0 +1,13 @@
+name := "TDC"
+version := "0.2.0"
+scalaVersion := "2.12.7"
+organization := "com.hydra"
+libraryDependencies += "com.hydra" %% "sydra" % "0.6.0"
+libraryDependencies += "org.pegdown" % "pegdown" % "1.6.0"
+libraryDependencies += "com.hwaipy" %% "hydrogen" % "0.3.0"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
+scalacOptions ++= Seq("-feature")
+scalacOptions ++= Seq("-deprecation")
+scalacOptions ++= Seq("-Xlint")
+//scalacOptions ++= Seq("-Xlint:unchecked")
+//fork := true

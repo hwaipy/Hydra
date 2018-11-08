@@ -1,0 +1,49 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Data Viewer</title>
+    <script type="text/javascript" src="../lib/scripts/jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/jquery.tablesorter.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/msgpack.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/moment.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/context.js"></script>
+    <script type="text/javascript" src="../lib/scripts/Chart.min.js"></script>
+    <script src="../lib/scripts/jquery.treetable.js"></script>
+    <script type="text/javascript" src="../sup/Hydra.js?v=2018061901"></script>
+    <script type="text/javascript" src="../sup/Util.js?v=2018061901"></script>
+    <script type="text/javascript" src="../sup/TreeTable.js"></script>
+    <script type="text/javascript" src="dataviewer.js?v=2018061901"></script>
+    <link rel="stylesheet" href="dataviewer.css?v=2018061901" type="text/css"/>
+    <link href="../lib/styles/treetable/jquery.treetable.css" rel="stylesheet" type="text/css"/>
+    <link href="../lib/styles/treetable/jquery.treetable.theme.default.css" rel="stylesheet" type="text/css"/>
+    <link rel="stylesheet" href="../lib/styles/tablesorter/blue/style.css" type="text/css"/>
+    <link rel="stylesheet" href="../lib/styles/context.standalone.css" type="text/css"/>
+    <link rel="icon" type="image/png" href="/favicon.png">
+</head>
+<body>
+<table id="file-table" border="1" class="treetable">
+    <thead>
+    <tr id="file-table-head">
+        <th class="header" order="1" column="0">Name</th>
+        <th class="header" order="1" column="1">Created</th>
+        <th class="header" order="1" column="2">Last Modified</th>
+        <th class="header" order="1" column="3">Size</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr id="root" data-tt-id="root" style="display: none">
+        <td>Loading...</td>
+        <td></td>
+        <td></td>
+        <td></td>
+    </tr>
+
+    </tbody>
+</table>
+<div id="HipEntryNote">
+</div>
+<div id="FileViewer" style="position: relative; height:20vh; width:80vw"></div>
+
+</body>
+</html>

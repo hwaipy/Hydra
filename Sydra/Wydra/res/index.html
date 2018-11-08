@@ -1,0 +1,42 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Hydra</title>
+    <script type="text/javascript" src="../lib/scripts/jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/jquery.tablesorter.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/msgpack.min.js"></script>
+    <script type="text/javascript" src="../lib/scripts/showdown.min.js"></script>
+    <script type="text/javascript" src="../sup/Hydra.js?v=2018061901"></script>
+    <script type="text/javascript" src="../sup/Util.js?v=2018061901"></script>
+    <link rel="icon" type="image/png" href="/favicon.png">
+</head>
+<body>
+<img src="/img/headlogo.png"/>
+
+<div>
+    <p></p>
+    <p></p>
+</div>
+
+<div id="Apps">
+    Open <a href="/apps/monitor.html">Monitor</a>
+    <p></p>
+    Open <a href="/apps/dataviewer.html">DataViewer</a>
+    <p></p>
+    <p></p>
+    <p></p>
+    <div id="launcher"> Download <a href="/apps/sydra/hydralocallauncher_2.12-0.1.0.jar">HydraLocal</a>
+    </div>
+</div>
+<script>
+    $(document).ready(function () {
+        var date = new Date()
+        var dateString = "" + date.getFullYear() + date.getMonth() + date.getDate() + date.getHours() + date.getMinutes() + date.getSeconds() + date.getMilliseconds()
+        document.getElementById('launcher').innerHTML =
+            "Download <a href=\"/apps/sydra/hydralocallauncher_2.12-0.1.0.jar?" + dateString + "\">HydraLocal</a>"
+            + "  (<a href=\"/apps/sydra/jre-8u181-windows-i586.exe?" + dateString + "\">Java</a>"
+            + " and <a href=\"/apps/sydra/Python37-32.rar?" + dateString + "\">Python3</a> required)"
+    });</script>
+</body>
+</html>
