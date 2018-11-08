@@ -16,7 +16,7 @@ object TDCProcess extends App {
   val parameters = mutable.HashMap[String, String]()
   args.foreach(arg => {
     val splitted = arg.split("=", 2)
-\    if (splitted.size == 2) parameters.put(splitted(0), splitted(1))
+    if (splitted.size == 2) parameters.put(splitted(0), splitted(1))
   })
 
   val DEBUG = parameters.get("debug").getOrElse("false").toBoolean
@@ -54,7 +54,7 @@ class TDCProcessService(port: Int) {
   private val dataTDA = new LongBufferToDataBlockListTDCDataAdapter(channelCount)
   private val server = new TDCProcessServer(channelCount, port, dataIncome, List(if (TDCProcess.DEBUG) simpleTDA else groundTDA, dataTDA))
   private val analysers = mutable.HashMap[String, DataAnalyser]()
-  private val pathRef = new AtomicReference[String]("/test/tdc/testservice.fs")
+  private val pathRef = new AtomicReference[String]("/test/tdc/default.fs")
   private val storageRef = new AtomicReference[BlockingRemoteObject](null)
   analysers("Counter") = new CounterAnalyser(channelCount)
   analysers("Histogram") = new HistogramAnalyser(channelCount)
