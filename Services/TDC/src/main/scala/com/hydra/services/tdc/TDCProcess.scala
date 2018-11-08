@@ -19,7 +19,7 @@ object TDCProcess extends App {
     if (splitted.size == 2) parameters.put(splitted(0), splitted(1))
   })
 
-  val DEBUG = parameters.get("debug").getOrElse("false").toBoolean
+  val DEBUG = true//parameters.get("debug").getOrElse("false").toBoolean
 
   val port = 20156
   val process = new TDCProcessService(port)

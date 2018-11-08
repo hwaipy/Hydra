@@ -43,7 +43,7 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     val period: Double = configuration("Period")
     val startTime: Long = configuration("StartTime")
     val channel: Int = configuration("Channel")
-    val timeDifference: Double = configuration("TimeDifference")
+    //val timeDifference: Double = configuration("TimeDifference")
     val binCount: Int = configuration("BinCount")
 
     val dataList = dataBlock.content(channel)

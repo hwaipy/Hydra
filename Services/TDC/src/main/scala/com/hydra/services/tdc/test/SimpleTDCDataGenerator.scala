@@ -1,6 +1,5 @@
 package com.hydra.services.tdc.test
 
-import java.io.{BufferedOutputStream, File, FileOutputStream}
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
