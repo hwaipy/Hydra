@@ -49,6 +49,11 @@ class MessagePackTest(unittest.TestCase):
         self.assertRaises(StopIteration, unpacker.__next__)
         self.assertEqual(m1, MessagePackTest.map)
 
+    def testMapPackAndClassUnpack(self):
+        bytes = Message(MessagePackTest.map).pack()
+        m1 = Message.unpack(bytes)
+        self.assertEqual(m1, MessagePackTest.map)
+
     def testMultiUnpack(self):
         multi = 100
         bytes = b''
@@ -109,6 +114,7 @@ class MessagePackTest(unittest.TestCase):
         unpacker.feed(bytes)
         self.assertEqual(unpacker.__next__(), MessagePackTest.map)
         self.assertNotEqual(unpacker.__next__(), MessagePackTest.map)
+
     #
     # def testStringPack(self):
     #     # uBytes = Message(u"Test").pack()

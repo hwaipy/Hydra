@@ -9,6 +9,7 @@ import random
 import struct
 import threading
 
+
 class ProtocolException(Exception):
     def __init__(self, description, message=None):
         Exception.__init__(self)
@@ -154,6 +155,13 @@ class Message:
             content.update(other)
             return Message(content)
         raise TypeError
+
+    @classmethod
+    def unpack(cls, bytes):
+        unpacker = msgpack.Unpacker(encoding='utf-8')
+        unpacker.feed(bytes)
+        m1 = unpacker.__next__()
+        return m1
 
 
 class MessageBuilder:
@@ -383,7 +391,7 @@ class Session:
                 #     return False
 
                 # For Python 2 & 3
-                timeStep = 0.1 if timeout is None else timeout/10
+                timeStep = 0.1 if timeout is None else timeout / 10
                 startTime = time.time()
                 while True:
                     acq = self.__awaitSemaphore.acquire(False)
@@ -391,7 +399,7 @@ class Session:
                         return acq
                     else:
                         passedTime = time.time() - startTime
-                        if (timeout is not None) and (passedTime>=timeout):
+                        if (timeout is not None) and (passedTime >= timeout):
                             return False
                         time.sleep(timeStep)
 
@@ -455,7 +463,7 @@ class Session:
                     raise IndexError()
                 invoker = self.__remoteReferenceKeyMap[objectID][0]
                 # method = invoker.__getattribute__(name)
-                method = getattr(invoker,name)
+                method = getattr(invoker, name)
                 noResponse = message.get(Message.KeyNoResponse)
                 if callable(method):
                     try:
@@ -566,6 +574,7 @@ class DynamicRemoteObject(RemoteObject):
 
     def __getattr__(self, item):
         item = u'{}'.format(item)
+
         def invoke(*args, **kwargs):
             builder = Message.newBuilder().asRequest(item, args, kwargs)
             if self.__target is not None:
