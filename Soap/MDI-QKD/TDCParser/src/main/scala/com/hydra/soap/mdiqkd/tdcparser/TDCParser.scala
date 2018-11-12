@@ -12,10 +12,9 @@ import scalafx.geometry.{Dimension2D, Point2D, Pos}
 import scalafx.scene.layout._
 import scalafx.stage.Screen
 import com.hydra.io.MessageClient
-
 import scalafx.scene.control._
 import com.hydra.`type`.NumberTypeConversions._
-import com.hydra.core.MessageGenerator
+import com.hydra.core.{MessageGenerator, MessagePack}
 import com.hydra.soap.mdiqkd.tdcparser.LogarithmicAxis
 import org.python.core.PyException
 import org.python.google.common.util.concurrent.AtomicDouble
@@ -29,6 +28,7 @@ import scalafx.beans.property.{BooleanProperty, DoubleProperty}
 import scalafx.collections.ObservableBuffer
 import scalafx.scene.Scene
 import scalafx.scene.chart.{AreaChart, NumberAxis, ValueAxis, XYChart}
+
 import collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scalafx.scene.chart.XYChart.Series
@@ -63,22 +63,14 @@ object TDCParser extends JFXApp {
   val path = "/test/tdc/default.fs"
   val recentSize = new AtomicInteger(0)
 
+  val reportPath = "/test/tdc/mdireport.fs"
+  storageInvoker.FSFileInitialize("", reportPath)
+
   val visualBounds = Screen.primary.visualBounds
   val frameSize = new Dimension2D(visualBounds.width * 0.9, visualBounds.height * 0.6)
   val framePosition = new Point2D(
     visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
     visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
-
-  //  val regionsRef = new AtomicReference[Map[String, List[Tuple2[Double, Double]]]]()
-  //  val regionColorMap = new mutable.HashMap[String, Color]()
-  //
-  //  val fitResult = new Label("")
-  //  fitResult.visible = false
-  //
-  //  val simpleCalcResult = new TextArea()
-  //  simpleCalcResult.editable = false
-  //  val simpleCalcResultTitle = new Label()
-  //
 
   val regionDefination = Map("Pulse1" -> (2.0, 4.0), "Pulse2" -> (5.0, 7.0), "Vacuum" -> (8.0, 10.0))
 
@@ -134,6 +126,19 @@ object TDCParser extends JFXApp {
       f"Time 1 Error Rate: ${1 / time1Ratio * 100}%.3f" + "%" + System.lineSeparator() +
       ""
     reportArea.text = report
+
+    val reportMap = Map(
+      "Pulse Extinction Ratio" -> 10 * math.log10(pulseExtinctionRatio),
+      "Vacuum Intensity" -> 10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount)),
+      "Decoy Intensity (Time)" -> timeDecoysCount / timeSignalsCount,
+      "Decoy Intensity (Phase)" -> phaseDecoysCount / phaseSignalsCount,
+      "Time / Phase (Signal)" -> timeSignalsCount / phaseSignalsCount,
+      "Time / Phase (Decoy)" -> timeDecoysCount / phaseDecoysCount,
+      "Time 0 Error Rate" -> 1 / time0Ratio * 100,
+      "Time 1 Error Rate" -> 1 / time1Ratio * 100,
+      "SystemTime" ->System.currentTimeMillis())
+    val bytes = MessagePack.pack(reportMap)
+    storageInvoker.FSFileAppendFrame("", reportPath, bytes)
   }
 
 
@@ -229,15 +234,15 @@ object TDCParser extends JFXApp {
       val item = mg.next().get.content
       val mdiqkdEncoding = item("MDIQKDEncoding").asInstanceOf[Map[String, Any]]
 
-      val channel: Int = mdiqkdEncoding("Channel")
-      val startTime: Long = mdiqkdEncoding("StartTime")
+//      val channel: Int = mdiqkdEncoding("Channel")
+      val delay: Long = mdiqkdEncoding("Delay")
       val period: Double = mdiqkdEncoding("Period")
 
       val histograms = mdiqkdEncoding.keys.filter(key => key.startsWith("Histogram With RandomNumber"))
         .map(key => (key.replace("Histogram With RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[List[Int]])).toMap
       val rndCounts = mdiqkdEncoding.keys.filter(key => key.startsWith("Count of RandomNumber"))
         .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
-      val reports = chartTextRegeons.map(_.updateHistogram(startTime, period, integrated.get, histograms, rndCounts)).toMap
+      val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMap
       updateReport(reports)
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
     }
