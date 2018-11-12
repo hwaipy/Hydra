@@ -50,7 +50,7 @@ object TDCViweer extends JFXApp {
 
   val client = MessageClient.newClient(parameters.named.get("host") match {
     case Some(host) => host
-    case None => "10.1.1.11"
+    case None => "192.168.25.27"
   }, parameters.named.get("port") match {
     case Some(port) => port.toInt
     case None => 20102
@@ -638,6 +638,7 @@ object TDCViweer extends JFXApp {
         """
         """.stripMargin
       val code = List(pre, logi, post).mkString(System.lineSeparator())
+      regionsRef.set(new mutable.HashMap[String, List[Tuple2[Double, Double]]]().toMap)
       interpreter.exec(code)
       val evalResults = (JythonBridge.title, JythonBridge.display)
       regionsRef set JythonBridge.regions.toMap
@@ -645,8 +646,7 @@ object TDCViweer extends JFXApp {
         simpleCalcResultTitle.text = evalResults._1
         simpleCalcResult.text = evalResults._2
       })
-    }
-    catch {
+    } catch {
       case e: PyException => {
         val out = new ByteArrayOutputStream()
         e.printStackTrace(new PrintStream(out))

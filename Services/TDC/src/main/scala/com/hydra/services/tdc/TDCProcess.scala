@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicReference
 import com.hydra.core.MessagePack
 import com.hydra.io.{BlockingRemoteObject, MessageClient}
 import com.hydra.services.tdc.adapters.SimpleTDCDataAdapter
-import com.hydra.services.tdc.application.MDIQKDEncodingAnalyser
+import com.hydra.services.tdc.application.{MDIQKDEncodingAnalyser, MDIQKDQBERAnalyser}
 import com.hydra.services.tdc.device.adapters.GroundTDCDataAdapter
 import com.hydra.services.tdc.test.SimpleTDCDataGenerator
 
@@ -19,7 +19,7 @@ object TDCProcess extends App {
     if (splitted.size == 2) parameters.put(splitted(0), splitted(1))
   })
 
-  val DEBUG = true//parameters.get("debug").getOrElse("false").toBoolean
+  val DEBUG = parameters.get("debug").getOrElse("false").toBoolean
 
   val port = 20156
   val process = new TDCProcessService(port)
@@ -28,7 +28,7 @@ object TDCProcess extends App {
 
   process.turnOnAnalyser("Counter")
   process.turnOnAnalyser("Histogram", Map("Sync" -> 0, "Signal" -> 1, "ViewStart" -> -100000, "ViewStop" -> 100000))
-  process.turnOnAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "StartTime" -> 0, "Period" -> 10000, "Channel" -> 1, "TimeDifference" -> 3000))
+  process.turnOnAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "Period" -> 10000, "SignalChannel" -> 1, "TriggerChannel" -> 0))
 
   println("Ground TDC Process started on port 20156.")
 
@@ -59,6 +59,7 @@ class TDCProcessService(port: Int) {
   analysers("Counter") = new CounterAnalyser(channelCount)
   analysers("Histogram") = new HistogramAnalyser(channelCount)
   analysers("MDIQKDEncoding") = new MDIQKDEncodingAnalyser(channelCount)
+  analysers("MDIQKDQBER") = new MDIQKDQBERAnalyser(channelCount)
 
   def stop() = server.stop
 
