@@ -3,7 +3,7 @@ import Pydra
 
 class ExperimentControl:
     def __init__(self):
-        self.session = Pydra.Session.newSession(('192.168.25.27', 20102), None, 'MDI-QKD-Controller')
+        self.session = Pydra.Session.newSession(('192.168.25.27', 20102), None, 'MDI-QKD-Controller-Test')
 
     def testAWGControl(self, name):
         awg = self.session.blockingInvoker('AWG-MDI-' + name)
@@ -43,9 +43,24 @@ class ExperimentControl:
     def stop(self):
         self.session.stop()
 
+    def test(self):
+        awg = self.session.blockingInvoker('AWG-MDI-Bob')
+        awg .configure('firstLaserPulseMode', True)
+        awg .configure('specifiedRandomNumberMode', False)
+        awg .configure('specifiedRandomNumber', 14)
+        awg.configure('syncWidth', 300.0)
+        awg.configure('syncPeriod', 8000.0)
+
+        awg .setRandomNumbers([0,1,2,3,8,9,10,11,12,13,14,15]*100)
+        awg .generateNewWaveform()
+
 
 if __name__ == '__main__':
     ec = ExperimentControl()
-    ec.testAWGControl('Alice')
+    # ec.testAWGControl('Alice')
+
+    ec.test()
+
+
 
     ec.stop()

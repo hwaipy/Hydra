@@ -26,6 +26,8 @@ class AWGWaveformCreator {
   private var ampDecoyPhase = 40.toByte
   private var ampPM = 200.toByte
   private var interferometerDiff = 3e-9
+  private var syncWidth = 100.0
+  private var syncPeriod = 1000.0
   private val channels = List(
     new Channel("Laser") {
       override def amplitude(randomNumber: RandomNumber, timeInPulse: Double, pulseIndex: Int) =
@@ -34,10 +36,11 @@ class AWGWaveformCreator {
         else if (((timeInPulse <= laserPulseWidth) && ((!firstLaserPulseMode) || (pulseIndex == 0)))) 1 else 0
     },
     new Channel("Sync") {
-      override def amplitude(randomNumber: RandomNumber, timeInPulse: Double, pulseIndex: Int) =
-        if (firstModulationPulseMode && pulseIndex > 0) 0 else {
-          if (pulseIndex < 10) 1 else 0
-        }
+      override def amplitude(randomNumber: RandomNumber, timeInPulse: Double, pulseIndex: Int) ={
+        val time = pulseIndex * period + timeInPulse
+        val timeInSync = time % syncPeriod
+        if (timeInSync < syncWidth) 1 else 0
+      }
     },
     new Channel("AMDecoy") {
       override def amplitude(randomNumber: RandomNumber, timeInPulse: Double, pulseIndex: Int) =
@@ -114,6 +117,10 @@ class AWGWaveformCreator {
   def setSpecifiedRandomNumber(srn: Int) = specifiedRandomNumber = new RandomNumber(srn)
 
   def setInterferometerDiff(diff: Double) = interferometerDiff = diff
+
+  def setSyncWidth(width: Double) = syncWidth = width
+
+  def setSyncPeriod(period: Double) = syncPeriod = period
 
   def setDelay(name: String, delay: Double) = channels.filter(c => c.name == name).headOption match {
     case Some(channel) => channel.delay = delay
@@ -210,13 +217,15 @@ object AWGWaveformCreator extends App {
   paras.get("amplituteDecoyPhase").foreach(w => awgwc.setAmplituteDecoyPhase(w.toDouble))
   paras.get("amplitutePM").foreach(w => awgwc.setAmplitutePM(w.toDouble))
   paras.get("interferometerDiff").foreach(w => awgwc.setInterferometerDiff(w.toDouble))
+  paras.get("syncWidth").foreach(w => awgwc.setSyncWidth(w.toDouble))
+  paras.get("syncPeriod").foreach(w => awgwc.setSyncPeriod(w.toDouble))
 
   val startTime = System.nanoTime()
   awgwc.createWaveforms(randomNumbers)
   awgwc.saveToFile(new File("test.wave"))
   val endTime = System.nanoTime()
   val delta = (endTime - startTime) / 1e9
-  println(delta + " s")
+//  println(delta + " s")
 
   //    val host = if (args.length > 3) args(0) else "localhost"
   //    val port = if (args.length > 3) args(1).toInt else 20102

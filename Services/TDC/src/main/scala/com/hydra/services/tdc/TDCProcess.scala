@@ -59,7 +59,7 @@ class TDCProcessService(port: Int) {
   analysers("Counter") = new CounterAnalyser(channelCount)
   analysers("Histogram") = new HistogramAnalyser(channelCount)
   analysers("MDIQKDEncoding") = new MDIQKDEncodingAnalyser(channelCount)
-  analysers("MDIQKDQBER") = new MDIQKDQBERAnalyser(channelCount)
+//  analysers("MDIQKDQBER") = new MDIQKDQBERAnalyser(channelCount)
 
   def stop() = server.stop
 

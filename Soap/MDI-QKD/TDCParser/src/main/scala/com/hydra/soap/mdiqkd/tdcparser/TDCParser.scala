@@ -235,7 +235,7 @@ object TDCParser extends JFXApp {
       val mdiqkdEncoding = item("MDIQKDEncoding").asInstanceOf[Map[String, Any]]
 
 //      val channel: Int = mdiqkdEncoding("Channel")
-      val delay: Long = mdiqkdEncoding("Delay")
+      val delay: Double = mdiqkdEncoding("Delay")
       val period: Double = mdiqkdEncoding("Period")
 
       val histograms = mdiqkdEncoding.keys.filter(key => key.startsWith("Histogram With RandomNumber"))
@@ -260,7 +260,7 @@ object TDCParser extends JFXApp {
       try {
         updateResults()
       } catch {
-        case e: RuntimeException => println(e.getMessage)
+        case e: RuntimeException if e.getMessage.contains("ChannelFuture failed")=> //println(e.getMessage)
         case e: Throwable => e.printStackTrace()
       }
     }(executionContext)
@@ -325,12 +325,12 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   //  children = Seq(stackPane, hBox)
   children = Seq(stackPane)
 
-  val recentStartTime = new AtomicLong(0)
+  val recentStartTime = new AtomicDouble(0)
   val recentPeriod = new AtomicDouble(0)
   val recentXData = new AtomicReference[Array[Double]](new Array[Double](0))
   val recentHistogram = new AtomicReference[Array[Double]](new Array[Double](0))
 
-  def updateHistogram(startTime: Long, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]], randomNumberCounts: Map[Int, Int]) = {
+  def updateHistogram(startTime: Double, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]], randomNumberCounts: Map[Int, Int]) = {
     val histogramViewed = histograms.filter(entry => strategy.isAcceptedRND(entry._1)).map(his => his._2).reduce((a, b) => a.zip(b).map(z => z._1 + z._2))
     val randomNumberValid = randomNumberCounts.filter(entry => strategy.isAcceptedRND(entry._1)).map(_._2).sum
     if (integrated && recentStartTime.get == startTime && recentPeriod.get == period) {

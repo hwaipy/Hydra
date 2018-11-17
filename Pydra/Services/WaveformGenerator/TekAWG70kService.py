@@ -707,7 +707,9 @@ class AWGDev:
             'delayAMTime2': -20.08,  # ns
             'pulseWidth': 2,  # ns
             'laserPulseWidth': 3.2,  # ns
-            'interferometerDiff': 3.11  # ns
+            'interferometerDiff': 3.11,  # ns
+            'syncWidth': 100.0,  # ns
+            'syncPeriod': 1000.0  # ns
         }
         self.modeParameters = {
             'firstLaserPulseMode': False,
@@ -751,8 +753,6 @@ class AWGDev:
         return map[key]
 
     def generateNewWaveform(self):
-        start = time.time()
-
         rndFile = open('{}/RNDs'.format(self.dataRoot), 'wb')
         rndFile.write(bytearray(self.rns))
         rndFile.close()
@@ -767,8 +767,12 @@ class AWGDev:
                 parameters.append('{}={}'.format(key, self.modeParameters[key]))
         for key in self.amplituteParameters.keys():
             parameters.append('{}={}'.format(key, self.amplituteParameters[key]))
+
+        if self.getConfiguration('firstLaserPulseMode') and self.getConfiguration('specifiedRandomNumberMode'): raise RuntimeError('FirstLaserPulseMode and SpecifiedRandomNumberMode can not be activeted both.')
+
         args = ' '.join(parameters)
-        os.system("\"C:\\Program Files (x86)\\Java\\jdk1.8.0_111\\bin\\java\" -jar awgwaveformcreator_2.12-0.1.0.jar {}".format(args))
+        os.system("java -jar awgwaveformcreator_2.12-0.1.0.jar {}".format(args))
+        # os.system("\"C:\\Program Files (x86)\\Java\\jdk1.8.0_111\\bin\\java\" -jar awgwaveformcreator_2.12-0.1.0.jar {}".format(args))
 
         waveformNames = 'AMDecoy', 'Laser', 'Sync', 'PM', 'AMTime1', 'AMTime2'
         path = '{}/test.wave'.format(self.dataRoot)
@@ -779,25 +783,26 @@ class AWGDev:
         for waveformName in waveformNames:
             bytes = file.read(waveformSize)
             waveforms[waveformName] = [b for b in bytes]
-
-        stop = time.time()
-        print('{} s!'.format(stop - start))
+        file.close()
 
         waveform1 = waveforms['AMDecoy' ]
         waveform1 = [(w/128.0-1) for w in waveform1]
-        print("####",len(waveform1))
         marker11 = waveforms['Laser']
+        print("LASER MAX = {}".format(max(marker11)))
         marker12 = waveforms['Sync']
         waveform2 = waveforms['PM']
         waveform2 = [(w/128.0-1) for w in waveform2]
         marker21 = waveforms['AMTime1']
         marker22 = waveforms['AMTime2']
 
+        os.remove('{}/RNDs'.format(self.dataRoot))
+        os.remove(path)
+
         assert len(waveform1) == len(marker11)
         assert len(waveform1) == len(marker12)
         assert len(waveform2) == len(marker21)
         assert len(waveform2) == len(marker22)
-        print('ready')
+
         self.dev.writeWaveform("Waveform1", waveform1)
         self.dev.addMarker('Waveform1', [[marker11[i], marker12[i]] for i in range(0, len(waveform1))])
         self.dev.writeWaveform("Waveform2", waveform2)
@@ -815,83 +820,12 @@ class AWGDev:
 
 
 if __name__ == "__main__":
-    import Pydra
-    dev = AWGDev()
-    session = Pydra.Session.newSession(('192.168.25.27',20102), dev, 'AWG-MDI-Bob')
-
-if __name__ == "__main__2":
-    import sys
-    with AWG70002PM() as dev:
-        dev._stop()
-        # dev.clearAll()
-        #dev.setClock(25E9)
-
-        # waveform1 = ([0]*200+[1]*50+[0]*250)*100
-        # marker11 = ([0]*133+[1]*50+[0]*317)*100
-        # marker12 = ([0]*94+[1]*50+[0]*356)*100
-        # waveform2 = ([0]*200+[1]*50+[0]*250)*100
-        # marker21 = ([1]*5000+[0]*45000)
-        # marker22 = ([0]*200+[1]*50+[0]*250)*100
-
-
-        import time
-        import os
-        import random
-
-        start = time.time()
-
-        # dataRoot = '/Users/hwaipy/GitHub/Hydra/Soap/MDI-QKD/AWGWaveformCreator/'
-        dataRoot = './'
-
-        RnsSeries = ([0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15])
-        #rns = ([15]*1+[0]*199)
-        rns = ([15]*200)
-        #rns = ([0]*12)
-        #rns = [random.choice(RnsSeries) for i in range(200)]
-        rndFile = open('{}/RNDs'.format(dataRoot), 'wb')
-        rndFile.write(bytearray(rns))
-        rndFile.close()
-
-        timeParameters = {
-            'delayAMDecoy': -112.06,  # ns
-            'delaySync': 3,  # ns
-            'delayLaser': -125.34,  # ns
-            'delayPM': 0,  # ns
-            'delayAMTime1': -30.20,  # ns
-            'delayAMTime2': -20.08,  # ns
-            'pulseWidth': 2,  # ns
-            'laserPulseWidth': 3.2,  # ns
-            'interferometerDiff': 3.11  # ns
-        }
-        modeParameters = {
-            'firstLaserPulseMode': False,
-            'firstModulationPulseMode': False,
-            'specifiedRandomNumberMode': False,
-            'specifiedRandomNumber': 3}
-        amplituteParameters = {  # should be a float between -1 and 1
-            'amplituteSignalTime': 1,
-            'amplituteSignalPhase': 0.05,
-            'amplituteDecoyTime': -0.35,
-            'amplituteDecoyPhase': -0.6,
-            'amplitutePM': 0,
-        }
-
-        parameters = []
-        for key in timeParameters.keys():
-            parameters.append('{}={}'.format(key, timeParameters[key] * 1e-9))
-        for key in modeParameters.keys():
-            if key.endswith('Mode'):
-                parameters.append('{}={}'.format(key, 'true' if modeParameters[key] else 'false'))
-            else:
-                parameters.append('{}={}'.format(key, modeParameters[key]))
-        for key in amplituteParameters.keys():
-            parameters.append('{}={}'.format(key, amplituteParameters[key]))
-        args = ' '.join(parameters)
-        print(args)
-        os.system("\"C:\\Program Files (x86)\\Java\\jdk1.8.0_111\\bin\\java\" -jar awgwaveformcreator_2.12-0.1.0.jar {}".format(args))
+    # import Pydra
+    # dev = AWGDev()
+    # session = Pydra.Session.newSession(('192.168.25.27',20102), dev, 'AWG-MDI-Test')
 
         waveformNames = 'AMDecoy', 'Laser', 'Sync', 'PM', 'AMTime1', 'AMTime2'
-        path = '{}/test.wave'.format(dataRoot)
+        path = '{}/test.wave'.format('D:\\GitHub\\Hydra\\Soap\\MDI-QKD\\AWGWaveformCreator\\')
         fileSize = os.path.getsize(path)
         waveformSize = int(fileSize / 6)
         waveforms = {}
@@ -899,32 +833,14 @@ if __name__ == "__main__2":
         for waveformName in waveformNames:
             bytes = file.read(waveformSize)
             waveforms[waveformName] = [b for b in bytes]
-
-        stop = time.time()
-        print('{} s!'.format(stop - start))
+        file.close()
 
         waveform1 = waveforms['AMDecoy' ]
         waveform1 = [(w/128.0-1) for w in waveform1]
-        print("####",len(waveform1))
         marker11 = waveforms['Laser']
+        print("LASER MAX = {}".format(max(marker11)))
         marker12 = waveforms['Sync']
         waveform2 = waveforms['PM']
         waveform2 = [(w/128.0-1) for w in waveform2]
         marker21 = waveforms['AMTime1']
         marker22 = waveforms['AMTime2']
-
-        assert len(waveform1) == len(marker11)
-        assert len(waveform1) == len(marker12)
-        assert len(waveform2) == len(marker21)
-        assert len(waveform2) == len(marker22)
-        print('ready')
-        dev.writeWaveform("Waveform1", waveform1)
-        dev.addMarker('Waveform1', [[marker11[i], marker12[i]] for i in range(0, len(waveform1))])
-        dev.writeWaveform("Waveform2", waveform2)
-        dev.addMarker('Waveform2', [[marker21[i], marker22[i]] for i in range(0, len(waveform2))])
-        dev.assignOutput(1,"Waveform1")
-        dev.assignOutput(2,"Waveform2")
-        dev._setOutput(1, True)
-        dev._setOutput(2, True)
-        dev._start()
-        sys.exit(0)
