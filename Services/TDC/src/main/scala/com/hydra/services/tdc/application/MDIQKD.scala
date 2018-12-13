@@ -4,7 +4,6 @@ import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import com.hydra.services.tdc.{DataAnalyser, DataBlock, Histogram}
 import com.hydra.`type`.NumberTypeConversions._
-import io.netty.handler.codec.http2.Http2HeadersEncoder.Configuration
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -79,14 +78,15 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
 
 
 class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
-  configuration("AliceRandomNumbers") = List(1)
-  configuration("BobRandomNumbers") = List(1)
+  configuration("AliceRandomNumbers") = Range(0, 1000).toList
+  configuration("BobRandomNumbers") = Range(0, 1000).toList
   configuration("Period") = 10000.0
-  configuration("Delay") = 0
-  configuration("Channel 1") = 0
-  configuration("Channel 2") = 1
-  configuration("Gate") = 2000
-  configuration("PulseDiff") = 3000
+  configuration("Delay") = 3000.0
+  configuration("TriggerChannel") = 0
+  configuration("Channel 1") = 1
+  configuration("Channel 2") = 3
+  configuration("Gate") = 2000.0
+  configuration("PulseDiff") = 3000.0
 
   override def configure(key: String, value: Any) = key match {
     case "AliceRandomNumbers" => value.asInstanceOf[List[Int]] != null
@@ -115,6 +115,10 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       val sc: Int = value
       sc >= 0 && sc < channelCount
     }
+    case "TriggerChannel" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
   }
 
   override protected def analysis(dataBlock: DataBlock) = {
@@ -131,31 +135,42 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val triggerList = dataBlock.content(triggerChannel)
     val signalList1 = dataBlock.content(channel1)
     val signalList2 = dataBlock.content(channel2)
-    val item1s = analysisSingleChannel(triggerList, signalList1, period, delay, gate, pulseDiff)
-    val item2s = analysisSingleChannel(triggerList, signalList2, period, delay, gate, pulseDiff)
+
+    val item1s = analysisSingleChannel(triggerList, signalList1, period, delay, gate, pulseDiff, randomNumbersAlice.size)
+    val item2s = analysisSingleChannel(triggerList, signalList2, period, delay, gate, pulseDiff, randomNumbersBob.size)
     val validItem1s = item1s.filter(_._3 >= 0)
     val validItem2s = item2s.filter(_._3 >= 0)
 
-    val iterator1 = validItem1s.iterator
-    val iterator2 = validItem2s.iterator
-    val item1Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
-    val item2Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
-    def fillRef = {
-      if (item1Ref.get == null && iterator1.hasNext) item1Ref set iterator1.next
-      if (item2Ref.get == null && iterator2.hasNext) item2Ref set iterator2.next
-      item1Ref.get != null && item2Ref.get != null
+    println(s"delay is $delay")
+    println(s"${item1s.size} -> ${validItem1s.size}")
+
+    def generateCoincidences(iterator1: Iterator[Tuple3[Long, Long, Int]], iterator2: Iterator[Tuple3[Long, Long, Int]]) = {
+      val item1Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
+      val item2Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
+      def fillRef = {
+        if (item1Ref.get == null && iterator1.hasNext) item1Ref set iterator1.next
+        if (item2Ref.get == null && iterator2.hasNext) item2Ref set iterator2.next
+        item1Ref.get != null && item2Ref.get != null
+      }
+      val resultBuffer = new ArrayBuffer[Coincidence]()
+      while(fillRef) {
+        val item1 = item1Ref.get
+        val item2 = item2Ref.get
+        if (item1._1 > item2._1) item2Ref set null
+        else if (item1._1 < item2._1) item1Ref set null
+        else if (item1._2 > item2._2) item2Ref set null
+        else if (item1._2 < item2._2) item1Ref set null
+        else{
+          resultBuffer += new Coincidence(item1._3, item2._3, randomNumbersAlice(item1._2 % randomNumbersAlice.size), randomNumbersBob(item1._2 % randomNumbersBob.size), item1._1, item1._2)
+          item1Ref set null
+          item2Ref set null
+        }
+      }
+      resultBuffer.toList
     }
-    val resultBuffer = new ArrayBuffer[Coincidence]()
-    while(fillRef) {
-      val item1 = item1Ref.get
-      val item2 = item2Ref.get
-      if (item1._1 > item2._1) item2Ref set null
-      else if (item1._1 < item2._1) item1Ref set null
-      else if (item1._2 > item2._2) item2Ref set null
-      else if (item1._2 < item2._2) item1Ref set null
-      else resultBuffer += new Coincidence(item1._3, item2._3, randomNumbersAlice(item1._2), randomNumbersBob(item1._2), item1._1, item1._2)
-    }
-    val coincidences = resultBuffer.toList
+
+    val coincidences = generateCoincidences(validItem1s.iterator, validItem2s.iterator)
+    println(s"Coincidences: ${validItem1s.size} * ${validItem2s.size} / 100M = ${(validItem1s.size).toDouble*(validItem2s.size)/(1e8)}, actual = ${coincidences.size}")
     val basisMatchedCoincidences = coincidences.filter(_.basisMatched)
     val validCoincidences = basisMatchedCoincidences.filter(_.valid)
 
@@ -224,22 +239,27 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put("Vacuum-Decoy, Phase, Wrong", coincidenceVacuumDecoyPhase.filterNot(_.isCorrect).size)
     map.put("Vacuum-Vacuum, Phase, Wrong", coincidenceVacuumVacuumPhase.filterNot(_.isCorrect).size)
 
+    val ccs0 = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isSignal && c.randomNumberAlice.isPhase).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
+    val ccs5 = generateCoincidences(validItem1s.iterator, validItem2s.map(i=>(i._1 + 5, i._2, i._3)).iterator)
+                .filter(_.basisMatched).filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isSignal && c.randomNumberAlice.isPhase).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
+    map.put("Signal-Signal, Phase, 0&0 with delays", List(ccs0, ccs5))
+
     map.toMap
   }
 
-  private def analysisSingleChannel(triggerList: Array[Long], signalList: Array[Long], period:Double, delay:Long, gate:Double, pulseDiff:Double) = {
+  private def analysisSingleChannel(triggerList: Array[Long], signalList: Array[Long], period:Double, delay:Double, gate:Double, pulseDiff:Double, randomNumberSize:Int) = {
     val triggerIterator = triggerList.iterator
     val currentTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else 0)
     val nextTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
     val meta = signalList.map(time => {
-      if(time>=nextTriggerRef.get){
+      while(time>=nextTriggerRef.get){
         currentTriggerRef set nextTriggerRef.get
         nextTriggerRef.set(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
       }
-      val pulseIndex = ((time - delay - currentTriggerRef.get) / period).toLong
-      val delta = (time - delay - currentTriggerRef.get - period * pulseIndex).toLong
+      val pulseIndex = ((time - currentTriggerRef.get) / period).toLong
+      val delta = (time - currentTriggerRef.get - period * pulseIndex).toLong
       val p = if(math.abs(delta - delay) < gate/2) 0 else if (math.abs(delta - delay - pulseDiff) < gate/2) 1 else -1
-      (currentTriggerRef.get, pulseIndex, p)
+      ((currentTriggerRef.get / period / randomNumberSize).toLong, pulseIndex, p)
     })
     meta
   }

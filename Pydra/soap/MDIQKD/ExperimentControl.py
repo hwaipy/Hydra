@@ -44,15 +44,8 @@ class ExperimentControl:
         self.session.stop()
 
     def test(self):
-        awg = self.session.blockingInvoker('AWG-MDI-Bob')
-        awg .configure('firstLaserPulseMode', True)
-        awg .configure('specifiedRandomNumberMode', False)
-        awg .configure('specifiedRandomNumber', 14)
-        awg.configure('syncWidth', 300.0)
-        awg.configure('syncPeriod', 8000.0)
+        tdc = self.session.blockingInvoker('GroundTDCService')
 
-        awg .setRandomNumbers([0,1,2,3,8,9,10,11,12,13,14,15]*100)
-        awg .generateNewWaveform()
 
 
 if __name__ == '__main__':

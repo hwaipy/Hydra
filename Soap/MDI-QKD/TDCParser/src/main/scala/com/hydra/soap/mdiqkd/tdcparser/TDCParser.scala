@@ -1,39 +1,28 @@
 package com.hydra.soap.mdiqkd.tdcparser
 
-import java.io.{ByteArrayOutputStream, File, PrintStream}
-import java.text.DecimalFormat
-import java.util.{Properties, Timer, TimerTask}
+import java.io.File
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.{Executors, ThreadFactory}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
-
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import scalafx.application.Platform
 import scalafx.application.JFXApp.PrimaryStage
-import scalafx.geometry.{Dimension2D, Point2D, Pos}
+import scalafx.geometry.{Dimension2D, Point2D}
 import scalafx.scene.layout._
 import scalafx.stage.Screen
 import com.hydra.io.MessageClient
 import scalafx.scene.control._
 import com.hydra.`type`.NumberTypeConversions._
 import com.hydra.core.{MessageGenerator, MessagePack}
-import com.hydra.soap.mdiqkd.tdcparser.LogarithmicAxis
-import org.python.core.PyException
 import org.python.google.common.util.concurrent.AtomicDouble
-import org.python.util.PythonInterpreter
-
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
-import scala.io.Source
 import scalafx.application.JFXApp
-import scalafx.beans.property.{BooleanProperty, DoubleProperty}
-import scalafx.collections.ObservableBuffer
 import scalafx.scene.Scene
 import scalafx.scene.chart.{AreaChart, NumberAxis, ValueAxis, XYChart}
-
-import collection.JavaConverters._
+//import collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-import scalafx.scene.chart.XYChart.Series
-import scalafx.scene.paint.Color
 import com.hydra.services.tdc.application.RandomNumber
+import scalafx.collections.ObservableBuffer
 
 object TDCParser extends JFXApp {
   val DEBUG = new File(".").getAbsolutePath.contains("GitHub")
@@ -72,7 +61,7 @@ object TDCParser extends JFXApp {
     visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
     visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
 
-  val regionDefination = Map("Pulse1" -> (2.0, 4.0), "Pulse2" -> (5.0, 7.0), "Vacuum" -> (8.0, 10.0))
+  val regionDefination = Map("Pulse1" -> Tuple2(2.0, 4.0), "Pulse2" -> Tuple2(5.0, 7.0), "Vacuum" -> Tuple2(8.0, 10.0))
 
   val histogramStrategyAllPulses = new HistogramStrategy("All Pulses", RandomNumber.ALL_RANDOM_NUMBERS.map(_.RN), regionDefination)
   val histogramStrategyTimeSignals = new HistogramStrategy("Time Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isTime).map(_.RN), regionDefination)
@@ -94,7 +83,7 @@ object TDCParser extends JFXApp {
     histogramStrategyPhaseDecoy,
   )
 
-  def updateReport(reports: Map[String, Map[String, Double]]) = {
+  def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double]) = {
     def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
 
     val vAllPulses = getV(histogramStrategyAllPulses.title)
@@ -112,6 +101,7 @@ object TDCParser extends JFXApp {
     val timeDecoysCount = (vTimeDecoys(0) + vTimeDecoys(1)) / 2 / vTimeDecoys(3)
     val phaseDecoysCount = (vPhaseDecoys(0) + vPhaseDecoys(1)) / 2 / vPhaseDecoys(3)
     val vacuumsCount = (vVacuums(0) + vVacuums(1)) / 2 / vVacuums(3)
+    val timeRatio = vTime0(0) / vTime1(1)
     val time0Ratio = vTime0(0) / vTime0(1)
     val time1Ratio = vTime1(1) / vTime1(0)
 
@@ -121,23 +111,39 @@ object TDCParser extends JFXApp {
       f"Decoy Intensity (Phase): ${phaseDecoysCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
       f"Time / Phase (Signal): ${timeSignalsCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
       f"Time / Phase (Decoy): ${timeDecoysCount / phaseDecoysCount}%.3f" + System.lineSeparator() +
+      f"Time 0 / Time 1: ${timeRatio}%.3f" + System.lineSeparator() +
       System.lineSeparator() +
       f"Time 0 Error Rate: ${1 / time0Ratio * 100}%.3f" + "%" + System.lineSeparator() +
       f"Time 1 Error Rate: ${1 / time1Ratio * 100}%.3f" + "%" + System.lineSeparator() +
+      System.lineSeparator() +
+      System.lineSeparator() +
+      f"-------QBER-------" + System.lineSeparator() +
+      f"Channel 1 in Window: ${qberReport("Channel 1 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
+      f"Channel 2 in Window: ${qberReport("Channel 2 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"HOM Count: ${qberReport("HOM Count")}" + System.lineSeparator() +
+      f"HOM Dip: ${qberReport("HOM Dip")}%.3f" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"Coincidences in Time: ${qberReport("QBER Time Count")}" + System.lineSeparator() +
+      f"QBER in Time: ${qberReport("QBER Time") * 100}%.3f" +"%" + System.lineSeparator() +
+      f"Coincidences in Phase: ${qberReport("QBER Phase Count")}" + System.lineSeparator() +
+      f"QBER in Phase: ${qberReport("QBER Phase") * 100}%.3f" +"%" + System.lineSeparator() +
+      System.lineSeparator() +
       ""
     reportArea.text = report
 
-    val reportMap = Map(
+    val reportMap = Map[String, Double](
       "Pulse Extinction Ratio" -> 10 * math.log10(pulseExtinctionRatio),
       "Vacuum Intensity" -> 10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount)),
       "Decoy Intensity (Time)" -> timeDecoysCount / timeSignalsCount,
       "Decoy Intensity (Phase)" -> phaseDecoysCount / phaseSignalsCount,
       "Time / Phase (Signal)" -> timeSignalsCount / phaseSignalsCount,
       "Time / Phase (Decoy)" -> timeDecoysCount / phaseDecoysCount,
+      "Time 0 / Time 1" -> timeRatio,
       "Time 0 Error Rate" -> 1 / time0Ratio * 100,
       "Time 1 Error Rate" -> 1 / time1Ratio * 100,
       "SystemTime" ->System.currentTimeMillis())
-    val bytes = MessagePack.pack(reportMap)
+    val bytes = MessagePack.pack(reportMap ++ qberReport)
     storageInvoker.FSFileAppendFrame("", reportPath, bytes)
   }
 
@@ -166,53 +172,7 @@ object TDCParser extends JFXApp {
 
         //Charts
         chartTextRegeons.zipWithIndex.foreach { z => grid.add(z._1, z._2 % 4, z._2 / 4) }
-        //        //LineChart
-        //        AnchorPane.setTopAnchor(lineChart, 0.0)
-        //        AnchorPane.setBottomAnchor(lineChart, 0.0)
-        //        AnchorPane.setLeftAnchor(lineChart, 0.0)
-        //        AnchorPane.setRightAnchor(lineChart, 180.0)
-        //        AnchorPane.setTopAnchor(lineChartLog, 0.0)
-        //        AnchorPane.setBottomAnchor(lineChartLog, 0.0)
-        //        AnchorPane.setLeftAnchor(lineChartLog, 0.0)
-        //        AnchorPane.setRightAnchor(lineChartLog, 180.0)
-        //
-        //        //Fit Result
-        //        AnchorPane.setTopAnchor(fitResult, 10)
-        //        AnchorPane.setRightAnchor(fitResult, 200)
-        //        AnchorPane.setLeftAnchor(fitResult, 10)
-        //        fitResult.alignment = Pos.CenterRight
-        //
-        //        //ChartPane
-        //        chartPane.children = List(lineChart, lineChartLog, fitResult)
-        //        AnchorPane.setTopAnchor(chartPane, 0.0)
-        //        AnchorPane.setLeftAnchor(chartPane, 240.0)
-        //        AnchorPane.setRightAnchor(chartPane, 0.0)
-        //        AnchorPane.setBottomAnchor(chartPane, 0.0)
-        //        AnchorPane.setTopAnchor(chartPane, 0.0)
-        //        AnchorPane.setLeftAnchor(chartPane, 240.0)
-        //        AnchorPane.setRightAnchor(chartPane, 0.0)
-        //        AnchorPane.setBottomAnchor(chartPane, 0.0)
-        //
-        //        //ConfigurationPane
-        //        configurationPane.children = configurationFields ::: List(simpleCalcResult, simpleCalcResultTitle)
-        //        AnchorPane.setTopAnchor(configurationPane, 0.0)
-        //        AnchorPane.setRightAnchor(configurationPane, 0.0)
-        //        AnchorPane.setBottomAnchor(configurationPane, 0.0)
-        //        var top = 0.0
-        //        configurationFields.foreach(cf => {
-        //          AnchorPane.setTopAnchor(cf, top)
-        //          AnchorPane.setLeftAnchor(cf, 0)
-        //          AnchorPane.setRightAnchor(cf, 0)
-        //          top += cf.prefHeight.value + 5
-        //        })
-        //        configurationPane.prefWidth = 180
-        //        AnchorPane.setTopAnchor(simpleCalcResult, top + 50)
-        //        AnchorPane.setLeftAnchor(simpleCalcResult, 0)
-        //        AnchorPane.setRightAnchor(simpleCalcResult, 0)
-        //        AnchorPane.setBottomAnchor(simpleCalcResult, 0)
-        //        AnchorPane.setTopAnchor(simpleCalcResultTitle, top + 30)
-        //        AnchorPane.setLeftAnchor(simpleCalcResultTitle, 0)
-        //
+
         children = Seq(grid, reportArea)
         prefWidth = frameSize.width
         prefHeight = frameSize.height
@@ -233,6 +193,7 @@ object TDCParser extends JFXApp {
       mg.feed(frameBytes)
       val item = mg.next().get.content
       val mdiqkdEncoding = item("MDIQKDEncoding").asInstanceOf[Map[String, Any]]
+      val mdiqkdQBER = item("MDIQKDQBER").asInstanceOf[Map[String, Any]]
 
 //      val channel: Int = mdiqkdEncoding("Channel")
       val delay: Double = mdiqkdEncoding("Delay")
@@ -243,7 +204,33 @@ object TDCParser extends JFXApp {
       val rndCounts = mdiqkdEncoding.keys.filter(key => key.startsWith("Count of RandomNumber"))
         .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
       val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMap
-      updateReport(reports)
+
+      val qberReport = new mutable.HashMap[String, Double]()
+      val qberCount1 : Int = mdiqkdQBER("Count 1")
+      val qberValidCount1 : Int = mdiqkdQBER("Valid Count 1")
+      val qberCount2 : Int = mdiqkdQBER("Count 2")
+      val qberValidCount2 : Int = mdiqkdQBER("Valid Count 2")
+      val channel1InWindow = qberValidCount1.toDouble / qberCount1
+      val channel2InWindow = qberValidCount2.toDouble / qberCount2
+      qberReport.put("Channel 1 in Window", channel1InWindow)
+      qberReport.put("Channel 2 in Window", channel2InWindow)
+
+      val homResults = mdiqkdQBER("Signal-Signal, Phase, 0&0 with delays").asInstanceOf[List[Int]]
+      qberReport.put("HOM Count", homResults(0))
+      qberReport.put("HOM Dip", if(homResults(1) == 0) Double.NaN else homResults(0).toDouble/homResults(1))
+
+      val ssTimeCorrect : Int = mdiqkdQBER("Signal-Signal, Time, Correct")
+      val ssPhaseCorrect : Int = mdiqkdQBER("Signal-Signal, Phase, Correct")
+      val ssTimeWrong : Int = mdiqkdQBER("Signal-Signal, Time, Wrong")
+      val ssPhaseWrong : Int = mdiqkdQBER("Signal-Signal, Phase, Wrong")
+      qberReport.put("QBER Time Count", ssTimeCorrect + ssTimeWrong)
+      qberReport.put("QBER Time", if(ssTimeCorrect + ssTimeWrong == 0) Double.NaN else ssTimeWrong.toDouble/(ssTimeCorrect + ssTimeWrong))
+      qberReport.put("QBER Phase Count", ssPhaseCorrect + ssPhaseWrong)
+      qberReport.put("QBER Phase", if(ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble/(ssPhaseCorrect + ssPhaseWrong))
+
+      println(s"$ssTimeCorrect, $ssTimeWrong,      $ssPhaseCorrect, $ssPhaseWrong")
+
+      updateReport(reports, qberReport.toMap)
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
     }
   }
@@ -420,44 +407,4 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
 
 class HistogramStrategy(val title: String, acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]]) {
   def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
-
-  //  def result(regionValues: Map[String, Double], validRandomNumberCount: Int) = {
-  //    val regionAverages = regionValues.map(e => (e._1, e._2 / (regions(e._1)._2 - regions(e._1)._1)))
-  //    report(regionAverages, validRandomNumberCount)
-  //  }
 }
-
-//object JythonBridge {
-//  var title = ""
-//  var counts = new Array[Int](0)
-//  var histogramX = new Array[Double](0)
-//  var histogramY = new Array[Double](0)
-//  var histogramDivide = 0
-//  var display = ""
-//  var regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
-//  val regionColorMap = new mutable.HashMap[String, Color]()
-//
-//  def title(t: String): Unit = {
-//    title = t
-//  }
-//
-//  def display(t: String): Unit = {
-//    display = t
-//  }
-//
-//  def region(name: String, start: Double, stop: Double) = {
-//    val list = regions.getOrElseUpdate(name, List[Tuple2[Double, Double]]())
-//    regions(name) = list ::: List((start, stop))
-//  }
-//
-//  def region(name: String, color: Color) = {
-//    regionColorMap.put(name, color)
-//  }
-//
-//  def region(name: String) = regions.get(name) match {
-//    case None => 0.0
-//    case Some(reg) => histogramX.zip(histogramY).filter(z => !reg.map(range => z._1 < range._1 || z._1 > range._2).forall(b => b)).map(_._2).sum
-//  }
-//
-//  Thread.setDefaultUncaughtExceptionHandler((t, e) => e.printStackTrace())
-//}

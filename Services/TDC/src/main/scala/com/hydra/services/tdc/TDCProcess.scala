@@ -29,6 +29,7 @@ object TDCProcess extends App {
   process.turnOnAnalyser("Counter")
   process.turnOnAnalyser("Histogram", Map("Sync" -> 0, "Signal" -> 1, "ViewStart" -> -100000, "ViewStop" -> 100000))
   process.turnOnAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "Period" -> 10000, "SignalChannel" -> 1, "TriggerChannel" -> 0))
+  process.turnOnAnalyser("MDIQKDQBER", Map())
 
   println("Ground TDC Process started on port 20156.")
 
@@ -59,7 +60,7 @@ class TDCProcessService(port: Int) {
   analysers("Counter") = new CounterAnalyser(channelCount)
   analysers("Histogram") = new HistogramAnalyser(channelCount)
   analysers("MDIQKDEncoding") = new MDIQKDEncodingAnalyser(channelCount)
-//  analysers("MDIQKDQBER") = new MDIQKDQBERAnalyser(channelCount)
+  analysers("MDIQKDQBER") = new MDIQKDQBERAnalyser(channelCount)
 
   def stop() = server.stop
 

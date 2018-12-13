@@ -69,8 +69,9 @@ class AWGWaveformCreator {
     new Channel("PM") {
       override def amplitude(randomNumber: RandomNumber, timeInPulse: Double, pulseIndex: Int) =
         if (firstModulationPulseMode && pulseIndex > 0) 0 else {
-          val inPulse1 = (timeInPulse >= 0) && (timeInPulse < pulseWidth)
-          if (inPulse1 && randomNumber.encode == 0 && !randomNumber.isVacuum && !randomNumber.isTime) ampPM else 0
+          val inPulse1 = (timeInPulse >= 0) && (timeInPulse < period / 2)
+//          if (inPulse1 && randomNumber.encode == 0 && !randomNumber.isVacuum && !randomNumber.isTime) ampPM else 0
+          if (inPulse1 && randomNumber.encode == 0) ampPM else 0
         }
     }
   )

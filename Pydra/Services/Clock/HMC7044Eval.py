@@ -33,6 +33,8 @@ class HMC7044Eval(Instrument):
             slip -= min(3000, slip)
         self.digitalDelay(channel, digitalDelay)
         self.analogDelay(channel, analogDelay)
+        self.digitalDelays[channel] = digitalDelay
+        self.analogDelays[channel] = analogDelay
 
     def setDivider(self, channel, divide):
         self.checkChannel(channel)
