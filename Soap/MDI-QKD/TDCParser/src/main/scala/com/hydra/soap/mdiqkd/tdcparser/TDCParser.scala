@@ -64,87 +64,96 @@ object TDCParser extends JFXApp {
   val regionDefination = Map("Pulse1" -> Tuple2(2.0, 4.0), "Pulse2" -> Tuple2(5.0, 7.0), "Vacuum" -> Tuple2(8.0, 10.0))
 
   val histogramStrategyAllPulses = new HistogramStrategy("All Pulses", RandomNumber.ALL_RANDOM_NUMBERS.map(_.RN), regionDefination)
-  val histogramStrategyTimeSignals = new HistogramStrategy("Time Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isTime).map(_.RN), regionDefination)
-  val histogramStrategyPhaseSignals = new HistogramStrategy("Phase Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isPhase).map(_.RN), regionDefination)
-  val histogramStrategyTimeDecoy = new HistogramStrategy("Time Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isTime).map(_.RN), regionDefination)
-  val histogramStrategyPhaseDecoy = new HistogramStrategy("Phase Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isPhase).map(_.RN), regionDefination)
+//  val histogramStrategyTimeSignals = new HistogramStrategy("Time Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isTime).map(_.RN), regionDefination)
+//  val histogramStrategyPhaseSignals = new HistogramStrategy("Phase Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isPhase).map(_.RN), regionDefination)
+//  val histogramStrategyTimeDecoy = new HistogramStrategy("Time Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isTime).map(_.RN), regionDefination)
+//  val histogramStrategyPhaseDecoy = new HistogramStrategy("Phase Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isPhase).map(_.RN), regionDefination)
   val histogramStrategyVacuum = new HistogramStrategy("Vacuum", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isVacuum).map(_.RN), regionDefination)
-  val histogramStrategyTime0 = new HistogramStrategy("Time 0", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 0).map(_.RN), regionDefination)
-  val histogramStrategyTime1 = new HistogramStrategy("Time 1", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isTime).filter(_.encode == 1).map(_.RN), regionDefination)
+  val histogramStrategyZ0 = new HistogramStrategy("Z 0", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isZ).filter(_.encode == 0).map(_.RN), regionDefination)
+  val histogramStrategyZ1 = new HistogramStrategy("Z 1", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isZ).filter(_.encode == 1).map(_.RN), regionDefination)
+  val histogramStrategyX = new HistogramStrategy("X", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isX).filter(_.encode == 1).map(_.RN), regionDefination)
+  val histogramStrategyY = new HistogramStrategy("Y", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isY).filter(_.encode == 1).map(_.RN), regionDefination)
 
   val histogramStrategies = List(
     histogramStrategyAllPulses,
     histogramStrategyVacuum,
-    histogramStrategyTime0,
-    histogramStrategyTime1,
-    histogramStrategyTimeSignals,
-    histogramStrategyPhaseSignals,
-    histogramStrategyTimeDecoy,
-    histogramStrategyPhaseDecoy,
+    histogramStrategyZ0,
+    histogramStrategyZ1,
+    histogramStrategyX,
+    histogramStrategyY,
+//    histogramStrategyTimeSignals,
+//    histogramStrategyPhaseSignals,
+//    histogramStrategyTimeDecoy,
+//    histogramStrategyPhaseDecoy,
   )
 
   def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double]) = {
     def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
 
     val vAllPulses = getV(histogramStrategyAllPulses.title)
-    val vTimeSignals = getV(histogramStrategyTimeSignals.title)
-    val vPhaseSignals = getV(histogramStrategyPhaseSignals.title)
-    val vTimeDecoys = getV(histogramStrategyTimeDecoy.title)
-    val vPhaseDecoys = getV(histogramStrategyPhaseDecoy.title)
+//    val vTimeSignals = getV(histogramStrategyTimeSignals.title)
+//    val vPhaseSignals = getV(histogramStrategyPhaseSignals.title)
+//    val vTimeDecoys = getV(histogramStrategyTimeDecoy.title)
+//    val vPhaseDecoys = getV(histogramStrategyPhaseDecoy.title)
     val vVacuums = getV(histogramStrategyVacuum.title)
-    val vTime0 = getV(histogramStrategyTime0.title)
-    val vTime1 = getV(histogramStrategyTime1.title)
-
+    val vZ0 = getV(histogramStrategyZ0.title)
+    val vZ1 = getV(histogramStrategyZ1.title)
+//
     val pulseExtinctionRatio = (vAllPulses(0) + vAllPulses(1)) / vAllPulses(2) / 2
-    val timeSignalsCount = (vTimeSignals(0) + vTimeSignals(1)) / 2 / vTimeSignals(3)
-    val phaseSignalsCount = (vPhaseSignals(0) + vPhaseSignals(1)) / 2 / vPhaseSignals(3)
-    val timeDecoysCount = (vTimeDecoys(0) + vTimeDecoys(1)) / 2 / vTimeDecoys(3)
-    val phaseDecoysCount = (vPhaseDecoys(0) + vPhaseDecoys(1)) / 2 / vPhaseDecoys(3)
+//    val timeSignalsCount = (vTimeSignals(0) + vTimeSignals(1)) / 2 / vTimeSignals(3)
+//    val phaseSignalsCount = (vPhaseSignals(0) + vPhaseSignals(1)) / 2 / vPhaseSignals(3)
+//    val timeDecoysCount = (vTimeDecoys(0) + vTimeDecoys(1)) / 2 / vTimeDecoys(3)
+//    val phaseDecoysCount = (vPhaseDecoys(0) + vPhaseDecoys(1)) / 2 / vPhaseDecoys(3)
     val vacuumsCount = (vVacuums(0) + vVacuums(1)) / 2 / vVacuums(3)
-    val timeRatio = vTime0(0) / vTime1(1)
-    val time0Ratio = vTime0(0) / vTime0(1)
-    val time1Ratio = vTime1(1) / vTime1(0)
-
+//    val timeRatio = vTime0(0) / vTime1(1)
+//    val time0Ratio = vTime0(0) / vTime0(1)
+//    val time1Ratio = vTime1(1) / vTime1(0)
+//
     val report = f"Pulse Extinction Ratio: ${10 * math.log10(pulseExtinctionRatio)}%.3f dB" + System.lineSeparator() +
-      f"Vacuum Intensity: ${10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount))}%.2f dB" + System.lineSeparator() +
-      f"Decoy Intensity (Time): ${timeDecoysCount / timeSignalsCount}%.3f" + System.lineSeparator() +
-      f"Decoy Intensity (Phase): ${phaseDecoysCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
-      f"Time / Phase (Signal): ${timeSignalsCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
-      f"Time / Phase (Decoy): ${timeDecoysCount / phaseDecoysCount}%.3f" + System.lineSeparator() +
-      f"Time 0 / Time 1: ${timeRatio}%.3f" + System.lineSeparator() +
-      System.lineSeparator() +
-      f"Time 0 Error Rate: ${1 / time0Ratio * 100}%.3f" + "%" + System.lineSeparator() +
-      f"Time 1 Error Rate: ${1 / time1Ratio * 100}%.3f" + "%" + System.lineSeparator() +
-      System.lineSeparator() +
-      System.lineSeparator() +
-      f"-------QBER-------" + System.lineSeparator() +
-      f"Channel 1 in Window: ${qberReport("Channel 1 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
-      f"Channel 2 in Window: ${qberReport("Channel 2 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
-      System.lineSeparator() +
-      f"HOM Count: ${qberReport("HOM Count")}" + System.lineSeparator() +
-      f"HOM Dip: ${qberReport("HOM Dip")}%.3f" + System.lineSeparator() +
-      System.lineSeparator() +
-      f"Coincidences in Time: ${qberReport("QBER Time Count")}" + System.lineSeparator() +
-      f"QBER in Time: ${qberReport("QBER Time") * 100}%.3f" +"%" + System.lineSeparator() +
-      f"Coincidences in Phase: ${qberReport("QBER Phase Count")}" + System.lineSeparator() +
-      f"QBER in Phase: ${qberReport("QBER Phase") * 100}%.3f" +"%" + System.lineSeparator() +
-      System.lineSeparator() +
+//      f"Vacuum Intensity: ${10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount))}%.2f dB" + System.lineSeparator() +
+//      f"Decoy Intensity (Time): ${timeDecoysCount / timeSignalsCount}%.3f" + System.lineSeparator() +
+//      f"Decoy Intensity (Phase): ${phaseDecoysCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
+//      f"Time / Phase (Signal): ${timeSignalsCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
+//      f"Time / Phase (Decoy): ${timeDecoysCount / phaseDecoysCount}%.3f" + System.lineSeparator() +
+//      f"Time 0 / Time 1: ${timeRatio}%.3f" + System.lineSeparator() +
+//      System.lineSeparator() +
+//      f"Time 0 Error Rate: ${1 / time0Ratio * 100}%.3f" + "%" + System.lineSeparator() +
+//      f"Time 1 Error Rate: ${1 / time1Ratio * 100}%.3f" + "%" + System.lineSeparator() +
+//      System.lineSeparator() +
+//      System.lineSeparator() +
+//      f"-------QBER-------" + System.lineSeparator() +
+//      f"Channel 1 in Window: ${qberReport("Channel 1 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
+//      f"Channel 2 in Window: ${qberReport("Channel 2 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
+//      System.lineSeparator() +
+//      f"HOM with First Pulses of Phase Encoding" + System.lineSeparator() +
+//      f"Count: ${qberReport("HOM Count")}" + System.lineSeparator() +
+//      f"Dip: ${qberReport("HOM Dip")}%.3f" + System.lineSeparator() +
+//      System.lineSeparator() +
+//      f"HOM with All First Pulses" + System.lineSeparator() +
+//      f"Count: ${qberReport("HOM Count All")}" + System.lineSeparator() +
+//      f"Dip: ${qberReport("HOM Dip All")}%.3f" + System.lineSeparator() +
+//      System.lineSeparator() +
+//      f"Coincidences in Time: ${qberReport("QBER Time Count")}" + System.lineSeparator() +
+//      f"QBER in Time: ${qberReport("QBER Time") * 100}%.3f" +"%" + System.lineSeparator() +
+//      f"Coincidences in Phase: ${qberReport("QBER Phase Count")}" + System.lineSeparator() +
+//      f"QBER in Phase: ${qberReport("QBER Phase") * 100}%.3f" +"%" + System.lineSeparator() +
+//      System.lineSeparator() +
       ""
     reportArea.text = report
 
-    val reportMap = Map[String, Double](
-      "Pulse Extinction Ratio" -> 10 * math.log10(pulseExtinctionRatio),
-      "Vacuum Intensity" -> 10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount)),
-      "Decoy Intensity (Time)" -> timeDecoysCount / timeSignalsCount,
-      "Decoy Intensity (Phase)" -> phaseDecoysCount / phaseSignalsCount,
-      "Time / Phase (Signal)" -> timeSignalsCount / phaseSignalsCount,
-      "Time / Phase (Decoy)" -> timeDecoysCount / phaseDecoysCount,
-      "Time 0 / Time 1" -> timeRatio,
-      "Time 0 Error Rate" -> 1 / time0Ratio * 100,
-      "Time 1 Error Rate" -> 1 / time1Ratio * 100,
-      "SystemTime" ->System.currentTimeMillis())
-    val bytes = MessagePack.pack(reportMap ++ qberReport)
-    storageInvoker.FSFileAppendFrame("", reportPath, bytes)
+//    val reportMap = Map[String, Double](
+//      "Pulse Extinction Ratio" -> 10 * math.log10(pulseExtinctionRatio),
+//      "Vacuum Intensity" -> 10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount)),
+//      "Decoy Intensity (Time)" -> timeDecoysCount / timeSignalsCount,
+//      "Decoy Intensity (Phase)" -> phaseDecoysCount / phaseSignalsCount,
+//      "Time / Phase (Signal)" -> timeSignalsCount / phaseSignalsCount,
+//      "Time / Phase (Decoy)" -> timeDecoysCount / phaseDecoysCount,
+//      "Time 0 / Time 1" -> timeRatio,
+//      "Time 0 Error Rate" -> 1 / time0Ratio * 100,
+//      "Time 1 Error Rate" -> 1 / time1Ratio * 100,
+//      "SystemTime" ->System.currentTimeMillis())
+//    val bytes = MessagePack.pack(reportMap ++ qberReport)
+//    storageInvoker.FSFileAppendFrame("", reportPath, bytes)
   }
 
 
@@ -219,6 +228,10 @@ object TDCParser extends JFXApp {
       qberReport.put("HOM Count", homResults(0))
       qberReport.put("HOM Dip", if(homResults(1) == 0) Double.NaN else homResults(0).toDouble/homResults(1))
 
+      val homResultsAll = mdiqkdQBER("All, 0&0 with delays").asInstanceOf[List[Int]]
+      qberReport.put("HOM Count All", homResultsAll(0))
+      qberReport.put("HOM Dip All", if(homResultsAll(1) == 0) Double.NaN else homResultsAll(0).toDouble/homResultsAll(1))
+
       val ssTimeCorrect : Int = mdiqkdQBER("Signal-Signal, Time, Correct")
       val ssPhaseCorrect : Int = mdiqkdQBER("Signal-Signal, Phase, Correct")
       val ssTimeWrong : Int = mdiqkdQBER("Signal-Signal, Time, Wrong")
@@ -228,7 +241,8 @@ object TDCParser extends JFXApp {
       qberReport.put("QBER Phase Count", ssPhaseCorrect + ssPhaseWrong)
       qberReport.put("QBER Phase", if(ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble/(ssPhaseCorrect + ssPhaseWrong))
 
-      println(s"$ssTimeCorrect, $ssTimeWrong,      $ssPhaseCorrect, $ssPhaseWrong")
+      val time : Long = mdiqkdQBER("Time")
+      qberReport.put("Time", time)
 
       updateReport(reports, qberReport.toMap)
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)

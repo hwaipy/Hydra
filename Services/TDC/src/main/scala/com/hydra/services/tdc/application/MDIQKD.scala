@@ -1,13 +1,10 @@
 package com.hydra.services.tdc.application
 
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
-
 import com.hydra.services.tdc.{DataAnalyser, DataBlock, Histogram}
 import com.hydra.`type`.NumberTypeConversions._
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
 
 class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("RandomNumbers") = List(1)
@@ -141,9 +138,6 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val validItem1s = item1s.filter(_._3 >= 0)
     val validItem2s = item2s.filter(_._3 >= 0)
 
-    println(s"delay is $delay")
-    println(s"${item1s.size} -> ${validItem1s.size}")
-
     def generateCoincidences(iterator1: Iterator[Tuple3[Long, Long, Int]], iterator2: Iterator[Tuple3[Long, Long, Int]]) = {
       val item1Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
       val item2Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
@@ -170,7 +164,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     }
 
     val coincidences = generateCoincidences(validItem1s.iterator, validItem2s.iterator)
-    println(s"Coincidences: ${validItem1s.size} * ${validItem2s.size} / 100M = ${(validItem1s.size).toDouble*(validItem2s.size)/(1e8)}, actual = ${coincidences.size}")
+//    println(s"Coincidences: ${validItem1s.size} * ${validItem2s.size} / 100M = ${(validItem1s.size).toDouble*(validItem2s.size)/(1e8)}, actual = ${coincidences.size}")
     val basisMatchedCoincidences = coincidences.filter(_.basisMatched)
     val validCoincidences = basisMatchedCoincidences.filter(_.valid)
 
@@ -182,68 +176,25 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put("Coincidence Count", coincidences.size)
     map.put("Basis Matched Coincidence Count", basisMatchedCoincidences.size)
     map.put("Valid Coincidence Count", validCoincidences.size)
-    val coincidenceSignalSignalTime = validCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isSignal && c.randomNumberAlice.isTime)
-    val coincidenceSignalDecoyTime = validCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isDecoy && c.randomNumberAlice.isTime)
-    val coincidenceSignalVacuumTime = validCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isVacuum && c.randomNumberAlice.isTime)
-    val coincidenceDecoySignalTime = validCoincidences.filter(c => c.randomNumberAlice.isDecoy && c.randomNumberBob.isSignal && c.randomNumberAlice.isTime)
-    val coincidenceDecoyDecoyTime = validCoincidences.filter(c => c.randomNumberAlice.isDecoy && c.randomNumberBob.isDecoy && c.randomNumberAlice.isTime)
-    val coincidenceDecoyVacuumTime = validCoincidences.filter(c => c.randomNumberAlice.isDecoy && c.randomNumberBob.isVacuum && c.randomNumberAlice.isTime)
-    val coincidenceVacuumSignalTime = validCoincidences.filter(c => c.randomNumberAlice.isVacuum && c.randomNumberBob.isSignal && c.randomNumberAlice.isTime)
-    val coincidenceVacuumDecoyTime = validCoincidences.filter(c => c.randomNumberAlice.isVacuum && c.randomNumberBob.isDecoy && c.randomNumberAlice.isTime)
-    val coincidenceVacuumVacuumTime = validCoincidences.filter(c => c.randomNumberAlice.isVacuum && c.randomNumberBob.isVacuum && c.randomNumberAlice.isTime)
-    val coincidenceSignalSignalPhase = validCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isSignal && c.randomNumberAlice.isPhase)
-    val coincidenceSignalDecoyPhase = validCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isDecoy && c.randomNumberAlice.isPhase)
-    val coincidenceSignalVacuumPhase = validCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isVacuum && c.randomNumberAlice.isPhase)
-    val coincidenceDecoySignalPhase = validCoincidences.filter(c => c.randomNumberAlice.isDecoy && c.randomNumberBob.isSignal && c.randomNumberAlice.isPhase)
-    val coincidenceDecoyDecoyPhase = validCoincidences.filter(c => c.randomNumberAlice.isDecoy && c.randomNumberBob.isDecoy && c.randomNumberAlice.isPhase)
-    val coincidenceDecoyVacuumPhase = validCoincidences.filter(c => c.randomNumberAlice.isDecoy && c.randomNumberBob.isVacuum && c.randomNumberAlice.isPhase)
-    val coincidenceVacuumSignalPhase = validCoincidences.filter(c => c.randomNumberAlice.isVacuum && c.randomNumberBob.isSignal && c.randomNumberAlice.isPhase)
-    val coincidenceVacuumDecoyPhase = validCoincidences.filter(c => c.randomNumberAlice.isVacuum && c.randomNumberBob.isDecoy && c.randomNumberAlice.isPhase)
-    val coincidenceVacuumVacuumPhase = validCoincidences.filter(c => c.randomNumberAlice.isVacuum && c.randomNumberBob.isVacuum && c.randomNumberAlice.isPhase)
 
-    map.put("Signal-Signal, Time, Correct", coincidenceSignalSignalTime.filter(_.isCorrect).size)
-    map.put("Signal-Decoy, Time, Correct", coincidenceSignalDecoyTime.filter(_.isCorrect).size)
-    map.put("Signal-Vacuum, Time, Correct", coincidenceSignalVacuumTime.filter(_.isCorrect).size)
-    map.put("Decoy-Signal, Time, Correct", coincidenceDecoySignalTime.filter(_.isCorrect).size)
-    map.put("Decoy-Decoy, Time, Correct", coincidenceDecoyDecoyTime.filter(_.isCorrect).size)
-    map.put("Decoy-Vacuum, Time, Correct", coincidenceDecoyVacuumTime.filter(_.isCorrect).size)
-    map.put("Vacuum-Signal, Time, Correct", coincidenceVacuumSignalTime.filter(_.isCorrect).size)
-    map.put("Vacuum-Decoy, Time, Correct", coincidenceVacuumDecoyTime.filter(_.isCorrect).size)
-    map.put("Vacuum-Vacuum, Time, Correct", coincidenceVacuumVacuumTime.filter(_.isCorrect).size)
-    map.put("Signal-Signal, Phase, Correct", coincidenceSignalSignalPhase.filter(_.isCorrect).size)
-    map.put("Signal-Decoy, Phase, Correct", coincidenceSignalDecoyPhase.filter(_.isCorrect).size)
-    map.put("Signal-Vacuum, Phase, Correct", coincidenceSignalVacuumPhase.filter(_.isCorrect).size)
-    map.put("Decoy-Signal, Phase, Correct", coincidenceDecoySignalPhase.filter(_.isCorrect).size)
-    map.put("Decoy-Decoy, Phase, Correct", coincidenceDecoyDecoyPhase.filter(_.isCorrect).size)
-    map.put("Decoy-Vacuum, Phase, Correct", coincidenceDecoyVacuumPhase.filter(_.isCorrect).size)
-    map.put("Vacuum-Signal, Phase, Correct", coincidenceVacuumSignalPhase.filter(_.isCorrect).size)
-    map.put("Vacuum-Decoy, Phase, Correct", coincidenceVacuumDecoyPhase.filter(_.isCorrect).size)
-    map.put("Vacuum-Vacuum, Phase, Correct", coincidenceVacuumVacuumPhase.filter(_.isCorrect).size)
+    val basisStrings = List("O", "X", "Y", "Z")
+    Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob =>{
+      val coincidences = validCoincidences.filter(c => c.randomNumberAlice.intensity == basisAlice && c.randomNumberBob.intensity == basisBob)
+      map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Correct", coincidences.filter(_.isCorrect).size)
+      map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Wrong", coincidences.filterNot(_.isCorrect).size)
+    }))
 
-    map.put("Signal-Signal, Time, Wrong", coincidenceSignalSignalTime.filterNot(_.isCorrect).size)
-    map.put("Signal-Decoy, Time, Wrong", coincidenceSignalDecoyTime.filterNot(_.isCorrect).size)
-    map.put("Signal-Vacuum, Time, Wrong", coincidenceSignalVacuumTime.filterNot(_.isCorrect).size)
-    map.put("Decoy-Signal, Time, Wrong", coincidenceDecoySignalTime.filterNot(_.isCorrect).size)
-    map.put("Decoy-Decoy, Time, Wrong", coincidenceDecoyDecoyTime.filterNot(_.isCorrect).size)
-    map.put("Decoy-Vacuum, Time, Wrong", coincidenceDecoyVacuumTime.filterNot(_.isCorrect).size)
-    map.put("Vacuum-Signal, Time, Wrong", coincidenceVacuumSignalTime.filterNot(_.isCorrect).size)
-    map.put("Vacuum-Decoy, Time, Wrong", coincidenceVacuumDecoyTime.filterNot(_.isCorrect).size)
-    map.put("Vacuum-Vacuum, Time, Wrong", coincidenceVacuumVacuumTime.filterNot(_.isCorrect).size)
-    map.put("Signal-Signal, Phase, Wrong", coincidenceSignalSignalPhase.filterNot(_.isCorrect).size)
-    map.put("Signal-Decoy, Phase, Wrong", coincidenceSignalDecoyPhase.filterNot(_.isCorrect).size)
-    map.put("Signal-Vacuum, Phase, Wrong", coincidenceSignalVacuumPhase.filterNot(_.isCorrect).size)
-    map.put("Decoy-Signal, Phase, Wrong", coincidenceDecoySignalPhase.filterNot(_.isCorrect).size)
-    map.put("Decoy-Decoy, Phase, Wrong", coincidenceDecoyDecoyPhase.filterNot(_.isCorrect).size)
-    map.put("Decoy-Vacuum, Phase, Wrong", coincidenceDecoyVacuumPhase.filterNot(_.isCorrect).size)
-    map.put("Vacuum-Signal, Phase, Wrong", coincidenceVacuumSignalPhase.filterNot(_.isCorrect).size)
-    map.put("Vacuum-Decoy, Phase, Wrong", coincidenceVacuumDecoyPhase.filterNot(_.isCorrect).size)
-    map.put("Vacuum-Vacuum, Phase, Wrong", coincidenceVacuumVacuumPhase.filterNot(_.isCorrect).size)
+    val ccs0 = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
+    val ccsOther = Range(10,15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i=>(i._1 + delta, i._2, i._3)).iterator)
+      .filter(_.basisMatched).filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
+    )
+    map.put("X-X, 0&0 with delays", List(ccs0, ccsOther.sum / ccsOther.size))
 
-    val ccs0 = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isSignal && c.randomNumberAlice.isPhase).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
-    val ccs5 = generateCoincidences(validItem1s.iterator, validItem2s.map(i=>(i._1 + 5, i._2, i._3)).iterator)
-                .filter(_.basisMatched).filter(c => c.randomNumberAlice.isSignal && c.randomNumberBob.isSignal && c.randomNumberAlice.isPhase).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
-    map.put("Signal-Signal, Phase, 0&0 with delays", List(ccs0, ccs5))
+    val ccsAll0 = coincidences.filter(c => (c.r1 == 0) && (c.r2 == 0)).size
+    val ccsAllOther = Range(10,15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i=>(i._1 + delta, i._2, i._3)).iterator).filter(c => (c.r1 == 0) && (c.r2 == 0)).size)
+    map.put("All, 0&0 with delays", List(ccsAll0, ccsAllOther.sum / ccsAllOther.size))
 
+    map.put("Time", dataBlock.time)
     map.toMap
   }
 
@@ -268,33 +219,33 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
 object RandomNumber {
   def apply(rn: Int) = new RandomNumber(rn)
 
-  val ALL_RANDOM_NUMBERS = Array(0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15).map(RandomNumber(_))
+  val ALL_RANDOM_NUMBERS = Array(0, 1, 2, 3, 4, 5, 6, 7).map(RandomNumber(_))
 
-  private val random = new Random()
-
-  def generateRandomNumbers(length: Int, signalRatio: Double, decoyRatio: Double) = Range(0, length).map(_ => {
-    val amp = random.nextDouble() match {
-      case d if d < signalRatio => 0xC
-      case d if d < signalRatio + decoyRatio => 0x8
-      case _ => 0x0
-    }
-    val encode = random.nextInt(4)
-    new RandomNumber(amp | encode)
-  }).toArray
+//  private val random = new Random()
+//
+//  def generateRandomNumbers(length: Int, signalRatio: Double, decoyRatio: Double) = Range(0, length).map(_ => {
+//    val amp = random.nextDouble() match {
+//      case d if d < signalRatio => 0xC
+//      case d if d < signalRatio + decoyRatio => 0x8
+//      case _ => 0x0
+//    }
+//    val encode = random.nextInt(4)
+//    new RandomNumber(amp | encode)
+//  }).toArray
 }
 
 class RandomNumber(val RN: Int) {
-  def isVacuum = (RN & 0x8) == 0
+  def isVacuum = (RN/2) == 0
 
-  def isSignal = (RN & 0x4) > 0
+  def isX = (RN/2) == 1
 
-  def isDecoy = (!isSignal) && (!isVacuum)
+  def isY = (RN/2) == 2
 
-  def isTime = (RN & 0x2) > 0
+  def isZ = (RN/2) == 3
 
-  def isPhase = !isTime
+  def intensity = RN/2
 
-  def encode = RN & 0x1
+  def encode = RN % 2
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case other: RandomNumber => other.RN == RN
@@ -303,7 +254,7 @@ class RandomNumber(val RN: Int) {
 }
 
 class Coincidence(val r1:Int, val r2:Int, val randomNumberAlice: RandomNumber, val randomNumberBob: RandomNumber, val triggerTime: Long, val pulseIndex: Long){
-  val basisMatched = (randomNumberAlice.isTime && randomNumberBob.isTime) || (randomNumberAlice.isPhase && randomNumberBob.isPhase)
+  val basisMatched = randomNumberAlice.intensity  == randomNumberBob.intensity
   val valid = (r1 == 0 && r2 == 1) || (r1 == 1 && r2 == 0)
   val isCorrect = randomNumberAlice.encode != randomNumberBob.encode
 }

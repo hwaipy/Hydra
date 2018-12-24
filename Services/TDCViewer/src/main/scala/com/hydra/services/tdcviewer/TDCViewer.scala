@@ -308,9 +308,9 @@ object TDCViweer extends JFXApp {
         yValueMax <= recentHistogram.get.max
         updateYAxisRange()
       })
-      updateGaussianFit()
       evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
       updateRegions()
+      updateGaussianFit()
     }
   }
 
