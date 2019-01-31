@@ -623,6 +623,7 @@ class AWGEncoder:
         self.waveformLength = 10 * 10 * 25
         self.randomNumbers = [0] * 10
         self.firstPulseMode = False
+        self.specifiedRandomNumber = -1
         self.ampDecoyZ = 1
         self.ampDecoyX = 0.8
         self.ampDecoyY = 0.4
@@ -630,7 +631,8 @@ class AWGEncoder:
         self.ampPhase = 0.7
         self.pulseWidthDecoy = 2
         self.pulseWidthLaser = 3
-        self.pulseWidthTime = 2
+        self.pulseWidthTime0 = 2
+        self.pulseWidthTime1 = 2
         self.pulseWidthPhase = 2
         self.pulseWidthSync = 2
         self.interferometerDiff = 3
@@ -641,6 +643,10 @@ class AWGEncoder:
         self.delayLaser = 0
         self.delaySync = 0
         self.syncPeriod = 1000
+        self.betterAMTimeA = False
+        self.betterAMTimeAmpPulse0 = 1
+        self.betterAMTimeAmpPulse1 = 1
+        self.advancedPM = True
 
     def _ampModDecoy(self, pulseIndex, randomNumber):
         if pulseIndex == 0: return [self.ampDecoyO, self.ampDecoyX, self.ampDecoyY, self.ampDecoyZ][int(randomNumber / 2)]
@@ -658,11 +664,19 @@ class AWGEncoder:
         decoy = int(randomNumber / 2)
         if decoy == 0: return 0
         elif decoy == 1 or decoy == 2: return 1
-        else: return pulseIndex == randomNumber % 2
+        else: return (pulseIndex == randomNumber % 2) * ([self.betterAMTimeAmpPulse0, self.betterAMTimeAmpPulse1][pulseIndex])
 
     def _ampModPhase(self, pulseIndex, randomNumber):
         if pulseIndex == -1: return 0
-        else: return (pulseIndex == randomNumber % 2) * self.ampPhase
+        else:
+            if self.advancedPM: return (pulseIndex == randomNumber % 2) * self.ampPhase
+            else: return ((pulseIndex == 0) and (randomNumber % 2 == 1)) * self.ampPhase
+
+    def _ampModLaser(self, pulseIndex, randomNumber):
+        if pulseIndex != 0: return 0
+        if self.specifiedRandomNumber == -1 or (self.specifiedRandomNumber == randomNumber):
+            return 1
+        else: return 0
 
     def _ampModSinglePulse(self, pulseIndex, randomNumber):
         return pulseIndex == 0
@@ -677,12 +691,19 @@ class AWGEncoder:
         waveformSyncPeriodLength = self.syncPeriod * self.sampleRate * 1e-9
         waveformPeriod = waveformPeriodLength * 1e9 / self.sampleRate
         waveformSyncPeriod = waveformSyncPeriodLength * 1e9 / self.sampleRate
+
+        syncCount = self.waveformLength / waveformSyncPeriodLength
+        if math.fabs(int(syncCount+0.5)-syncCount) > 0.001:
+            raise RuntimeError('Sync period does not match the length of waveform.')
+        if waveformSyncPeriodLength < waveformPeriodLength:
+            raise RuntimeError('Sync can not be faster then other signals.')
+
         modulatorConfigs = {
             'AMDecoy': ModulatorConfig(self.pulseWidthDecoy / waveformPeriod, self.delayDecoy, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModDecoy),
-            'AMTime1': ModulatorConfig(self.pulseWidthTime / waveformPeriod, self.delayTime1, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModTime),
-            'AMTime2': ModulatorConfig(self.pulseWidthTime / waveformPeriod, self.delayTime2, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModTime),
+            'AMTime1': ModulatorConfig(self.pulseWidthTime0 / waveformPeriod, self.delayTime1, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModTime),
+            'AMTime2': ModulatorConfig(self.pulseWidthTime1 / waveformPeriod, self.delayTime2, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModTime),
             'PM': ModulatorConfig(self.pulseWidthPhase / waveformPeriod, self.delayPhase, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModPhase),
-            'AMLaser': ModulatorConfig(self.pulseWidthLaser / waveformPeriod, self.delayLaser, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModSinglePulse),
+            'AMLaser': ModulatorConfig(self.pulseWidthLaser / waveformPeriod, self.delayLaser, self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength, self._ampModLaser),
             'AMSync': ModulatorConfig(self.pulseWidthSync / waveformSyncPeriod, self.delaySync, self.interferometerDiff / waveformSyncPeriod, waveformSyncPeriodLength, self.waveformLength, self._ampModSinglePulse)
         }
 
@@ -709,11 +730,12 @@ class AWGDev:
         elif 'delaySync'.__eq__(key): self.encoder.delaySync = value
         elif 'delayLaser'.__eq__(key): self.encoder.delayLaser = value
         elif 'delayPM'.__eq__(key): self.encoder.delayPhase= value
-        elif 'delayTime1'.__eq__(key): self.encoder.delayTime1 = value
-        elif 'delayTime2'.__eq__(key): self.encoder.delayTime2 = value
+        elif 'delayTime0'.__eq__(key): self.encoder.delayTime1 = value
+        elif 'delayTime1'.__eq__(key): self.encoder.delayTime2 = value
 
         elif 'pulseWidthDecoy'.__eq__(key): self.encoder.pulseWidthDecoy = value
-        elif 'pulseWidthTime'.__eq__(key): self.encoder.pulseWidthTime = value
+        elif 'pulseWidthTime0'.__eq__(key): self.encoder.pulseWidthTime0 = value
+        elif 'pulseWidthTime1'.__eq__(key): self.encoder.pulseWidthTime1 = value
         elif 'pulseWidthPhase'.__eq__(key): self.encoder.pulseWidthPhase = value
         elif 'pulseWidthLaser'.__eq__(key): self.encoder.pulseWidthLaser = value
         elif 'pulseWidthSync'.__eq__(key): self.encoder.pulseWidthSync = value
@@ -726,19 +748,33 @@ class AWGDev:
         elif 'ampPhase'.__eq__(key): self.encoder.ampPhase = value
 
         elif 'firstLaserPulseMode'.__eq__(key): self.encoder.firstPulseMode = value
+        elif 'specifiedRandomNumber'.__eq__(key): self.encoder.specifiedRandomNumber = value
         elif 'waveformLength'.__eq__(key): self.encoder.waveformLength = value
+
+        elif 'betterAMTimeA'.__eq__(key): self.encoder.betterAMTimeA = value
+        elif 'betterAMTimeAmpPulse0'.__eq__(key): self.encoder.betterAMTimeAmpPulse0 = value
+        elif 'betterAMTimeAmpPulse1'.__eq__(key): self.encoder.betterAMTimeAmpPulse1 = value
+        elif 'advancedPM'.__eq__(key): self.encoder.advancedPM = value
+
         else: raise RuntimeError('Bad configuration')
 
     def generateNewWaveform(self):
         waveforms = self.encoder.generateWaveforms()
         waveform1 = waveforms['AMDecoy' ]
-        waveform1 = [(w*2-1) for w in waveform1]
         marker11 = waveforms['AMLaser']
         marker12 = waveforms['AMSync']
-        waveform2 = waveforms['PM']
-        waveform2 = [(w*2-1) for w in waveform2]
-        marker21 = waveforms['AMTime1']
+        waveform2 = waveforms['AMTime1']
+        marker21 = waveforms['PM']
         marker22 = waveforms['AMTime2']
+
+        if not self.encoder.betterAMTimeA:
+            wft = waveform2
+            waveform2 = marker21
+            marker21 = wft
+
+        waveform1 = [(w*2-1) for w in waveform1]
+        waveform2 = [(w*2-1) for w in waveform2]
+        marker21 = [0 if w == 0 else 1 for w in marker21]
 
         self.dev.writeWaveform("Waveform1", waveform1)
         self.dev.addMarker('Waveform1', [[marker11[i], marker12[i]] for i in range(0, len(waveform1))])
@@ -761,18 +797,27 @@ class AWGDev:
 if __name__ == "__main__":
     encoder = AWGEncoder()
     encoder.randomNumbers = [0,1,2,3,4,5,6,7]
-    # encoder.waveformLength = len(encoder.randomNumbers) * 250
+    encoder.waveformLength = len(encoder.randomNumbers) * 250
+    encoder.syncPeriod = 10
+    encoder.pulseWidthSync = 0.1
     # encoder.firstPulseMode = True
-    encoder.delayDecoy = 20
+    encoder.delaySync = 1
+    encoder.delayDecoy = 1
+    encoder.specifiedRandomNumber = -1
+    encoder.betterAMTimeAmpPulse0 = 0.1
+    encoder.betterAMTimeAmpPulse1 = 0.7
+    encoder.pulseWidthPhase = 5
+    encoder.advancedPM = False
     startTime = time.time()
     waveforms = encoder.generateWaveforms()
     stopTime = time.time()
     print('finished in {} s'.format(stopTime - startTime))
 
     import matplotlib.pyplot as plt
-    waveform = waveforms['AMDecoy']
+    # waveform = waveforms['AMDecoy']
     # waveform = waveforms['AMSync']
     # waveform = waveforms['AMLaser']
+    waveform = waveforms['PM']
     plt.plot([i for i in range(0, len(waveform))], waveform)
     plt.show()
 

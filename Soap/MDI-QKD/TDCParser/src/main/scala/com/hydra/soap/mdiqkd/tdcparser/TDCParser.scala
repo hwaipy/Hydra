@@ -3,7 +3,8 @@ package com.hydra.soap.mdiqkd.tdcparser
 import java.io.File
 import java.util.{Timer, TimerTask}
 import java.util.concurrent.{Executors, ThreadFactory}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
+
 import scalafx.application.Platform
 import scalafx.application.JFXApp.PrimaryStage
 import scalafx.geometry.{Dimension2D, Point2D}
@@ -14,11 +15,14 @@ import scalafx.scene.control._
 import com.hydra.`type`.NumberTypeConversions._
 import com.hydra.core.{MessageGenerator, MessagePack}
 import org.python.google.common.util.concurrent.AtomicDouble
+
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scalafx.application.JFXApp
 import scalafx.scene.Scene
 import scalafx.scene.chart.{AreaChart, NumberAxis, ValueAxis, XYChart}
+
+import scala.collection.mutable.ArrayBuffer
 //import collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import com.hydra.services.tdc.application.RandomNumber
@@ -50,7 +54,7 @@ object TDCParser extends JFXApp {
   val tdcInvoker = client.blockingInvoker("GroundTDCService")
   val pyMathInvoker = client.blockingInvoker("PyMathService")
   val path = "/test/tdc/default.fs"
-  val recentSize = new AtomicInteger(0)
+  val recentSize = new AtomicLong(0)
 
   val reportPath = "/test/tdc/mdireport.fs"
   storageInvoker.FSFileInitialize("", reportPath)
@@ -61,18 +65,14 @@ object TDCParser extends JFXApp {
     visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
     visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
 
-  val regionDefination = Map("Pulse1" -> Tuple2(2.0, 4.0), "Pulse2" -> Tuple2(5.0, 7.0), "Vacuum" -> Tuple2(8.0, 10.0))
+  val regionDefination = Map("Pulse1" -> Tuple2(2.0, 4.0), "Pulse2" -> Tuple2(5.1, 7.1), "Vacuum" -> Tuple2(8.0, 10.0))
 
   val histogramStrategyAllPulses = new HistogramStrategy("All Pulses", RandomNumber.ALL_RANDOM_NUMBERS.map(_.RN), regionDefination)
-//  val histogramStrategyTimeSignals = new HistogramStrategy("Time Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isTime).map(_.RN), regionDefination)
-//  val histogramStrategyPhaseSignals = new HistogramStrategy("Phase Signals", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isSignal).filter(_.isPhase).map(_.RN), regionDefination)
-//  val histogramStrategyTimeDecoy = new HistogramStrategy("Time Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isTime).map(_.RN), regionDefination)
-//  val histogramStrategyPhaseDecoy = new HistogramStrategy("Phase Decoy", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isDecoy).filter(_.isPhase).map(_.RN), regionDefination)
   val histogramStrategyVacuum = new HistogramStrategy("Vacuum", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isVacuum).map(_.RN), regionDefination)
-  val histogramStrategyZ0 = new HistogramStrategy("Z 0", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isZ).filter(_.encode == 0).map(_.RN), regionDefination)
+  val histogramStrategyZ0 = new HistogramStrategy("Z 0", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isZ).filter(_.encode == 0).map(_.RN), regionDefination, true)
   val histogramStrategyZ1 = new HistogramStrategy("Z 1", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isZ).filter(_.encode == 1).map(_.RN), regionDefination)
-  val histogramStrategyX = new HistogramStrategy("X", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isX).filter(_.encode == 1).map(_.RN), regionDefination)
-  val histogramStrategyY = new HistogramStrategy("Y", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isY).filter(_.encode == 1).map(_.RN), regionDefination)
+  val histogramStrategyX = new HistogramStrategy("X", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isX).map(_.RN), regionDefination)
+  val histogramStrategyY = new HistogramStrategy("Y", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isY).map(_.RN), regionDefination)
 
   val histogramStrategies = List(
     histogramStrategyAllPulses,
@@ -81,79 +81,73 @@ object TDCParser extends JFXApp {
     histogramStrategyZ1,
     histogramStrategyX,
     histogramStrategyY,
-//    histogramStrategyTimeSignals,
-//    histogramStrategyPhaseSignals,
-//    histogramStrategyTimeDecoy,
-//    histogramStrategyPhaseDecoy,
   )
 
   def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double]) = {
+    println("In update report")
     def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
 
     val vAllPulses = getV(histogramStrategyAllPulses.title)
-//    val vTimeSignals = getV(histogramStrategyTimeSignals.title)
-//    val vPhaseSignals = getV(histogramStrategyPhaseSignals.title)
-//    val vTimeDecoys = getV(histogramStrategyTimeDecoy.title)
-//    val vPhaseDecoys = getV(histogramStrategyPhaseDecoy.title)
     val vVacuums = getV(histogramStrategyVacuum.title)
     val vZ0 = getV(histogramStrategyZ0.title)
     val vZ1 = getV(histogramStrategyZ1.title)
-//
+    val vX = getV(histogramStrategyX.title)
+    val vY = getV(histogramStrategyY.title)
+
     val pulseExtinctionRatio = (vAllPulses(0) + vAllPulses(1)) / vAllPulses(2) / 2
-//    val timeSignalsCount = (vTimeSignals(0) + vTimeSignals(1)) / 2 / vTimeSignals(3)
-//    val phaseSignalsCount = (vPhaseSignals(0) + vPhaseSignals(1)) / 2 / vPhaseSignals(3)
-//    val timeDecoysCount = (vTimeDecoys(0) + vTimeDecoys(1)) / 2 / vTimeDecoys(3)
-//    val phaseDecoysCount = (vPhaseDecoys(0) + vPhaseDecoys(1)) / 2 / vPhaseDecoys(3)
-    val vacuumsCount = (vVacuums(0) + vVacuums(1)) / 2 / vVacuums(3)
-//    val timeRatio = vTime0(0) / vTime1(1)
-//    val time0Ratio = vTime0(0) / vTime0(1)
-//    val time1Ratio = vTime1(1) / vTime1(0)
-//
+    val vacuumsCountRate = (vVacuums(0) + vVacuums(1)) / vVacuums(3)
+    val Z0CountRate = (vZ0(0) + vZ0(1)) / vZ0(3)
+    val Z1CountRate = (vZ1(0) + vZ1(1)) / vZ1(3)
+    val XCountRate = (vX(0) + vX(1)) / vX(3)
+    val YCountRate = (vY(0) + vY(1)) / vY(3)
+    val ZRatio = Z0CountRate / Z1CountRate
+    val Z0ExtinctionRatio = vZ0(0) / vZ0(1)
+    val Z1ExtinctionRatio = vZ1(1) / vZ1(0)
+
     val report = f"Pulse Extinction Ratio: ${10 * math.log10(pulseExtinctionRatio)}%.3f dB" + System.lineSeparator() +
-//      f"Vacuum Intensity: ${10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount))}%.2f dB" + System.lineSeparator() +
-//      f"Decoy Intensity (Time): ${timeDecoysCount / timeSignalsCount}%.3f" + System.lineSeparator() +
-//      f"Decoy Intensity (Phase): ${phaseDecoysCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
-//      f"Time / Phase (Signal): ${timeSignalsCount / phaseSignalsCount}%.3f" + System.lineSeparator() +
-//      f"Time / Phase (Decoy): ${timeDecoysCount / phaseDecoysCount}%.3f" + System.lineSeparator() +
-//      f"Time 0 / Time 1: ${timeRatio}%.3f" + System.lineSeparator() +
-//      System.lineSeparator() +
-//      f"Time 0 Error Rate: ${1 / time0Ratio * 100}%.3f" + "%" + System.lineSeparator() +
-//      f"Time 1 Error Rate: ${1 / time1Ratio * 100}%.3f" + "%" + System.lineSeparator() +
-//      System.lineSeparator() +
-//      System.lineSeparator() +
-//      f"-------QBER-------" + System.lineSeparator() +
-//      f"Channel 1 in Window: ${qberReport("Channel 1 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
-//      f"Channel 2 in Window: ${qberReport("Channel 2 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
-//      System.lineSeparator() +
-//      f"HOM with First Pulses of Phase Encoding" + System.lineSeparator() +
-//      f"Count: ${qberReport("HOM Count")}" + System.lineSeparator() +
-//      f"Dip: ${qberReport("HOM Dip")}%.3f" + System.lineSeparator() +
-//      System.lineSeparator() +
-//      f"HOM with All First Pulses" + System.lineSeparator() +
-//      f"Count: ${qberReport("HOM Count All")}" + System.lineSeparator() +
-//      f"Dip: ${qberReport("HOM Dip All")}%.3f" + System.lineSeparator() +
-//      System.lineSeparator() +
-//      f"Coincidences in Time: ${qberReport("QBER Time Count")}" + System.lineSeparator() +
-//      f"QBER in Time: ${qberReport("QBER Time") * 100}%.3f" +"%" + System.lineSeparator() +
-//      f"Coincidences in Phase: ${qberReport("QBER Phase Count")}" + System.lineSeparator() +
-//      f"QBER in Phase: ${qberReport("QBER Phase") * 100}%.3f" +"%" + System.lineSeparator() +
-//      System.lineSeparator() +
-      ""
+      f"Vacuum Intensity: ${10 * math.log10(vacuumsCountRate / (Z0CountRate))}%.2f dB" + System.lineSeparator() +
+      f"X Intensity: ${XCountRate / Z0CountRate}%.3f" + System.lineSeparator() +
+      f"Y Intensity: ${YCountRate / Z0CountRate}%.3f" + System.lineSeparator() +
+      f"Z 0 / TZ 1: ${ZRatio}%.3f" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"Z 0 Error Rate: ${1 / Z0ExtinctionRatio * 100}%.3f" + "%" + System.lineSeparator() +
+      f"Z 1 Error Rate: ${1 / Z1ExtinctionRatio * 100}%.3f" + "%" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"Pulse 0 Position of Z 0: ${qberReport("pulse0Position")}%.3f" + System.lineSeparator() +
+      f"Pulse 0 Width of Z 0: ${qberReport("pulse0Width")}%.3f" + System.lineSeparator() +
+      System.lineSeparator() +
+      System.lineSeparator() +
+      f"-------QBER-------" + System.lineSeparator() +
+      f"Channel 1 in Window: ${qberReport("Channel 1 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
+      f"Channel 2 in Window: ${qberReport("Channel 2 in Window") * 100}%.3f" + "%" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"HOM with First Pulses of X Encoding" + System.lineSeparator() +
+      f"Count: ${qberReport("HOM Count")}" + System.lineSeparator() +
+      f"Dip: ${qberReport("HOM Dip")}%.3f" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"HOM with All First Pulses" + System.lineSeparator() +
+      f"Count: ${qberReport("HOM Count All")}" + System.lineSeparator() +
+      f"Dip: ${qberReport("HOM Dip All")}%.3f" + System.lineSeparator() +
+      System.lineSeparator() +
+      f"Coincidences in Z: ${qberReport("QBER Z Count")}" + System.lineSeparator() +
+      f"QBER in Z: ${qberReport("QBER Z") * 100}%.3f" +"%" + System.lineSeparator() +
+      f"Coincidences in X: ${qberReport("QBER X Count")}" + System.lineSeparator() +
+      f"QBER in X: ${qberReport("QBER X") * 100}%.3f" +"%" + System.lineSeparator() +
+      System.lineSeparator()
     reportArea.text = report
 
-//    val reportMap = Map[String, Double](
-//      "Pulse Extinction Ratio" -> 10 * math.log10(pulseExtinctionRatio),
-//      "Vacuum Intensity" -> 10 * math.log10(vacuumsCount / (timeSignalsCount + phaseSignalsCount)),
-//      "Decoy Intensity (Time)" -> timeDecoysCount / timeSignalsCount,
-//      "Decoy Intensity (Phase)" -> phaseDecoysCount / phaseSignalsCount,
-//      "Time / Phase (Signal)" -> timeSignalsCount / phaseSignalsCount,
-//      "Time / Phase (Decoy)" -> timeDecoysCount / phaseDecoysCount,
-//      "Time 0 / Time 1" -> timeRatio,
-//      "Time 0 Error Rate" -> 1 / time0Ratio * 100,
-//      "Time 1 Error Rate" -> 1 / time1Ratio * 100,
-//      "SystemTime" ->System.currentTimeMillis())
-//    val bytes = MessagePack.pack(reportMap ++ qberReport)
-//    storageInvoker.FSFileAppendFrame("", reportPath, bytes)
+    val reportMap = Map[String, Double](
+      "Pulse Extinction Ratio" -> 10 * math.log10(pulseExtinctionRatio),
+      "Vacuum Intensity" -> 10 * math.log10(vacuumsCountRate / Z0CountRate),
+      "X Intensity" -> XCountRate / Z0CountRate,
+      "Y Intensity" -> YCountRate / Z0CountRate,
+      "Z 0 / Z 1" -> ZRatio,
+      "Z 0 Error Rate" -> 1 / Z0ExtinctionRatio * 100,
+      "Z 1 Error Rate" -> 1 / Z1ExtinctionRatio * 100,
+      "SystemTime" ->System.currentTimeMillis())
+    val bytes = MessagePack.pack(reportMap ++ qberReport)
+
+    if(!DEBUG) storageInvoker.FSFileAppendFrame("", reportPath, bytes)
   }
 
 
@@ -196,6 +190,7 @@ object TDCParser extends JFXApp {
     assertThread("TDCParser")
     val size: Long = storageInvoker.metaData("", path, false).asInstanceOf[Map[String, Any]]("Size")
     if (size != recentSize.get) {
+      println("in update results")
       recentSize.set(size)
       val frameBytes = storageInvoker.FSFileReadTailFrames("", path, 0, 1).asInstanceOf[List[Array[Byte]]](0)
       val mg = new MessageGenerator()
@@ -212,9 +207,15 @@ object TDCParser extends JFXApp {
         .map(key => (key.replace("Histogram With RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[List[Int]])).toMap
       val rndCounts = mdiqkdEncoding.keys.filter(key => key.startsWith("Count of RandomNumber"))
         .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
+
       val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMap
+      val pulse0Position = chartTextRegeons(2).fitCenter.get
+      val pulse0Width = chartTextRegeons(2).fitWidth.get
 
       val qberReport = new mutable.HashMap[String, Double]()
+      qberReport.put("pulse0Position", pulse0Position)
+      qberReport.put("pulse0Width", pulse0Width)
+
       val qberCount1 : Int = mdiqkdQBER("Count 1")
       val qberValidCount1 : Int = mdiqkdQBER("Valid Count 1")
       val qberCount2 : Int = mdiqkdQBER("Count 2")
@@ -224,7 +225,7 @@ object TDCParser extends JFXApp {
       qberReport.put("Channel 1 in Window", channel1InWindow)
       qberReport.put("Channel 2 in Window", channel2InWindow)
 
-      val homResults = mdiqkdQBER("Signal-Signal, Phase, 0&0 with delays").asInstanceOf[List[Int]]
+      val homResults = mdiqkdQBER("X-X, 0&0 with delays").asInstanceOf[List[Int]]
       qberReport.put("HOM Count", homResults(0))
       qberReport.put("HOM Dip", if(homResults(1) == 0) Double.NaN else homResults(0).toDouble/homResults(1))
 
@@ -232,14 +233,20 @@ object TDCParser extends JFXApp {
       qberReport.put("HOM Count All", homResultsAll(0))
       qberReport.put("HOM Dip All", if(homResultsAll(1) == 0) Double.NaN else homResultsAll(0).toDouble/homResultsAll(1))
 
-      val ssTimeCorrect : Int = mdiqkdQBER("Signal-Signal, Time, Correct")
-      val ssPhaseCorrect : Int = mdiqkdQBER("Signal-Signal, Phase, Correct")
-      val ssTimeWrong : Int = mdiqkdQBER("Signal-Signal, Time, Wrong")
-      val ssPhaseWrong : Int = mdiqkdQBER("Signal-Signal, Phase, Wrong")
-      qberReport.put("QBER Time Count", ssTimeCorrect + ssTimeWrong)
-      qberReport.put("QBER Time", if(ssTimeCorrect + ssTimeWrong == 0) Double.NaN else ssTimeWrong.toDouble/(ssTimeCorrect + ssTimeWrong))
-      qberReport.put("QBER Phase Count", ssPhaseCorrect + ssPhaseWrong)
-      qberReport.put("QBER Phase", if(ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble/(ssPhaseCorrect + ssPhaseWrong))
+      val ssTimeCorrect : Int = mdiqkdQBER("Z-Z, Correct")
+      val ssPhaseCorrect : Int = mdiqkdQBER("X-X, Correct")
+      val ssTimeWrong : Int = mdiqkdQBER("Z-Z, Wrong")
+      val ssPhaseWrong : Int = mdiqkdQBER("X-X, Wrong")
+      qberReport.put("QBER Z Count", ssTimeCorrect + ssTimeWrong)
+      qberReport.put("QBER Z", if(ssTimeCorrect + ssTimeWrong == 0) Double.NaN else ssTimeWrong.toDouble/(ssTimeCorrect + ssTimeWrong))
+      qberReport.put("QBER X Count", ssPhaseCorrect + ssPhaseWrong)
+      qberReport.put("QBER X", if(ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble/(ssPhaseCorrect + ssPhaseWrong))
+
+      val basisStrings = List("O", "X", "Y", "Z")
+      Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => List("Correct", "Wrong").foreach(cw =>{
+        val msg = s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, ${cw}"
+        qberReport.put(msg, mdiqkdQBER(msg))
+      })))
 
       val time : Long = mdiqkdQBER("Time")
       qberReport.put("Time", time)
@@ -265,7 +272,7 @@ object TDCParser extends JFXApp {
         case e: Throwable => e.printStackTrace()
       }
     }(executionContext)
-  }, 1000, 400)
+  }, 1000, 200)
 }
 
 class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
@@ -276,6 +283,8 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   val yAxisLog = new ValueAxis(yAxisLogUnderlying) {}
   yAxisLog.label = "Count (Log)"
   val regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
+  val fitCenter = new AtomicDouble(Double.NaN)
+  val fitWidth = new AtomicDouble(Double.NaN)
 
   val toChartData = (xy: (Double, Double)) => XYChart.Data[Number, Number](xy._1, xy._2)
 
@@ -352,6 +361,40 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
       seriesLog.data = recentHistogram.get.zipWithIndex.filter(z => z._1 > 0).map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
       updateYAxisRange()
     })
+
+    val fit = if(strategy.autoFit){
+      //Fit
+      try{
+        val it = series.data.get().iterator()
+        val xs = ArrayBuffer[Double]()
+        val ys = ArrayBuffer[Double]()
+        while(it.hasNext){
+          val next = it.next()
+          xs += next.getXValue.doubleValue()
+          ys += next.getYValue.doubleValue()
+        }
+        val mathService = TDCParser.client.blockingInvoker("PyMathService")
+        val fitResult = mathService.singlePeakGaussianFit(xs.toList, ys.toList).asInstanceOf[List[Double]]
+        if(fitResult.forall(r=>r != Double.NaN)){
+          Some(fitResult)
+        }else{
+          None
+        }
+      }catch{
+        case _: Throwable => {
+//          e.printStackTrace()
+          None
+        }
+      }
+    } else None
+    if(fit.isDefined){
+      fitCenter set (fit.get)(1)
+      fitWidth set math.abs((fit.get)(2)*2.35)
+    }else{
+      fitCenter set Double.NaN
+      fitWidth set Double.NaN
+    }
+
     (strategy.title, regionValues ++ Map("RandomNumberCount" -> randomNumberValid.toDouble))
   }
 
@@ -419,6 +462,6 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   }
 }
 
-class HistogramStrategy(val title: String, acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]]) {
+class HistogramStrategy(val title: String, acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]], val autoFit: Boolean = false) {
   def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
 }

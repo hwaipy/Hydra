@@ -1,6 +1,6 @@
 import sys
 
-sys.path.append('/Users/hwaipy/GitHub/Hydra/Pydra')
+sys.path.append('D:/GitHub/Hydra/Pydra/')
 
 import Utils
 import time
@@ -8,7 +8,7 @@ import Pydra
 import GaussianFit
 
 sysArgs = Utils.SystemArguments(sys.argv)
-server = sysArgs.get('server', 'localhost')
+server = sysArgs.get('server', '192.168.25.27')
 port = sysArgs.get('port', '20102')
 clientName = sysArgs.get('clientName', 'PyMathService')
 

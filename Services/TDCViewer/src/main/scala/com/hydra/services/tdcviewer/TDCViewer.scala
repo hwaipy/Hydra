@@ -1,6 +1,6 @@
 package com.hydra.services.tdc
 
-import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.io._
 import java.text.DecimalFormat
 import java.util.{Properties, Timer, TimerTask}
 import java.util.concurrent.{Executors, ThreadFactory}
@@ -12,7 +12,6 @@ import scalafx.geometry.{Dimension2D, Point2D, Pos}
 import scalafx.scene.layout.{AnchorPane, Region}
 import scalafx.stage.Screen
 import com.hydra.io.MessageClient
-
 import scalafx.scene.control._
 import com.hydra.`type`.NumberTypeConversions._
 import com.hydra.core.MessageGenerator
@@ -28,6 +27,7 @@ import scalafx.beans.property.{BooleanProperty, DoubleProperty}
 import scalafx.collections.ObservableBuffer
 import scalafx.scene.Scene
 import scalafx.scene.chart.{AreaChart, NumberAxis, ValueAxis, XYChart}
+
 import collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scalafx.scene.chart.XYChart.Series
@@ -140,7 +140,7 @@ object TDCViweer extends JFXApp {
   val regionColorMap = new mutable.HashMap[String, Color]()
 
   val fitResult = new Label("")
-  fitResult.visible = false
+  fitResult.visible = true
 
   val simpleCalcResult = new TextArea()
   simpleCalcResult.editable = false
@@ -512,6 +512,9 @@ object TDCViweer extends JFXApp {
       fitSeriesLog.data = (recentXData.get zip fittedYData).map(toChartData)
       fitResult.text = s"Peak: ${timeDomainNotation(x0)}, FWHM: ${timeDomainNotation(sigma * 2.35)}"
     })
+    val pw = new PrintWriter(new FileOutputStream("Fit.csv", true))
+    pw.println(s"${System.currentTimeMillis()}, ${x0}, ${sigma *2.35}")
+    pw.close()
   }
 
   def createCheckButtonSetter(title: String, selected: Boolean, onChange: (Boolean) => Unit, buttonAction: Option[Tuple2[String, () => Unit]]) = {
