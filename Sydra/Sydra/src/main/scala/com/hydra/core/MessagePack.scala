@@ -43,10 +43,12 @@ object MessagePack {
   }
 }
 
-class MessagePacker(flatter: (Any, Option[String]) => RemoteObject = (a: Any, None) => throw new IllegalArgumentException(s"Type ${a.getClass} not recognized.")) {
+class MessagePacker(flatter: (Any, Option[String]) => RemoteObject = (a: Any, None) => throw new IllegalArgumentException(s"Type ${a.getClass} not recognized.")) extends MessageEncoder {
   private val packer = org.msgpack.core.MessagePack.newDefaultBufferPacker
   private val bufferArray = new Array[Byte](8)
   private val buffer = ByteBuffer.wrap(bufferArray)
+
+  def feed(msg: Message): MessagePacker = feed(msg.content, None)
 
   def feed(value: Any, target: Option[String] = None): MessagePacker = {
     doFeed(value, 0, target)
@@ -142,20 +144,22 @@ class MessagePacker(flatter: (Any, Option[String]) => RemoteObject = (a: Any, No
   }
 
   def pack(): Array[Byte] = {
-    packer.toByteArray
+    val array = packer.toByteArray
+    packer.clear
+    array
   }
 }
 
 class MessageGenerator(shapper: (String, Long) => RemoteObject = (name, id) => {
   RemoteObject(name, id)
-}, val bufferSize: Int = 10 * 1024 * 1024) {
+}, val bufferSize: Int = 10 * 1024 * 1024) extends MessageDecoder {
 
   private val buffer = ByteBuffer.allocate(bufferSize)
   buffer.limit(0)
   private val messageGenerated = new AtomicInteger(0)
   private val bytesConverted = new AtomicLong(0)
 
-  def feed(feed: ByteBuffer) {
+  def feed(feed: ByteBuffer) = {
     var currentPosition: Int = buffer.position();
     if (feed.remaining() > (buffer.capacity() - buffer.limit())) {
       buffer.compact()
@@ -172,6 +176,7 @@ class MessageGenerator(shapper: (String, Long) => RemoteObject = (name, id) => {
     feed.limit(feedLimit)
     buffer.limit(buffer.position())
     buffer.position(currentPosition)
+    buffer.remaining
   }
 
   def feed(feed: Array[Byte]): Int = {

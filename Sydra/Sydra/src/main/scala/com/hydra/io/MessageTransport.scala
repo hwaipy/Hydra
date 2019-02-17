@@ -1,10 +1,6 @@
 package com.hydra.io
 
-import com.hydra.core.Message
-import com.hydra.core.MessageGenerator
-import com.hydra.core.MessagePacker
-import com.hydra.core.MessageBuilder
-import com.hydra.core.RuntimeInvoker
+import com.hydra.core._
 import io.netty.bootstrap.Bootstrap
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.ByteBuf
@@ -31,13 +27,14 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.lang.Thread.UncaughtExceptionHandler
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.lang.reflect.InvocationTargetException
-import java.util.concurrent.atomic.AtomicLong
+
 import org.slf4j.LoggerFactory
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
@@ -133,7 +130,7 @@ class MessageServer(port: Int) {
   }
 }
 
-class MessageClient(val name: String, host: String, port: Int, invokeHandler: Any = None, autoReconnect: Boolean = false) {
+class MessageClient(val name: String, host: String, port: Int, invokeHandler: Any = None, autoReconnect: Boolean = false, protocol: String = MessageEncodingProtocol.PROTOCOL_MSGPACK) {
 
   import com.hydra.core.MessageType._
 
@@ -147,8 +144,8 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
       override def initChannel(ch: SocketChannel) {
         ch.pipeline()
           .addLast(new IdleStateHandler(0, 10, 0))
-          .addLast(new MessagePackEncoder)
-          .addLast(new MessagePackDecoder)
+          .addLast(new MessagePackEncoder(protocol))
+          .addLast(new MessagePackDecoder(protocol))
           .addLast(handler)
       }
     })
@@ -197,8 +194,8 @@ class MessageClient(val name: String, host: String, port: Int, invokeHandler: An
 }
 
 object MessageClient {
-  def newClient(host: String, port: Int, name: String = "", invokeHandler: Any = None, timeout: Duration = 10 second) = {
-    val client = new MessageClient(name, host, port, invokeHandler)
+  def newClient(host: String, port: Int, name: String = "", invokeHandler: Any = None, timeout: Duration = 10 second, protocol: String = MessageEncodingProtocol.PROTOCOL_MSGPACK) = {
+    val client = new MessageClient(name, host, port, invokeHandler, protocol = protocol)
     try {
       val f = client.start
       f.await(timeout.toMillis)
@@ -222,14 +219,19 @@ object MessageClient {
 class RemoteInvokeException(item: Any) extends Exception(item.toString) {
 }
 
-protected class MessagePackEncoder extends MessageToByteEncoder[Message] {
+protected class MessagePackEncoder(protocol: String = "") extends MessageToByteEncoder[Message] {
+
   override def encode(ctx: ChannelHandlerContext, msg: Message, out: ByteBuf) = {
     try {
-      val packer = ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).get match {
-        case null => new MessagePacker
-        case flatter => new MessagePacker(flatter)
-      }
-      val pack = packer.feed(msg.content, msg.to).pack
+      val protocol = if (this.protocol != "") this.protocol else ctx.channel.attr(AttributeKey.valueOf[String]("MessageEncodingProtocol")).get
+      val packer = if (protocol == MessageEncodingProtocol.PROTOCOL_MSGPACK) {
+        ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).get match {
+          case null => new MessagePacker
+          case flatter => new MessagePacker(flatter)
+        }
+      } else if (protocol == MessageEncodingProtocol.PROTOCOL_JSON) new MessageJsonPacker()
+      else throw new IllegalArgumentException(s"No valid MessageEncodingProtocol assgined.")
+      val pack = packer.feed(msg).pack
       ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get match {
         case null =>
         case session => session.increseMessageSendStatistics(pack.size)
@@ -241,27 +243,32 @@ protected class MessagePackEncoder extends MessageToByteEncoder[Message] {
   }
 }
 
-//protected class MessageDecoder extends ByteToMessageDecoder {
-//  override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: java.util.List[Object]) {
-//    val generatorAttr = ctx.channel.attr(AttributeKey.valueOf[MessageGenerator]("Generator"))
-//
-//  }
-//}
-
-protected class MessagePackDecoder extends ByteToMessageDecoder {
+protected class MessagePackDecoder(protocol: String = "") extends ByteToMessageDecoder {
 
   override def decode(ctx: ChannelHandlerContext, in: ByteBuf, out: java.util.List[Object]) {
-    val generatorAttr = ctx.channel.attr(AttributeKey.valueOf[MessageGenerator]("Generator"))
+    if (in.readableBytes == 0) return
+    val generatorAttr = ctx.channel.attr(AttributeKey.valueOf[MessageDecoder]("Generator"))
     val generator = generatorAttr.get match {
       case null => {
-        val shapper = ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).get
-        val g = new MessageGenerator(shapper)
+        val protocol = if (this.protocol != "") this.protocol else {
+          in.markReaderIndex()
+          val firstByte = in.readByte()
+          in.resetReaderIndex()
+          val detectedProtocol = if (firstByte == '{'.toByte) MessageEncodingProtocol.PROTOCOL_JSON else MessageEncodingProtocol.PROTOCOL_MSGPACK
+          ctx.channel.attr(AttributeKey.valueOf[String]("MessageEncodingProtocol")).set(detectedProtocol)
+//          println(s"Detected Protocol: ${detectedProtocol}")
+          detectedProtocol
+        }
+        val g = if (protocol == MessageEncodingProtocol.PROTOCOL_MSGPACK) {
+          val shapper = ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).get
+          new MessageGenerator(shapper)
+        } else if (protocol == MessageEncodingProtocol.PROTOCOL_JSON) new MessageJsonGenerator()
+        else throw new IllegalArgumentException(s"No valid MessageEncodingProtocol assgined.")
         generatorAttr.set(g)
         g
       }
       case g => g
     }
-    if (in.readableBytes == 0) return
     in.nioBuffers.foreach(buffer => {
       in.skipBytes(buffer.remaining)
       generator.feed(buffer)
