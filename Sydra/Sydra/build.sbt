@@ -1,5 +1,5 @@
 name := "sydra"
-version := "0.6.0"
+version := "0.7.0"
 scalaVersion := "2.12.7"
 organization := "com.hydra"
 libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.12.7"
@@ -17,7 +17,6 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-generic",
   "io.circe" %% "circe-parser"
 ).map(_ % "0.10.0")
-//libraryDependencies += "io.spray" %%  "spray-json" % "1.3.4"
 libraryDependencies += "org.pegdown" % "pegdown" % "1.6.0"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
 scalacOptions ++= Seq("-feature")

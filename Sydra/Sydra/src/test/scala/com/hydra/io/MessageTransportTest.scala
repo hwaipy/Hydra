@@ -403,7 +403,7 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     future2.onComplete { case u => uC2 = u; latch2.countDown }
     future2.onSuccess { case u => uS2 = u }
     future2.onFailure { case u => uF2 = u; latch2.countDown }
-    assert(latch2.await(2, java.util.concurrent.TimeUnit.SECONDS))
+    assert(latch2.await(5, java.util.concurrent.TimeUnit.SECONDS))
     assert(uS2 == None)
     assert(uF2.isInstanceOf[RuntimeException])
     client2.stop
