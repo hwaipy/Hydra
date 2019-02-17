@@ -1,50 +1,51 @@
-package com.hydra.io
-
-import java.io.IOException
-import java.util.concurrent.CountDownLatch
-
-import com.hydra.core.MessageType._
-import com.hydra.io.MessageTransport.FutureDirect
-import org.scalatest._
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
-
-class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
+//package com.hydra.io
+//
+//import java.io.IOException
+//import java.util.concurrent.CountDownLatch
+//
+//import com.hydra.core.MessageEncodingProtocol
+//import com.hydra.core.MessageType._
+//import com.hydra.io.MessageTransport.FutureDirect
+//import org.scalatest._
+//
+//import scala.concurrent.Await
+//import scala.concurrent.duration._
+//
+//class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
 //  val port = 55660
 //  lazy val server = new MessageServer(port)
 //  lazy val channelFuture = server.start
-
-  override def beforeAll() {
+//
+//  override def beforeAll() {
 //    channelFuture.awaitUninterruptibly
-  }
-
-  override def afterAll() {
+//  }
+//
+//  override def afterAll() {
 //    server.stop.await
-  }
-
-  before {
-  }
-
-  test("Test configuration load.") {
-    assert(MessageTransport.Configuration.getProperty("messageserver.port", "20102") == "20102")
-    //TODO: Test unchangable here.
-  }
-
-  test("Test server status.") {
+//  }
+//
+//  before {
+//  }
+//
+//  test("Test configuration load.") {
+//    assert(MessageTransport.Configuration.getProperty("messageserver.port", "20102") == "20102")
+//    //TODO: Test unchangable here.
+//  }
+//
+//  test("Test server status.") {
 //    assert(channelFuture.isDone)
 //    assert(channelFuture.isSuccess)
-  }
-
+//  }
+//
 //  test("Test connection.") {
-//    val mc = new MessageClient("", "localhost", port, None)
+//    val mc = new MessageClient("", "localhost", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val f = mc.start
 //    f.await(1000)
 //    assert(f.isSuccess)
 //  }
 //
 //  test("Test dynamic invoker.") {
-//    val client = new MessageClient("", "localhost", port, None)
+//    val client = new MessageClient("", "localhost", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val invoker = client.toMessageInvoker()
 //    val m1 = invoker.fun1(a = 1, 2, "3", b = null, c = Vector(1, 2, "3d"))
 //    assert(m1.messageType == Request)
@@ -61,7 +62,7 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //  }
 //
 //  test("Test remote invoke and future.") {
-//    val client1 = new MessageClient("", "localhost", port, None)
+//    val client1 = new MessageClient("", "localhost", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val f1 = client1.start
 //    f1.await(1000)
 //    assert(f1.isSuccess)
@@ -78,7 +79,7 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //    assert(uF1.getClass.getSimpleName == "RemoteInvokeException")
 //    assert(uF1.asInstanceOf[RemoteInvokeException].getMessage == "Method not found: co.")
 //    client1.stop.await
-//    val client2 = new MessageClient("", "wrongaddress", port, None)
+//    val client2 = new MessageClient("", "wrongaddress", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val invoker2 = client2.asynchronousInvoker()
 //    val future2 = invoker2.co2
 //    val latch2 = new CountDownLatch(2)
@@ -95,14 +96,14 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //  }
 //
 //  test("Test register client.") {
-//    val mc1 = new MessageClient("TestClient1", "localhost", port, None)
+//    val mc1 = new MessageClient("TestClient1", "localhost", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val f1 = mc1.start
 //    f1.await(1000)
 //    assert(f1.isSuccess)
 //    val future1 = mc1.connect
 //    val r1 = Await.result[Any](future1, 1 second)
 //    assert(r1 == Unit)
-//    val mc2 = new MessageClient("TestClient2", "localhost", port, None)
+//    val mc2 = new MessageClient("TestClient2", "localhost", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val f2 = mc2.start
 //    f2.await(1000)
 //    assert(f2.isSuccess)
@@ -110,7 +111,9 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //    val r2 = invoker2.connect("TestClient2")
 //    assert(r2 == Unit)
 //    intercept[RemoteInvokeException] {
-//      try { val r3 = invoker2.connect("TestClient2") }
+//      try {
+//        val r3 = invoker2.connect("TestClient2")
+//      }
 //      catch {
 //        case e: NullPointerException => e.printStackTrace
 //        case e: Throwable => throw e
@@ -123,16 +126,19 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //  test("Test invoke other client") {
 //    class Target {
 //      def v8 = "V8 great!"
+//
 //      def v9 = throw new IllegalArgumentException("V9 not good.")
+//
 //      def v10 = throw new IOException("V10 have problems.")
+//
 //      def v(i: Int, b: Boolean) = "OK"
 //    }
-//    val mc1 = new MessageClient("T1-Benz", "localhost", port, new Target)
+//    val mc1 = new MessageClient("T1-Benz", "localhost", port, new Target, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val f1 = mc1.start.sync
 //    assert(f1.isDone)
 //    assert(f1.isSuccess)
 //    mc1.blockingInvoker().connect("T1-Benz")
-//    val checker = MessageClient.newClient("localhost", port, "T1-Checher")
+//    val checker = MessageClient.newClient("localhost", port, "T1-Checher", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val benzChecker = checker.blockingInvoker("T1-Benz")
 //    val v8r = benzChecker.v8
 //    assert(v8r == "V8 great!")
@@ -151,12 +157,12 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //  }
 //
 //  test("Test client name duplicated") {
-//    val mc1 = new MessageClient("T2-ClientDuplicated", "localhost", port, None)
+//    val mc1 = new MessageClient("T2-ClientDuplicated", "localhost", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val f1 = mc1.start.sync
 //    assert(f1.isDone)
 //    assert(f1.isSuccess)
 //    mc1.blockingInvoker().connect("T2-ClientDuplicated")
-//    val mc2 = new MessageClient("T2-ClientDuplicated", "localhost", port, None)
+//    val mc2 = new MessageClient("T2-ClientDuplicated", "localhost", port, None, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val f2 = mc2.start.sync
 //    assert(f2.isDone)
 //    assert(f2.isSuccess)
@@ -168,62 +174,67 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //    mc2.stop
 //  }
 //
-//  test("Test invoke and return Object") {
-//    val oc = MessageClient.newClient("localhost", port, "T3-Benz", new Object {
-//      def func = new Object() {
-//        def change() = "Haha"
-//      }
-//    })
-//    val checker = MessageClient.newClient("localhost", port, "T3-Checher")
-//    val getter = checker.blockingInvoker("T3-Benz")
-//    val result = getter.func.asInstanceOf[BlockingRemoteObject]
-//    assert(result.asInstanceOf[RemoteObject].remoteName == "T3-Benz")
-//    assert(result.getClass.getName == "com.hydra.io.BlockingRemoteObject")
-//    assert(result.change == "Haha")
-//    checker.stop
-//    val checker2 = MessageClient.newClient("localhost", port, "T3-Checher2", new Object {
-//      def rGet = {
-//        val checker3 = MessageClient.newClient("localhost", port, "T3-Checher3")
-//        val getter = checker3.blockingInvoker("T3-Benz")
-//        val r = getter.func
-//        checker3.stop
-//        r
-//      }
-//    })
-//    val checker4 = MessageClient.newClient("localhost", port, "T3-Checher4")
-//    val getter2 = checker4.blockingInvoker("T3-Checher2")
-//    assert(getter2.rGet.asInstanceOf[RemoteObject].remoteName == "T3-Benz")
-//    oc.stop
-//    checker2.stop
-//    checker4.stop
-//  }
+//  //  test("Test invoke and return Object") {
+//  //    val oc = MessageClient.newClient("localhost", port, "T3-Benz", new Object {
+//  //      def func = new Object() {
+//  //        def change() = "Haha"
+//  //      }
+//  //    }, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
+//  //    val checker = MessageClient.newClient("localhost", port, "T3-Checher", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
+//  //    val getter = checker.blockingInvoker("T3-Benz")
+//  //    val result = getter.func.asInstanceOf[BlockingRemoteObject]
+//  //    assert(result.asInstanceOf[RemoteObject].remoteName == "T3-Benz")
+//  //    assert(result.getClass.getName == "com.hydra.io.BlockingRemoteObject")
+//  //    assert(result.change == "Haha")
+//  //    checker.stop
+//  //    val checker2 = MessageClient.newClient("localhost", port, "T3-Checher2", new Object {
+//  //      def rGet = {
+//  //        val checker3 = MessageClient.newClient("localhost", port, "T3-Checher3")
+//  //        val getter = checker3.blockingInvoker("T3-Benz")
+//  //        val r = getter.func
+//  //        checker3.stop
+//  //        r
+//  //      }
+//  //    }, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
+//  //    val checker4 = MessageClient.newClient("localhost", port, "T3-Checher4", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
+//  //    val getter2 = checker4.blockingInvoker("T3-Checher2")
+//  //    assert(getter2.rGet.asInstanceOf[RemoteObject].remoteName == "T3-Benz")
+//  //    oc.stop
+//  //    checker2.stop
+//  //    checker4.stop
+//  //  }
 //
-//  test("Test Finilize of Remote Objects") {
-//    val oc = MessageClient.newClient("localhost", port, "T4-Benz", new Object {
-//      def func = new Object() {
-//        def change() = "Haha"
-//        override def finalize {
-//        }
-//      }
-//    })
-//    val checker = MessageClient.newClient("localhost", port, "T4-Checher")
-//    val getter = checker.blockingInvoker("T4-Benz")
-//    val result = getter.func.asInstanceOf[BlockingRemoteObject]
-//    assert(result.asInstanceOf[RemoteObject].remoteName == "T4-Benz")
-//    assert(result.getClass.getName == "com.hydra.io.BlockingRemoteObject")
-//    assert(result.change == "Haha")
-//    checker.stop
-//    oc.stop
-//  }
+//  //    test("Test Finilize of Remote Objects") {
+//  //      val oc = MessageClient.newClient("localhost", port, "T4-Benz", new Object {
+//  //        def func = new Object() {
+//  //          def change() = "Haha"
+//  //          override def finalize {
+//  //          }
+//  //        }
+//  //      })
+//  //      val checker = MessageClient.newClient("localhost", port, "T4-Checher")
+//  //      val getter = checker.blockingInvoker("T4-Benz")
+//  //      val result = getter.func.asInstanceOf[BlockingRemoteObject]
+//  //      assert(result.asInstanceOf[RemoteObject].remoteName == "T4-Benz")
+//  //      assert(result.getClass.getName == "com.hydra.io.BlockingRemoteObject")
+//  //      assert(result.change == "Haha")
+//  //      checker.stop
+//  //      oc.stop
+//  //    }
 //
 //  test("Test Session Listening") {
-//    val lc = MessageClient.newClient("localhost", port, "T5-Monitor")
+//    val lc = MessageClient.newClient("localhost", port, "T5-Monitor", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val latch = new CountDownLatch(2)
 //    lc.addSessionListener(new SessionListener {
-//      def sessionConnected(session: String) { latch.countDown }
-//      def sessionDisconnected(session: String) { latch.countDown }
+//      def sessionConnected(session: String) {
+//        latch.countDown
+//      }
+//
+//      def sessionDisconnected(session: String) {
+//        latch.countDown
+//      }
 //    })
-//    val rc = MessageClient.newClient("localhost", port, "T5-Rabit")
+//    val rc = MessageClient.newClient("localhost", port, "T5-Rabit", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    rc.stop.sync
 //    latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
 //    lc.stop
@@ -232,6 +243,7 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //  test("Test Session invoke in Sessoin") {
 //    class PXITDCHandle {
 //      var session: MessageClient = null
+//
 //      def begin() {
 //        val storage = session.blockingInvoker("Storage")
 //        storage.ask()
@@ -240,14 +252,46 @@ class MessageTransportJsonTest extends FunSuite with BeforeAndAfter with BeforeA
 //    class StorageHandle {
 //      def ask() {}
 //    }
-//    val sto = MessageClient.newClient("localhost", port, "Storage", new StorageHandle)
+//    val sto = MessageClient.newClient("localhost", port, "Storage", new StorageHandle, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val pxiTDCHandler = new PXITDCHandle
-//    val s1 = MessageClient.newClient("localhost", port, "PXITDC", pxiTDCHandler)
+//    val s1 = MessageClient.newClient("localhost", port, "PXITDC", pxiTDCHandler, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    pxiTDCHandler.session = s1
-//    val slocal = MessageClient.newClient("localhost", port, "local")
+//    val slocal = MessageClient.newClient("localhost", port, "local", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
 //    val invoker = slocal.blockingInvoker("PXITDC", 2 second)
 //    invoker.begin()
 //    s1.stop
 //  }
-}
-
+//
+//  test("Test invoke other client with int and double problem") {
+//    class Target {
+//      def v(i: Int, d: Double) = "OK"
+//    }
+//    val mc1 = new MessageClient("T1-Benz", "localhost", port, new Target, protocol = MessageEncodingProtocol.PROTOCOL_JSON)
+//    val f1 = mc1.start.sync
+//    assert(f1.isDone)
+//    assert(f1.isSuccess)
+//    mc1.blockingInvoker().connect("T1-Benz")
+//    val checker = MessageClient.newClient("localhost", port, "T1-Checher", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
+//    val benzChecker = checker.blockingInvoker("T1-Benz")
+//    val v8r = benzChecker.v(1, 11.0)
+//    mc1.stop.await
+//    checker.stop.await
+//  }
+//
+//  test("Test invoke mix of JSON and MSGPACK") {
+//    class Target {
+//      def v(i: Int, d: Double) = "OK"
+//    }
+//    val mc1 = new MessageClient("T1-Benz", "localhost", port, new Target, protocol = MessageEncodingProtocol.PROTOCOL_MSGPACK)
+//    val f1 = mc1.start.sync
+//    assert(f1.isDone)
+//    assert(f1.isSuccess)
+//    mc1.blockingInvoker().connect("T1-Benz")
+//    val checker = MessageClient.newClient("localhost", port, "T1-Checher", protocol = MessageEncodingProtocol.PROTOCOL_JSON)
+//    val benzChecker = checker.blockingInvoker("T1-Benz")
+//    val v8r = benzChecker.v(1, 11.0)
+//    mc1.stop.await
+//    checker.stop.await
+//  }
+//}
+//
