@@ -14,6 +14,8 @@ object HydraServerApp extends App {
   val server = new MessageServer(port)
   val future = server.start
   println(s"Hydra Server started on port $port.")
+
+  println(s"Internal Services started.")
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
   println("Stoping Hydra Server...")
   server.stop

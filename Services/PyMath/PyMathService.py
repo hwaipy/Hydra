@@ -6,6 +6,7 @@ import Utils
 import time
 import Pydra
 import GaussianFit
+import RiseTimeFit
 
 sysArgs = Utils.SystemArguments(sys.argv)
 server = sysArgs.get('server', '192.168.25.27')
@@ -20,6 +21,12 @@ class PyMathService:
     def singlePeakGaussianFit(self, xs, ys):
         return GaussianFit.singlePeakGaussianFit(xs, ys)
 
+    def riseTimeFit(self, xs, ys):
+        try:
+            return RiseTimeFit.riseTimeFit(xs, ys)
+        except Exception as e:
+            print(e)
+            e.__repr__()
 
 invoker = PyMathService()
 session = Pydra.Session.newSession((server, int(port)), invoker, clientName)

@@ -3,7 +3,7 @@ import Utils
 import Pydra
 import time
 from scipy import optimize
-
+import threading
 
 class FittingStrategy:
     def __init__(self):
@@ -58,7 +58,8 @@ class SyncService():
         self.predictBob = 0
         self.channelAlice = 0
         self.channelBob = 0
-        self.__run()
+        self.channelCharlie = 0
+        threading.Thread(target=self.__run).start()
 
     def __run(self):
         while True:
@@ -76,48 +77,59 @@ class SyncService():
                 bobDelay = newPredictBob - self.predictBob
                 self.predictBob = newPredictBob
             if aliceDelay < 0:
-                bobDelay += aliceDelay
-                charlieDelay += aliceDelay
+                bobDelay -= aliceDelay
+                charlieDelay -= aliceDelay
                 aliceDelay = 0
             if bobDelay < 0:
-                aliceDelay += bobDelay
-                charlieDelay += bobDelay
+                aliceDelay -= bobDelay
+                charlieDelay -= bobDelay
                 bobDelay = 0
             self.log('adjust delays: alice {}, bob {}, charlie {}.'.format(aliceDelay, bobDelay, charlieDelay))
-            try:
-                self.HMC7044EvalAlice.setDelay(aliceDelay)
-                self.HMC7044EvalBob.setDelay(bobDelay)
-                self.HMC7044EvalCharlie.setDelay(charlieDelay)
-            except BaseException as e:
-                self.log('Error in set delays: {}.'.format(e))
+            if self.aliceOn or self.bobOn:
+                print('set delay zaishishi action')
+                try:
+                    self.HMC7044EvalAlice.setDelay(self.channelAlice, aliceDelay)
+                    self.HMC7044EvalBob.setDelay(self.channelBob, bobDelay)
+                    self.HMC7044EvalCharlie.setDelay(self.channelCharlie, charlieDelay)
+                except BaseException as e:
+                    self.log('Error in set delays: {}.'.format(e))
 
     def updateAliceDelay(self, delay):
-        self.strategyAlice.update(time.time(), delay)
+        self.strategyAlice.update(time.time(), -delay)
+        self.log('Alice Delay updated: {}'.format(-delay))
 
     def updateBobDelay(self, delay):
-        self.strategyBob.update(time.time(), delay)
+        self.strategyBob.update(time.time(), -delay)
+        self.log('Bob Delay updated: {}'.format(-delay))
 
     def turnOnAlice(self, channel):
+        print('turn on alice')
         self.aliceOn = True
         self.strategyAlice = FittingStrategy()
         self.predictAlice = 0
         self.channelAlice = channel
 
     def turnOffAlice(self):
+        print('turn off alice')
         self.aliceOn = False
 
     def turnOnBob(self, channel):
+        print('turn on bob')
         self.bobOn = True
         self.strategyBob = FittingStrategy()
         self.predictBob = 0
         self.channelBob = channel
 
     def turnOffBob(self):
+        print('turn off bob')
         self.bobOn = False
+
+    def configCharlie(self, channel):
+        self.channelCharlie = channel
 
     def log(self, msg):
         file = open('log.txt', mode='a')
-        file.write(msg)
+        file.write('[{}]{}'.format(time.time(), msg))
         if msg[-1] is not '\n':
             file.write('\n')
         file.close()
@@ -131,6 +143,6 @@ if __name__ == '__main__':
 
     invoker = SyncService()
     session = Pydra.Session.newSession((server, int(port)), invoker, clientName)
-    session.blockingInvoker('HMC7044EvalAlice')
-    session.blockingInvoker('HMC7044EvalBob')
-    session.blockingInvoker('HMC7044EvalCharlie')
+    invoker.HMC7044EvalAlice = session.blockingInvoker('HMC7044EvalAlice')
+    invoker.HMC7044EvalBob = session.blockingInvoker('HMC7044EvalBob')
+    invoker.HMC7044EvalCharlie = session.blockingInvoker('HMC7044EvalCharlie')

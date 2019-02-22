@@ -115,6 +115,7 @@ object TDCParser extends JFXApp {
       System.lineSeparator() +
       f"Pulse 0 Position of Z 0: ${qberReport("pulse0Position")}%.3f" + System.lineSeparator() +
       f"Pulse 0 Width of Z 0: ${qberReport("pulse0Width")}%.3f" + System.lineSeparator() +
+      f"Pulse 0 Rise of Z 0: ${qberReport("pulse0Rise")}%.3f" + System.lineSeparator() +
       System.lineSeparator() +
       System.lineSeparator() +
       f"-------QBER-------" + System.lineSeparator() +
@@ -211,10 +212,12 @@ object TDCParser extends JFXApp {
       val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMap
       val pulse0Position = chartTextRegeons(2).fitCenter.get
       val pulse0Width = chartTextRegeons(2).fitWidth.get
+      val pulse0Rise = chartTextRegeons(2).fitRise.get
 
       val qberReport = new mutable.HashMap[String, Double]()
       qberReport.put("pulse0Position", pulse0Position)
       qberReport.put("pulse0Width", pulse0Width)
+      qberReport.put("pulse0Rise", pulse0Rise)
 
       val qberCount1 : Int = mdiqkdQBER("Count 1")
       val qberValidCount1 : Int = mdiqkdQBER("Valid Count 1")
@@ -285,6 +288,7 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
   val regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
   val fitCenter = new AtomicDouble(Double.NaN)
   val fitWidth = new AtomicDouble(Double.NaN)
+  val fitRise = new AtomicDouble(Double.NaN)
 
   val toChartData = (xy: (Double, Double)) => XYChart.Data[Number, Number](xy._1, xy._2)
 
@@ -393,6 +397,31 @@ class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
     }else{
       fitCenter set Double.NaN
       fitWidth set Double.NaN
+    }
+
+    val riseTime = if(strategy.autoFit){
+      //get rise time
+      try{
+        val it = series.data.get().iterator()
+        val xs = ArrayBuffer[Double]()
+        val ys = ArrayBuffer[Double]()
+        while(it.hasNext){
+          val next = it.next()
+          xs += next.getXValue.doubleValue()
+          ys += next.getYValue.doubleValue()
+        }
+        val mathService = TDCParser.client.blockingInvoker("PyMathService")
+        val fitResult: Double = mathService.riseTimeFit(xs.toList, ys.toList)
+        if(fitResult > 1e5) None else Some(fitResult)
+      }catch{
+        case e: Throwable => {
+                   e.printStackTrace()
+          None
+        }
+      }
+    } else None
+    if(riseTime.isDefined){
+      fitRise set (riseTime.get)
     }
 
     (strategy.title, regionValues ++ Map("RandomNumberCount" -> randomNumberValid.toDouble))
