@@ -561,5 +561,60 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     mc1.stop.await
     checker.stop.await
   }
+
+  test("[JSON]Test defined length message.") {
+    class Obj {
+      def func() = "Answer"
+    }
+    val mc1 = new MessageClient("TestClient1", "localhost", port, new Obj(), protocol = MessageEncodingProtocol.PROTOCOL_JSON_PREFIX)
+    val f1 = mc1.start
+    f1.await(1000)
+    assert(f1.isSuccess)
+    val future1 = mc1.connect
+    val r1 = Await.result[Any](future1, 1 second)
+    assert(r1 == Unit)
+    val mc2 = new MessageClient("TestClient2", "localhost", port, None)
+    val f2 = mc2.start
+    f2.await(1000)
+    assert(f2.isSuccess)
+    val invoker2 = mc2.blockingInvoker()
+    val r2 = invoker2.connect("TestClient2")
+    assert(r2 == Unit)
+    assert(mc2.blockingInvoker("TestClient1").func() == "Answer")
+    mc1.stop
+    mc2.stop
+  }
+
+
+  test("Test kill client.") {
+    class Obj(answer:String) {
+      def func() = answer
+    }
+    val mc1 = new MessageClient("TestClient1", "localhost", port, new Obj("Answer"))
+    val f1 = mc1.start
+    f1.await(1000)
+    assert(f1.isSuccess)
+    val future1 = mc1.connect
+    val r1 = Await.result[Any](future1, 1 second)
+    assert(r1 == Unit)
+    val mc2 = new MessageClient("TestClient2", "localhost", port, None)
+    val f2 = mc2.start
+    f2.await(1000)
+    assert(f2.isSuccess)
+    val invoker2 = mc2.blockingInvoker()
+    val r2 = invoker2.connect("TestClient2")
+    assert(r2 == Unit)
+    assert(mc2.blockingInvoker("TestClient1").func() == "Answer")
+    intercept[RemoteInvokeException] {
+      invoker2.kick("TestClientNotExist")
+    }
+    invoker2.kick("TestClient1")
+    val mc3 = MessageClient.newClient("localhost", port, "TestClient1", new Obj("Answer Again"))
+    assert(mc2.blockingInvoker("TestClient1").func() == "Answer Again")
+    mc1.stop
+    mc2.stop
+    mc3.stop
+  }
+
 }
 

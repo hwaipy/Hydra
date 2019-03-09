@@ -43,13 +43,25 @@ object TDCParser extends JFXApp {
     }
   }))
 
+  val riseIntegrateTime = new AtomicInteger(1)
+
+  class TDCParserInvokeHandler {
+    def setDelayMeasurementIntegrateTime(t: Int) = {
+      if (t <= 0) throw new IllegalArgumentException("t should be larger than 0.")
+      riseIntegrateTime set t
+    }
+  }
+
   val client = MessageClient.newClient(parameters.named.get("host") match {
     case Some(host) => host
     case None => "192.168.25.27"
   }, parameters.named.get("port") match {
     case Some(port) => port.toInt
     case None => 20102
-  })
+  }, parameters.named.get("name") match {
+    case Some(name) => name
+    case None => ""
+  }, new TDCParserInvokeHandler)
   val storageInvoker = client.blockingInvoker("StorageService")
   val tdcInvoker = client.blockingInvoker("GroundTDCService")
   val pyMathInvoker = client.blockingInvoker("PyMathService")
@@ -73,6 +85,8 @@ object TDCParser extends JFXApp {
   val histogramStrategyZ1 = new HistogramStrategy("Z 1", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isZ).filter(_.encode == 1).map(_.RN), regionDefination)
   val histogramStrategyX = new HistogramStrategy("X", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isX).map(_.RN), regionDefination)
   val histogramStrategyY = new HistogramStrategy("Y", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isY).map(_.RN), regionDefination)
+  val histogramStrategyAliceTime = new HistogramStrategy("Alice Delay", Array(-1), regionDefination, true)
+  val histogramStrategyBobTime = new HistogramStrategy("Bob Delay", Array(-2), regionDefination, true)
 
   val histogramStrategies = List(
     histogramStrategyAllPulses,
@@ -81,10 +95,13 @@ object TDCParser extends JFXApp {
     histogramStrategyZ1,
     histogramStrategyX,
     histogramStrategyY,
+    histogramStrategyAliceTime,
+    histogramStrategyBobTime,
   )
 
   def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double]) = {
     println("In update report")
+
     def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
 
     val vAllPulses = getV(histogramStrategyAllPulses.title)
@@ -116,6 +133,8 @@ object TDCParser extends JFXApp {
       f"Pulse 0 Position of Z 0: ${qberReport("pulse0Position")}%.3f" + System.lineSeparator() +
       f"Pulse 0 Width of Z 0: ${qberReport("pulse0Width")}%.3f" + System.lineSeparator() +
       f"Pulse 0 Rise of Z 0: ${qberReport("pulse0Rise")}%.3f" + System.lineSeparator() +
+      f"Pulse 0 Rise of Alice: ${qberReport("aliceRise")}%.3f" + System.lineSeparator() +
+      f"Pulse 0 Rise of Bob: ${qberReport("bobRise")}%.3f" + System.lineSeparator() +
       System.lineSeparator() +
       System.lineSeparator() +
       f"-------QBER-------" + System.lineSeparator() +
@@ -131,9 +150,9 @@ object TDCParser extends JFXApp {
       f"Dip: ${qberReport("HOM Dip All")}%.3f" + System.lineSeparator() +
       System.lineSeparator() +
       f"Coincidences in Z: ${qberReport("QBER Z Count")}" + System.lineSeparator() +
-      f"QBER in Z: ${qberReport("QBER Z") * 100}%.3f" +"%" + System.lineSeparator() +
+      f"QBER in Z: ${qberReport("QBER Z") * 100}%.3f" + "%" + System.lineSeparator() +
       f"Coincidences in X: ${qberReport("QBER X Count")}" + System.lineSeparator() +
-      f"QBER in X: ${qberReport("QBER X") * 100}%.3f" +"%" + System.lineSeparator() +
+      f"QBER in X: ${qberReport("QBER X") * 100}%.3f" + "%" + System.lineSeparator() +
       System.lineSeparator()
     reportArea.text = report
 
@@ -145,10 +164,12 @@ object TDCParser extends JFXApp {
       "Z 0 / Z 1" -> ZRatio,
       "Z 0 Error Rate" -> 1 / Z0ExtinctionRatio * 100,
       "Z 1 Error Rate" -> 1 / Z1ExtinctionRatio * 100,
-      "SystemTime" ->System.currentTimeMillis())
+      "SystemTime" -> System.currentTimeMillis())
     val bytes = MessagePack.pack(reportMap ++ qberReport)
 
-    if(!DEBUG) storageInvoker.FSFileAppendFrame("", reportPath, bytes)
+    if (!DEBUG) storageInvoker.FSFileAppendFrame("", reportPath, bytes)
+
+    println("done update report")
   }
 
 
@@ -200,12 +221,16 @@ object TDCParser extends JFXApp {
       val mdiqkdEncoding = item("MDIQKDEncoding").asInstanceOf[Map[String, Any]]
       val mdiqkdQBER = item("MDIQKDQBER").asInstanceOf[Map[String, Any]]
 
-//      val channel: Int = mdiqkdEncoding("Channel")
+      //      val channel: Int = mdiqkdEncoding("Channel")
       val delay: Double = mdiqkdEncoding("Delay")
       val period: Double = mdiqkdEncoding("Period")
 
+      val timeAliceHistogrm = mdiqkdEncoding("Histogram Alice Time").asInstanceOf[List[Int]]
+      val timeBobHistogrm = mdiqkdEncoding("Histogram Bob Time").asInstanceOf[List[Int]]
       val histograms = mdiqkdEncoding.keys.filter(key => key.startsWith("Histogram With RandomNumber"))
         .map(key => (key.replace("Histogram With RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[List[Int]])).toMap
+        .+(-1 -> timeAliceHistogrm).+(-2 -> timeBobHistogrm)
+
       val rndCounts = mdiqkdEncoding.keys.filter(key => key.startsWith("Count of RandomNumber"))
         .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
 
@@ -213,16 +238,20 @@ object TDCParser extends JFXApp {
       val pulse0Position = chartTextRegeons(2).fitCenter.get
       val pulse0Width = chartTextRegeons(2).fitWidth.get
       val pulse0Rise = chartTextRegeons(2).fitRise.get
+      val aliceRise = chartTextRegeons(6).fitRise.get
+      val bobRise = chartTextRegeons(7).fitRise.get
 
       val qberReport = new mutable.HashMap[String, Double]()
       qberReport.put("pulse0Position", pulse0Position)
       qberReport.put("pulse0Width", pulse0Width)
       qberReport.put("pulse0Rise", pulse0Rise)
+      qberReport.put("aliceRise", aliceRise)
+      qberReport.put("bobRise", bobRise)
 
-      val qberCount1 : Int = mdiqkdQBER("Count 1")
-      val qberValidCount1 : Int = mdiqkdQBER("Valid Count 1")
-      val qberCount2 : Int = mdiqkdQBER("Count 2")
-      val qberValidCount2 : Int = mdiqkdQBER("Valid Count 2")
+      val qberCount1: Int = mdiqkdQBER("Count 1")
+      val qberValidCount1: Int = mdiqkdQBER("Valid Count 1")
+      val qberCount2: Int = mdiqkdQBER("Count 2")
+      val qberValidCount2: Int = mdiqkdQBER("Valid Count 2")
       val channel1InWindow = qberValidCount1.toDouble / qberCount1
       val channel2InWindow = qberValidCount2.toDouble / qberCount2
       qberReport.put("Channel 1 in Window", channel1InWindow)
@@ -230,28 +259,28 @@ object TDCParser extends JFXApp {
 
       val homResults = mdiqkdQBER("X-X, 0&0 with delays").asInstanceOf[List[Int]]
       qberReport.put("HOM Count", homResults(0))
-      qberReport.put("HOM Dip", if(homResults(1) == 0) Double.NaN else homResults(0).toDouble/homResults(1))
+      qberReport.put("HOM Dip", if (homResults(1) == 0) Double.NaN else homResults(0).toDouble / homResults(1))
 
       val homResultsAll = mdiqkdQBER("All, 0&0 with delays").asInstanceOf[List[Int]]
       qberReport.put("HOM Count All", homResultsAll(0))
-      qberReport.put("HOM Dip All", if(homResultsAll(1) == 0) Double.NaN else homResultsAll(0).toDouble/homResultsAll(1))
+      qberReport.put("HOM Dip All", if (homResultsAll(1) == 0) Double.NaN else homResultsAll(0).toDouble / homResultsAll(1))
 
-      val ssTimeCorrect : Int = mdiqkdQBER("Z-Z, Correct")
-      val ssPhaseCorrect : Int = mdiqkdQBER("X-X, Correct")
-      val ssTimeWrong : Int = mdiqkdQBER("Z-Z, Wrong")
-      val ssPhaseWrong : Int = mdiqkdQBER("X-X, Wrong")
+      val ssTimeCorrect: Int = mdiqkdQBER("Z-Z, Correct")
+      val ssPhaseCorrect: Int = mdiqkdQBER("X-X, Correct")
+      val ssTimeWrong: Int = mdiqkdQBER("Z-Z, Wrong")
+      val ssPhaseWrong: Int = mdiqkdQBER("X-X, Wrong")
       qberReport.put("QBER Z Count", ssTimeCorrect + ssTimeWrong)
-      qberReport.put("QBER Z", if(ssTimeCorrect + ssTimeWrong == 0) Double.NaN else ssTimeWrong.toDouble/(ssTimeCorrect + ssTimeWrong))
+      qberReport.put("QBER Z", if (ssTimeCorrect + ssTimeWrong == 0) Double.NaN else ssTimeWrong.toDouble / (ssTimeCorrect + ssTimeWrong))
       qberReport.put("QBER X Count", ssPhaseCorrect + ssPhaseWrong)
-      qberReport.put("QBER X", if(ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble/(ssPhaseCorrect + ssPhaseWrong))
+      qberReport.put("QBER X", if (ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble / (ssPhaseCorrect + ssPhaseWrong))
 
       val basisStrings = List("O", "X", "Y", "Z")
-      Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => List("Correct", "Wrong").foreach(cw =>{
+      Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => List("Correct", "Wrong").foreach(cw => {
         val msg = s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, ${cw}"
         qberReport.put(msg, mdiqkdQBER(msg))
       })))
 
-      val time : Long = mdiqkdQBER("Time")
+      val time: Long = mdiqkdQBER("Time")
       qberReport.put("Time", time)
 
       updateReport(reports, qberReport.toMap)
@@ -271,226 +300,235 @@ object TDCParser extends JFXApp {
       try {
         updateResults()
       } catch {
-        case e: RuntimeException if e.getMessage.contains("ChannelFuture failed")=> //println(e.getMessage)
+        case e: RuntimeException if e.getMessage.contains("ChannelFuture failed") => //println(e.getMessage)
         case e: Throwable => e.printStackTrace()
       }
     }(executionContext)
   }, 1000, 200)
-}
 
-class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
-  val xAxis = NumberAxis("Time (ns)", 0, 10, 1)
-  val xAxisLog = NumberAxis("Time (ns)", 0, 10, 1)
-  val yAxis = NumberAxis("Count", 0, 100, 10)
-  val yAxisLogUnderlying = new LogarithmicAxis(1, 100)
-  val yAxisLog = new ValueAxis(yAxisLogUnderlying) {}
-  yAxisLog.label = "Count (Log)"
-  val regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
-  val fitCenter = new AtomicDouble(Double.NaN)
-  val fitWidth = new AtomicDouble(Double.NaN)
-  val fitRise = new AtomicDouble(Double.NaN)
+  class ChartTextRegeon(strategy: HistogramStrategy) extends VBox {
+    val xAxis = NumberAxis("Time (ns)", 0, 10, 1)
+    val xAxisLog = NumberAxis("Time (ns)", 0, 10, 1)
+    val yAxis = NumberAxis("Count", 0, 100, 10)
+    val yAxisLogUnderlying = new LogarithmicAxis(1, 100)
+    val yAxisLog = new ValueAxis(yAxisLogUnderlying) {}
+    yAxisLog.label = "Count (Log)"
+    val regions = new mutable.HashMap[String, List[Tuple2[Double, Double]]]()
+    val fitCenter = new AtomicDouble(Double.NaN)
+    val fitWidth = new AtomicDouble(Double.NaN)
+    val fitRise = new AtomicDouble(Double.NaN)
 
-  val toChartData = (xy: (Double, Double)) => XYChart.Data[Number, Number](xy._1, xy._2)
+    val toChartData = (xy: (Double, Double)) => XYChart.Data[Number, Number](xy._1, xy._2)
 
-  val series = new XYChart.Series[Number, Number] {
-    name = "Histogram"
-    data = Seq((0.0, 0.0)).map(toChartData)
-  }
-  val lineChart = new AreaChart[Number, Number](xAxis, yAxis, ObservableBuffer(series))
-  lineChart.setAnimated(false)
-  lineChart.setLegendVisible(false)
-  lineChart.setCreateSymbols(false)
-  lineChart.title = strategy.title
-
-  val seriesLog = new XYChart.Series[Number, Number] {
-    name = "HistogramLog"
-    data = Seq((0.0, 0.0)).map(toChartData)
-  }
-  val lineChartLog = new AreaChart[Number, Number](xAxisLog, yAxisLog, ObservableBuffer(seriesLog))
-  lineChartLog.setAnimated(false)
-  lineChartLog.setLegendVisible(false)
-  lineChartLog.setCreateSymbols(false)
-  lineChartLog.visible = false
-  lineChartLog.title = strategy.title
-
-  val fitSeries = new XYChart.Series[Number, Number] {
-    name = "GaussianFit"
-    data = Seq((0.0, 0.0)).map(toChartData)
-  }
-  val fitSeriesLog = new XYChart.Series[Number, Number] {
-    name = "GaussianFitLog"
-    data = Seq((0.0, 0.0)).map(toChartData)
-  }
-  val textField = new TextArea()
-  textField.editable = false
-  textField.focusTraversable = false
-  val logCheck = new CheckBox("log")
-  lineChart.visible <== !logCheck.selected
-  lineChartLog.visible <== logCheck.selected
-  val regionsRef = new AtomicReference[Map[String, List[Tuple2[Double, Double]]]]()
-
-  val stackPane = new StackPane() {
-    children = Seq(lineChart, lineChartLog)
-  }
-  val hBox = new HBox() {
-    children = Seq(logCheck, textField)
-  }
-
-  //  children = Seq(stackPane, hBox)
-  children = Seq(stackPane)
-
-  val recentStartTime = new AtomicDouble(0)
-  val recentPeriod = new AtomicDouble(0)
-  val recentXData = new AtomicReference[Array[Double]](new Array[Double](0))
-  val recentHistogram = new AtomicReference[Array[Double]](new Array[Double](0))
-
-  def updateHistogram(startTime: Double, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]], randomNumberCounts: Map[Int, Int]) = {
-    val histogramViewed = histograms.filter(entry => strategy.isAcceptedRND(entry._1)).map(his => his._2).reduce((a, b) => a.zip(b).map(z => z._1 + z._2))
-    val randomNumberValid = randomNumberCounts.filter(entry => strategy.isAcceptedRND(entry._1)).map(_._2).sum
-    if (integrated && recentStartTime.get == startTime && recentPeriod.get == period) {
-      recentHistogram set recentHistogram.get.zip(histogramViewed).map(z => z._1 + z._2)
-    } else {
-      recentHistogram set histogramViewed.toArray.map(i => i.toDouble)
+    val series = new XYChart.Series[Number, Number] {
+      name = "Histogram"
+      data = Seq((0.0, 0.0)).map(toChartData)
     }
-    val binWidth = period / 1000.0 / histogramViewed.size
-    recentXData set Range(0, recentHistogram.get.size).map(i => (xAxis.lowerBound.value + binWidth * (i + 0.5))).toArray
-    recentStartTime set startTime
-    recentPeriod set period
-    val xTick = calcTick(startTime / 1000.0, (startTime + period) / 1000.0)
-    val regionValues = calculateRegionValues
-    //    val report = strategy.result(regionValues, randomNumberValid)
-    Platform.runLater(() => {
-      xBoundAndTick(xTick._1, xTick._2, xTick._3)
-      series.data = recentHistogram.get.zipWithIndex.map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
-      seriesLog.data = recentHistogram.get.zipWithIndex.filter(z => z._1 > 0).map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
-      updateYAxisRange()
-    })
+    val lineChart = new AreaChart[Number, Number](xAxis, yAxis, ObservableBuffer(series))
+    lineChart.setAnimated(false)
+    lineChart.setLegendVisible(false)
+    lineChart.setCreateSymbols(false)
+    lineChart.title = strategy.title
 
-    val fit = if(strategy.autoFit){
-      //Fit
-      try{
-        val it = series.data.get().iterator()
-        val xs = ArrayBuffer[Double]()
-        val ys = ArrayBuffer[Double]()
-        while(it.hasNext){
-          val next = it.next()
-          xs += next.getXValue.doubleValue()
-          ys += next.getYValue.doubleValue()
-        }
-        val mathService = TDCParser.client.blockingInvoker("PyMathService")
-        val fitResult = mathService.singlePeakGaussianFit(xs.toList, ys.toList).asInstanceOf[List[Double]]
-        if(fitResult.forall(r=>r != Double.NaN)){
-          Some(fitResult)
-        }else{
-          None
-        }
-      }catch{
-        case _: Throwable => {
-//          e.printStackTrace()
-          None
-        }
+    val seriesLog = new XYChart.Series[Number, Number] {
+      name = "HistogramLog"
+      data = Seq((0.0, 0.0)).map(toChartData)
+    }
+    val lineChartLog = new AreaChart[Number, Number](xAxisLog, yAxisLog, ObservableBuffer(seriesLog))
+    lineChartLog.setAnimated(false)
+    lineChartLog.setLegendVisible(false)
+    lineChartLog.setCreateSymbols(false)
+    lineChartLog.visible = false
+    lineChartLog.title = strategy.title
+
+    val fitSeries = new XYChart.Series[Number, Number] {
+      name = "GaussianFit"
+      data = Seq((0.0, 0.0)).map(toChartData)
+    }
+    val fitSeriesLog = new XYChart.Series[Number, Number] {
+      name = "GaussianFitLog"
+      data = Seq((0.0, 0.0)).map(toChartData)
+    }
+    val textField = new TextArea()
+    textField.editable = false
+    textField.focusTraversable = false
+    val logCheck = new CheckBox("log")
+    lineChart.visible <== !logCheck.selected
+    lineChartLog.visible <== logCheck.selected
+    val regionsRef = new AtomicReference[Map[String, List[Tuple2[Double, Double]]]]()
+
+    val stackPane = new StackPane() {
+      children = Seq(lineChart, lineChartLog)
+    }
+    val hBox = new HBox() {
+      children = Seq(logCheck, textField)
+    }
+
+    //  children = Seq(stackPane, hBox)
+    children = Seq(stackPane)
+
+    val recentStartTime = new AtomicDouble(0)
+    val recentPeriod = new AtomicDouble(0)
+    val recentXData = new AtomicReference[Array[Double]](new Array[Double](0))
+    val recentHistogram = new AtomicReference[Array[Double]](new Array[Double](0))
+
+    val historyHistograms = new ListBuffer[Array[Double]]()
+
+    def updateHistogram(startTime: Double, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]], randomNumberCounts: Map[Int, Int]) = {
+      val histogramViewed = histograms.filter(entry => strategy.isAcceptedRND(entry._1)).map(his => his._2).reduce((a, b) => a.zip(b).map(z => z._1 + z._2))
+      val randomNumberValid = randomNumberCounts.filter(entry => strategy.isAcceptedRND(entry._1)).map(_._2).sum
+      if (integrated && recentStartTime.get == startTime && recentPeriod.get == period) {
+        recentHistogram set recentHistogram.get.zip(histogramViewed).map(z => z._1 + z._2)
+      } else {
+        recentHistogram set histogramViewed.toArray.map(i => i.toDouble)
       }
-    } else None
-    if(fit.isDefined){
-      fitCenter set (fit.get)(1)
-      fitWidth set math.abs((fit.get)(2)*2.35)
-    }else{
-      fitCenter set Double.NaN
-      fitWidth set Double.NaN
-    }
+      val binWidth = period / 1000.0 / histogramViewed.size
+      recentXData set Range(0, recentHistogram.get.size).map(i => (xAxis.lowerBound.value + binWidth * (i + 0.5))).toArray
+      recentStartTime set startTime
+      recentPeriod set period
+      val xTick = calcTick(startTime / 1000.0, (startTime + period) / 1000.0)
+      val regionValues = calculateRegionValues
+      //    val report = strategy.result(regionValues, randomNumberValid)
+      Platform.runLater(() => {
+        xBoundAndTick(xTick._1, xTick._2, xTick._3)
+        series.data = recentHistogram.get.zipWithIndex.map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
+        seriesLog.data = recentHistogram.get.zipWithIndex.filter(z => z._1 > 0).map(z => (xAxis.lowerBound.value + binWidth * (z._2 + 0.5), z._1.toDouble)).map(toChartData)
+        updateYAxisRange()
+      })
 
-    val riseTime = if(strategy.autoFit){
-      //get rise time
-      try{
-        val it = series.data.get().iterator()
-        val xs = ArrayBuffer[Double]()
-        val ys = ArrayBuffer[Double]()
-        while(it.hasNext){
-          val next = it.next()
-          xs += next.getXValue.doubleValue()
-          ys += next.getYValue.doubleValue()
+      val fit = if (strategy.autoFit) {
+        //Fit
+        try {
+          val it = series.data.get().iterator()
+          val xs = ArrayBuffer[Double]()
+          val ys = ArrayBuffer[Double]()
+          while (it.hasNext) {
+            val next = it.next()
+            xs += next.getXValue.doubleValue()
+            ys += next.getYValue.doubleValue()
+          }
+          val mathService = TDCParser.client.blockingInvoker("PyMathService")
+          val fitResult = mathService.singlePeakGaussianFit(xs.toList, ys.toList).asInstanceOf[List[Double]]
+          if (fitResult.forall(r => r != Double.NaN)) {
+            Some(fitResult)
+          } else {
+            None
+          }
+        } catch {
+          case _: Throwable => {
+            //          e.printStackTrace()
+            None
+          }
         }
-        val mathService = TDCParser.client.blockingInvoker("PyMathService")
-        val fitResult: Double = mathService.riseTimeFit(xs.toList, ys.toList)
-        if(fitResult > 1e5) None else Some(fitResult)
-      }catch{
-        case e: Throwable => {
-                   e.printStackTrace()
-          None
-        }
+      } else None
+      if (fit.isDefined) {
+        fitCenter set (fit.get) (1)
+        fitWidth set math.abs((fit.get) (2) * 2.35)
+      } else {
+        fitCenter set Double.NaN
+        fitWidth set Double.NaN
       }
-    } else None
-    if(riseTime.isDefined){
-      fitRise set (riseTime.get)
+
+      val riseTime = if (strategy.autoFit) {
+        //get rise time
+        try {
+          val it = series.data.get().iterator()
+          val xs = ArrayBuffer[Double]()
+          val ys = ArrayBuffer[Double]()
+          while (it.hasNext) {
+            val next = it.next()
+            xs += next.getXValue.doubleValue()
+            ys += next.getYValue.doubleValue()
+          }
+
+          if (historyHistograms.size > 0 && historyHistograms(0).size != ys.size) historyHistograms.clear()
+          historyHistograms += ys.toArray
+          if (historyHistograms.size > riseIntegrateTime.get) historyHistograms.remove(0)
+          val ysToFit = ys.toArray.map(_ => 0.0)
+          historyHistograms.foreach(hiso => Range(0, ysToFit.size).foreach(i => ysToFit(i) += hiso(i)))
+
+          val mathService = TDCParser.client.blockingInvoker("PyMathService")
+          val fitResult: Double = mathService.riseTimeFit(xs.toList, ysToFit.toList)
+          if (fitResult > 1e5) None else Some(fitResult)
+        } catch {
+          case e: Throwable => {
+            e.printStackTrace()
+            None
+          }
+        }
+      } else None
+      if (riseTime.isDefined) {
+        fitRise set (riseTime.get)
+      }
+
+      (strategy.title, regionValues ++ Map("RandomNumberCount" -> randomNumberValid.toDouble))
     }
 
-    (strategy.title, regionValues ++ Map("RandomNumberCount" -> randomNumberValid.toDouble))
-  }
+    def updateReport(report: String) = textField.text = report
 
-  def updateReport(report: String) = textField.text = report
+    doUpdateRegions(lineChart)
+    doUpdateRegions(lineChartLog)
 
-  doUpdateRegions(lineChart)
-  doUpdateRegions(lineChartLog)
-
-  private def doUpdateRegions(chart: AreaChart[Number, Number]) = {
-    val series = chart.data.getValue
-    strategy.regions.foreach(e => series.add(new XYChart.Series[Number, Number] {
-      name = s"Region-${e._1}"
-      val seriesData = ListBuffer[Tuple2[Double, Double]]()
-      seriesData += Tuple2(e._2._1 - 0.001, 0.001)
-      seriesData += Tuple2(e._2._1, Integer.MAX_VALUE.toDouble)
-      seriesData += Tuple2(e._2._2, Integer.MAX_VALUE.toDouble)
-      seriesData += Tuple2(e._2._2 + 0.001, 0.001)
-      data = seriesData.map(toChartData)
-    }.delegate))
-  }
-
-  private def calculateRegionValues = {
-    val histogramData = recentXData.get.zip(recentHistogram.get)
-    val regionValues = strategy.regions.map(e => {
-      val range = e._2
-      val sum = histogramData.filter(z => z._1 >= range._1 && z._1 <= range._2).map(_._2).sum
-      (e._1, sum)
-    })
-    regionValues
-  }
-
-  private def updateYAxisRange() = {
-    val yTick = calcTick(recentHistogram.get.min, recentHistogram.get.max, estimate = 8)
-    yAxis.lowerBound = yTick._1
-    yAxis.upperBound = yTick._2
-    yAxis.tickUnit = yTick._3
-    yAxisLog.lowerBound = Math.max(yTick._1, 1)
-    yAxisLog.upperBound = yTick._2
-  }
-
-  private def calcTick(min: Double, max: Double, estimate: Int = 20) = {
-    val tickEstimated = (max - min) / estimate
-    val tens = math.log10(tickEstimated).toInt
-    val tickEstRem = tickEstimated / math.pow(10, tens)
-    val tickBase = tickEstRem match {
-      case ter if ter < 1.6 => 1
-      case ter if ter < 3.6 => 2
-      case ter if ter < 8.6 => 5
-      case _ => 10
+    private def doUpdateRegions(chart: AreaChart[Number, Number]) = {
+      val series = chart.data.getValue
+      strategy.regions.foreach(e => series.add(new XYChart.Series[Number, Number] {
+        name = s"Region-${e._1}"
+        val seriesData = ListBuffer[Tuple2[Double, Double]]()
+        seriesData += Tuple2(e._2._1 - 0.001, 0.001)
+        seriesData += Tuple2(e._2._1, Integer.MAX_VALUE.toDouble)
+        seriesData += Tuple2(e._2._2, Integer.MAX_VALUE.toDouble)
+        seriesData += Tuple2(e._2._2 + 0.001, 0.001)
+        data = seriesData.map(toChartData)
+      }.delegate))
     }
-    val tickUnit = tickBase * math.pow(10, tens)
-    val viewMin = math.floor(min / tickUnit) * tickUnit
-    val viewMax = math.ceil(max / tickUnit) * tickUnit
-    val r = (viewMin, viewMax, tickUnit)
-    r
+
+    private def calculateRegionValues = {
+      val histogramData = recentXData.get.zip(recentHistogram.get)
+      val regionValues = strategy.regions.map(e => {
+        val range = e._2
+        val sum = histogramData.filter(z => z._1 >= range._1 && z._1 <= range._2).map(_._2).sum
+        (e._1, sum)
+      })
+      regionValues
+    }
+
+    private def updateYAxisRange() = {
+      val yTick = calcTick(recentHistogram.get.min, recentHistogram.get.max, estimate = 8)
+      yAxis.lowerBound = yTick._1
+      yAxis.upperBound = yTick._2
+      yAxis.tickUnit = yTick._3
+      yAxisLog.lowerBound = Math.max(yTick._1, 1)
+      yAxisLog.upperBound = yTick._2
+    }
+
+    private def calcTick(min: Double, max: Double, estimate: Int = 20) = {
+      val tickEstimated = (max - min) / estimate
+      val tens = math.log10(tickEstimated).toInt
+      val tickEstRem = tickEstimated / math.pow(10, tens)
+      val tickBase = tickEstRem match {
+        case ter if ter < 1.6 => 1
+        case ter if ter < 3.6 => 2
+        case ter if ter < 8.6 => 5
+        case _ => 10
+      }
+      val tickUnit = tickBase * math.pow(10, tens)
+      val viewMin = math.floor(min / tickUnit) * tickUnit
+      val viewMax = math.ceil(max / tickUnit) * tickUnit
+      val r = (viewMin, viewMax, tickUnit)
+      r
+    }
+
+    private def xBoundAndTick(lowerBound: Double, upperBound: Double, tickUnit: Double) = {
+      xAxis.lowerBound = lowerBound
+      xAxisLog.lowerBound = lowerBound
+      xAxis.upperBound = upperBound
+      xAxisLog.upperBound = upperBound
+      xAxis.tickUnit = tickUnit
+      xAxisLog.tickUnit = tickUnit
+    }
   }
 
-  private def xBoundAndTick(lowerBound: Double, upperBound: Double, tickUnit: Double) = {
-    xAxis.lowerBound = lowerBound
-    xAxisLog.lowerBound = lowerBound
-    xAxis.upperBound = upperBound
-    xAxisLog.upperBound = upperBound
-    xAxis.tickUnit = tickUnit
-    xAxisLog.tickUnit = tickUnit
+  class HistogramStrategy(val title: String, acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]], val autoFit: Boolean = false) {
+    def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
   }
-}
-
-class HistogramStrategy(val title: String, acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]], val autoFit: Boolean = false) {
-  def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
 }

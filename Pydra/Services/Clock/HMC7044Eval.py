@@ -17,17 +17,19 @@ class HMC7044Eval(Instrument):
         self.digitalDelayMax = 16
         self.analogDelayUnit = 0.025
         self.analogDelayMax = 23
+        self.residual = 0
 
     def setDelay(self, channel, delay):
         self.checkChannel(channel)
+        delay += self.residual
         currentTunableDelay = self.digitalDelays[channel] * self.digitalDelayUnit \
                               + self.analogDelays[channel] * self.analogDelayUnit
-        maxDelay = self.digitalDelayMax * self.digitalDelayUnit + self.analogDelayMax * self.analogDelayUnit
         realDelay = delay + currentTunableDelay
         slip = int(realDelay / self.slipUnit)
         residualDelay = realDelay - self.slipUnit * slip
         digitalDelay = int(residualDelay / self.digitalDelayUnit)
-        analogDelay = int((residualDelay - (self.digitalDelayUnit * digitalDelay)) / self.analogDelayUnit + 0.5)
+        analogDelay = int((residualDelay - (self.digitalDelayUnit * digitalDelay)) / self.analogDelayUnit)
+        self.residual = residualDelay - self.digitalDelayUnit * digitalDelay + self.analogDelayUnit * analogDelay
         while (slip > 0):
             self.slip(channel, min(3000, slip))
             slip -= min(3000, slip)
@@ -35,6 +37,7 @@ class HMC7044Eval(Instrument):
         self.analogDelay(channel, analogDelay)
         self.digitalDelays[channel] = digitalDelay
         self.analogDelays[channel] = analogDelay
+        return self.residual
 
     def setDivider(self, channel, divide):
         self.checkChannel(channel)

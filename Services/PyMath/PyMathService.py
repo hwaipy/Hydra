@@ -25,8 +25,9 @@ class PyMathService:
         try:
             return RiseTimeFit.riseTimeFit(xs, ys)
         except Exception as e:
-            print(e)
-            e.__repr__()
+            import traceback
+            msg = traceback.format_exc() # 方式1
+            print(msg)
 
 invoker = PyMathService()
 session = Pydra.Session.newSession((server, int(port)), invoker, clientName)

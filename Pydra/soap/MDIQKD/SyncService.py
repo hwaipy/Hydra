@@ -44,11 +44,20 @@ class FittingStrategy:
             d2 = [times, predicts]
         return d1, d2
 
+class EchoStrategy:
+    def __init__(self):
+        print('new echo strategy')
+        self.delay = 0
+
+    def update(self, time, delta):
+        if delta is not None:
+            self.delay = delta
+        return self.delay
 
 class SyncService():
     def __init__(self):
-        self.strategyAlice = FittingStrategy()
-        self.strategyBob = FittingStrategy()
+        self.strategyAlice = EchoStrategy()
+        self.strategyBob = EchoStrategy()
         self.aliceOn = False
         self.bobOn = False
         self.HMC7044EvalAlice = None
@@ -84,9 +93,9 @@ class SyncService():
                 aliceDelay -= bobDelay
                 charlieDelay -= bobDelay
                 bobDelay = 0
-            self.log('adjust delays: alice {}, bob {}, charlie {}.'.format(aliceDelay, bobDelay, charlieDelay))
             if self.aliceOn or self.bobOn:
-                print('set delay zaishishi action')
+                self.log('adjust delays: alice {}, bob {}, charlie {}.'.format(aliceDelay, bobDelay, charlieDelay))
+                print('adjust delays: alice {}, bob {}, charlie {}.'.format(aliceDelay, bobDelay, charlieDelay))
                 try:
                     self.HMC7044EvalAlice.setDelay(self.channelAlice, aliceDelay)
                     self.HMC7044EvalBob.setDelay(self.channelBob, bobDelay)
@@ -97,6 +106,7 @@ class SyncService():
     def updateAliceDelay(self, delay):
         self.strategyAlice.update(time.time(), -delay)
         self.log('Alice Delay updated: {}'.format(-delay))
+        print('Alice Delay updated: {}'.format(-delay))
 
     def updateBobDelay(self, delay):
         self.strategyBob.update(time.time(), -delay)
@@ -146,3 +156,10 @@ if __name__ == '__main__':
     invoker.HMC7044EvalAlice = session.blockingInvoker('HMC7044EvalAlice')
     invoker.HMC7044EvalBob = session.blockingInvoker('HMC7044EvalBob')
     invoker.HMC7044EvalCharlie = session.blockingInvoker('HMC7044EvalCharlie')
+
+
+    # while True:
+    #     invoker.HMC7044EvalBob.setDelay(0, 0.05)
+    #     time.sleep(3)
+    # invoker.HMC7044EvalCharlie.setDelay(0, 0)
+    # session.stop()

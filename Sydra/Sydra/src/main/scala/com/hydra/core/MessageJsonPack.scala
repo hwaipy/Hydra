@@ -21,7 +21,7 @@ object MessageJsonPack {
   def packString(value: Map[String, Any]) = new MessageJsonPacker().feed(value).packString()
 }
 
-class MessageJsonPacker(flatter: (Any, Option[String]) => RemoteObject = (a: Any, None) => throw new IllegalArgumentException(s"Type ${a.getClass} not recognized.")) extends MessageEncoder {
+class MessageJsonPacker(prefix:Boolean = false) extends MessageEncoder {
   private val jsValues = new ListBuffer[JsValue]()
 
   def feed(msg: Message) = feed(msg.content)
@@ -70,17 +70,18 @@ class MessageJsonPacker(flatter: (Any, Option[String]) => RemoteObject = (a: Any
   }
 
   def packString() = {
-    val str = jsValues.map(Json.stringify).mkString("")
+    val strArray = jsValues.map(Json.stringify)
     jsValues.clear()
-    str
+    val strArray2 = if(prefix){
+      strArray.map(str => s"${str.size}:${str}")
+    }else strArray
+    strArray2.mkString("")
   }
 
   def pack() = packString().getBytes("UTF-8")
 }
 
-class MessageJsonGenerator(shapper: (String, Long) => RemoteObject = (name, id) => {
-  RemoteObject(name, id)
-}, val bufferSize: Int = 10 * 1024 * 1024) extends MessageDecoder {
+class MessageJsonGenerator(prefix:Boolean = false, val bufferSize: Int = 10 * 1024 * 1024) extends MessageDecoder {
 
   private val buffer = CharBuffer.allocate(bufferSize)
   buffer.limit(0)
@@ -184,7 +185,18 @@ class MessageJsonGenerator(shapper: (String, Long) => RemoteObject = (name, id) 
   private val circePattern = Pattern.compile("expected whitespace or eof got.*line ([0-9]+), column ([0-9]+)")
 
   def next(): Option[Message] = {
-    val nextJsonString = {
+    val nextJsonString = if(prefix){
+      val str = String.valueOf(buffer.array().slice(buffer.position(), buffer.limit()))
+      val prefixLength = str.indexOf(":")
+      if (prefixLength < 0) None else{
+        val prefixNumber = str.slice(0, prefixLength).toInt
+        val end = prefixLength + 1 + prefixNumber
+        if (end > str.size) None else {
+          buffer.position(buffer.position() + end)
+          Some(str.slice(prefixLength + 1, end))
+        }
+      }
+    }else{
       val str = String.valueOf(buffer.array().slice(buffer.position(), buffer.limit()))
       io.circe.parser.parse(str) match {
         case Right(right) => {

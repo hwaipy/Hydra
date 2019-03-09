@@ -4,22 +4,22 @@ from scipy import asarray as ar, exp
 import numpy as np
 import matplotlib.pyplot as plt
 
-global riseRef
-global ysBuffer
-global ysBufferCount
+# global riseRef
+# global ysBuffer
+# global ysBufferCount
 
-riseRef = -1
-ysBuffer = []
-ysBufferCount = 0
+# riseRef = -1
+# ysBuffer = []
+# ysBufferCount = 0
 
 def riseTimeFit(xs, ys):
-    global ysBuffer, ysBufferCount
-    if len(ysBuffer) is 0:
-        ysBuffer = [0] * len(ys)
-
-    for i in range(0, len(ys)):
-        ys[i] += ysBuffer[i]
-
+    # global ysBuffer, ysBufferCount
+    # if len(ysBuffer) is 0:
+    #     ysBuffer = [0] * len(ys)
+    #
+    # for i in range(0, len(ys)):
+    #     ys[i] += ysBuffer[i]
+    #
     SPD = [ys[0]]
     for y in ys[1:]:
         SPD.append(SPD[-1] + y)
@@ -36,11 +36,11 @@ def riseTimeFit(xs, ys):
             fitXs.append(xs[i])
             fitYs.append(SPD[i])
 
-    ysBufferCount += 1
-    if ysBufferCount <= 4:
-        for i in range(0, len(ys)):
-            ysBuffer[i] = ys[i]
-        return 1e10
+    # ysBufferCount += 1
+    # if ysBufferCount <= 4:
+    #     for i in range(0, len(ys)):
+    #         ysBuffer[i] = ys[i]
+    #     return 1e10
 
 
     def linear(x, a, b):
@@ -53,11 +53,11 @@ def riseTimeFit(xs, ys):
     # plt.plot(fitXs, fitYs)
     # plt.plot(fitXs, [linear(x, popt[0], popt[1]) for x in fitXs])
     # plt.show()
-    global riseRef
+    # global riseRef
     rise = -popt[1]/popt[0]
-    if riseRef is -1:
-        riseRef = rise
-    print((rise-riseRef)*1000)
+    # if riseRef is -1:
+    #     riseRef = rise
+    # print((rise-riseRef)*1000)
     ysBuffer = []
     ysBufferCount = 0
     return rise

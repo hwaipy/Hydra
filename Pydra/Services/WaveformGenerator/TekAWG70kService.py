@@ -859,7 +859,10 @@ class AWGDev:
 
         waveform1 = [(w * 2 - 1) for w in waveform1]
         waveform2 = [(w * 2 - 1) for w in waveform2]
+        marker11 = [0 if w == 0 else 1 for w in marker11]
+        marker12 = [0 if w == 0 else 1 for w in marker12]
         marker21 = [0 if w == 0 else 1 for w in marker21]
+        marker22 = [0 if w == 0 else 1 for w in marker22]
 
         self.dev.writeWaveform("Waveform1", waveform1)
         self.dev.addMarker('Waveform1', [[marker11[i], marker12[i]] for i in range(0, len(waveform1))])
@@ -894,9 +897,9 @@ if __name__ == "__main__":
     encoder.betterAMTimeAmpPulse1 = 0.7
     encoder.pulseWidthPhase = 5
     encoder.advancedPM = False
-    encoder.ampDecoyZSlope = -0.5
-    encoder.ampDecoyXSlope = 0.3
-    encoder.ampDecoyYSlope = -0.1
+    # encoder.ampDecoyZSlope = -0.5
+    # encoder.ampDecoyXSlope = 0.3
+    # encoder.ampDecoyYSlope = -0.1
     startTime = time.time()
     waveforms = encoder.generateWaveforms()
     stopTime = time.time()

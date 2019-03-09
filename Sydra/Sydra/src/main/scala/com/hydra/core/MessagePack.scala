@@ -43,7 +43,7 @@ object MessagePack {
   }
 }
 
-class MessagePacker(flatter: (Any, Option[String]) => RemoteObject = (a: Any, None) => throw new IllegalArgumentException(s"Type ${a.getClass} not recognized.")) extends MessageEncoder {
+class MessagePacker(prefix:Boolean = false, flatter: (Any, Option[String]) => RemoteObject = (a: Any, None) => throw new IllegalArgumentException(s"Type ${a.getClass} not recognized.")) extends MessageEncoder {
   private val packer = org.msgpack.core.MessagePack.newDefaultBufferPacker
   private val bufferArray = new Array[Byte](8)
   private val buffer = ByteBuffer.wrap(bufferArray)
@@ -146,7 +146,14 @@ class MessagePacker(flatter: (Any, Option[String]) => RemoteObject = (a: Any, No
   def pack(): Array[Byte] = {
     val array = packer.toByteArray
     packer.clear
-    array
+    if(prefix){
+      val prefixedArray = new Array[Byte](5+array.size)
+      val prefixedBuffer = ByteBuffer.wrap(prefixedArray)
+      prefixedBuffer.put(0xc9.toByte)
+      prefixedBuffer.putInt(array.size)
+      prefixedBuffer.put(array)
+      prefixedArray
+    } else array
   }
 }
 

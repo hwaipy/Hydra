@@ -19,5 +19,7 @@ trait MessageDecoder {
 object MessageEncodingProtocol {
   val PROTOCOL_MSGPACK = "MSGPACK"
   val PROTOCOL_JSON = "JSON"
-  val protocols = Seq(PROTOCOL_MSGPACK, PROTOCOL_JSON)
+//  val PROTOCOL_MSGPACK_PREFIX = "MSGPACK_PREFIX"
+  val PROTOCOL_JSON_PREFIX = "JSON_PREFIX"
+  val protocols = Seq(PROTOCOL_MSGPACK, PROTOCOL_JSON, PROTOCOL_JSON_PREFIX)
 }

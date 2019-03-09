@@ -224,12 +224,13 @@ protected class MessagePackEncoder(protocol: String = "") extends MessageToByteE
   override def encode(ctx: ChannelHandlerContext, msg: Message, out: ByteBuf) = {
     try {
       val protocol = if (this.protocol != "") this.protocol else ctx.channel.attr(AttributeKey.valueOf[String]("MessageEncodingProtocol")).get
-      val packer = if (protocol == MessageEncodingProtocol.PROTOCOL_MSGPACK) {
-        ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).get match {
-          case null => new MessagePacker
-          case flatter => new MessagePacker(flatter)
-        }
-      } else if (protocol == MessageEncodingProtocol.PROTOCOL_JSON) new MessageJsonPacker()
+      val packer =
+        if (protocol == MessageEncodingProtocol.PROTOCOL_MSGPACK) {
+          ctx.channel.attr(AttributeKey.valueOf[(Any, Option[String]) => RemoteObject]("Flatter")).get match {
+            case null => new MessagePacker()
+            case flatter => new MessagePacker(flatter = flatter)
+          }
+        } else if (protocol == MessageEncodingProtocol.PROTOCOL_JSON || protocol == MessageEncodingProtocol.PROTOCOL_JSON_PREFIX) new MessageJsonPacker(protocol == MessageEncodingProtocol.PROTOCOL_JSON_PREFIX)
       else throw new IllegalArgumentException(s"No valid MessageEncodingProtocol assgined.")
       val pack = packer.feed(msg).pack
       ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get match {
@@ -254,7 +255,10 @@ protected class MessagePackDecoder(protocol: String = "") extends ByteToMessageD
           in.markReaderIndex()
           val firstByte = in.readByte()
           in.resetReaderIndex()
-          val detectedProtocol = if (firstByte == '{'.toByte) MessageEncodingProtocol.PROTOCOL_JSON else MessageEncodingProtocol.PROTOCOL_MSGPACK
+          val detectedProtocol =
+            if (firstByte == '{'.toByte) MessageEncodingProtocol.PROTOCOL_JSON
+            else if (firstByte >= '0' && firstByte <= '9') MessageEncodingProtocol.PROTOCOL_JSON_PREFIX
+            else MessageEncodingProtocol.PROTOCOL_MSGPACK
           ctx.channel.attr(AttributeKey.valueOf[String]("MessageEncodingProtocol")).set(detectedProtocol)
 //          println(s"Detected Protocol: ${detectedProtocol}")
           detectedProtocol
@@ -262,7 +266,7 @@ protected class MessagePackDecoder(protocol: String = "") extends ByteToMessageD
         val g = if (protocol == MessageEncodingProtocol.PROTOCOL_MSGPACK) {
           val shapper = ctx.channel.attr(AttributeKey.valueOf[(String, Long) => RemoteObject]("Shapper")).get
           new MessageGenerator(shapper)
-        } else if (protocol == MessageEncodingProtocol.PROTOCOL_JSON) new MessageJsonGenerator()
+        } else if (protocol == MessageEncodingProtocol.PROTOCOL_JSON || protocol == MessageEncodingProtocol.PROTOCOL_JSON_PREFIX) new MessageJsonGenerator(protocol == MessageEncodingProtocol.PROTOCOL_JSON_PREFIX)
         else throw new IllegalArgumentException(s"No valid MessageEncodingProtocol assgined.")
         generatorAttr.set(g)
         g
@@ -456,6 +460,14 @@ private class MessageServerInvokeHandler(ctx: ChannelHandlerContext) {
   def sessionsInformation() = {
     val sessions = MessageSession.getSessions
     sessions.map(session => session.summary)
+  }
+
+  def kick(name: String)= {
+    val session = MessageSession.getSessions.filter(session => session.name == name).headOption
+    session match{
+      case Some(session) => session.close
+      case None => throw new RemoteInvokeException(s"Session[${name}] does not exist.")
+    }
   }
 }
 

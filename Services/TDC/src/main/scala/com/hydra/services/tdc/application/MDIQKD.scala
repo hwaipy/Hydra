@@ -12,6 +12,8 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("Delay") = 0
   configuration("TriggerChannel") = 0
   configuration("SignalChannel") = 1
+  configuration("TimeAliceChannel") = 4
+  configuration("TimeBobChannel") = 5
   configuration("BinCount") = 100
 
   override def configure(key: String, value: Any) = key match {
@@ -32,6 +34,14 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
       val sc: Int = value
       sc >= 0 && sc < channelCount
     }
+    case "TimeAliceChannel" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
+    case "TimeBobChannel" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
     case "BinCount" => {
       val sc: Int = value
       sc > 0 && sc < 2000
@@ -43,15 +53,38 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     val period: Double = configuration("Period")
     val delay: Double = configuration("Delay")
     val triggerChannel: Int = configuration("TriggerChannel")
+    val timeAliceChannel: Int = configuration("TimeAliceChannel")
+    val timeBobChannel: Int = configuration("TimeBobChannel")
     val signalChannel: Int = configuration("SignalChannel")
     val binCount: Int = configuration("BinCount")
+    val map = mutable.HashMap[String, Any]("TriggerChannel" -> triggerChannel,"SignalChannel" -> signalChannel, "Delay" -> delay, "Period" -> period)
 
     val signalList = dataBlock.content(signalChannel)
     val triggerList = dataBlock.content(triggerChannel)
+    val timeAliceList = dataBlock.content(timeAliceChannel)
+    val timeBobList = dataBlock.content(timeBobChannel)
+    val meta = this.meta(signalList, triggerList, delay, period, randomNumbers)
+    RandomNumber.ALL_RANDOM_NUMBERS.foreach(rn => {
+      val validMeta = meta.filter(z => z._1 == rn)
+      val histoPulse = new Histogram(validMeta.map(_._2), binCount, 0, period.toLong, 1)
+      map.put(s"Histogram With RandomNumber[${rn.RN}]", histoPulse.yData.toList)
+      map.put(s"Count of RandomNumber[${rn.RN}]", randomNumbers.map(_.RN).count(_ == rn.RN))
+    })
+    val metaTimeAlice = this.meta(timeAliceList, triggerList, delay, period, randomNumbers)
+    val histoTimeAlice = new Histogram(metaTimeAlice.map(_._2), binCount, 0, period.toLong, 1)
+    map.put(s"Histogram Alice Time", histoTimeAlice.yData.toList)
+    val metaTimeBob = this.meta(timeBobList, triggerList, delay, period, randomNumbers)
+    val histoTimeBob = new Histogram(metaTimeBob.map(_._2), binCount, 0, period.toLong, 1)
+    map.put(s"Histogram Bob Time", histoTimeBob.yData.toList)
+
+    map.toMap
+  }
+
+  private def meta(signalList: Array[Long], triggerList: Array[Long], delay: Double, period:Double, randomNumbers: Array[RandomNumber])={
     val triggerIterator = triggerList.iterator
     val currentTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else 0)
     val nextTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
-    val meta = signalList.map(time => {
+    signalList.map(time => {
       while(time>=nextTriggerRef.get){
         currentTriggerRef set nextTriggerRef.get
         nextTriggerRef.set(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
@@ -62,14 +95,6 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
       val delta = (time - delay - currentTriggerRef.get - period * pulseIndex).toLong
       (randomNumber, delta)
     })
-    val map = mutable.HashMap[String, Any]("TriggerChannel" -> triggerChannel,"SignalChannel" -> signalChannel, "Delay" -> delay, "Period" -> period)
-    RandomNumber.ALL_RANDOM_NUMBERS.foreach(rn => {
-      val validMeta = meta.filter(z => z._1 == rn)
-      val histoPulse = new Histogram(validMeta.map(_._2), binCount, 0, period.toLong, 1)
-      map.put(s"Histogram With RandomNumber[${rn.RN}]", histoPulse.yData.toList)
-      map.put(s"Count of RandomNumber[${rn.RN}]", randomNumbers.map(_.RN).count(_ == rn.RN))
-    })
-    map.toMap
   }
 }
 
