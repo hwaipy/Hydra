@@ -27,11 +27,12 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.lang.Thread.UncaughtExceptionHandler
 import java.util.Properties
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.lang.reflect.InvocationTargetException
+import java.net.{DatagramPacket, DatagramSocket, InetAddress}
 
 import org.slf4j.LoggerFactory
 
@@ -231,7 +232,7 @@ protected class MessagePackEncoder(protocol: String = "") extends MessageToByteE
             case flatter => new MessagePacker(flatter = flatter)
           }
         } else if (protocol == MessageEncodingProtocol.PROTOCOL_JSON || protocol == MessageEncodingProtocol.PROTOCOL_JSON_PREFIX) new MessageJsonPacker(protocol == MessageEncodingProtocol.PROTOCOL_JSON_PREFIX)
-      else throw new IllegalArgumentException(s"No valid MessageEncodingProtocol assgined.")
+        else throw new IllegalArgumentException(s"No valid MessageEncodingProtocol assgined.")
       val pack = packer.feed(msg).pack
       ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get match {
         case null =>
@@ -260,7 +261,7 @@ protected class MessagePackDecoder(protocol: String = "") extends ByteToMessageD
             else if (firstByte >= '0' && firstByte <= '9') MessageEncodingProtocol.PROTOCOL_JSON_PREFIX
             else MessageEncodingProtocol.PROTOCOL_MSGPACK
           ctx.channel.attr(AttributeKey.valueOf[String]("MessageEncodingProtocol")).set(detectedProtocol)
-//          println(s"Detected Protocol: ${detectedProtocol}")
+          //          println(s"Detected Protocol: ${detectedProtocol}")
           detectedProtocol
         }
         val g = if (protocol == MessageEncodingProtocol.PROTOCOL_MSGPACK) {
@@ -462,9 +463,9 @@ private class MessageServerInvokeHandler(ctx: ChannelHandlerContext) {
     sessions.map(session => session.summary)
   }
 
-  def kick(name: String)= {
+  def kick(name: String) = {
     val session = MessageSession.getSessions.filter(session => session.name == name).headOption
-    session match{
+    session match {
       case Some(session) => session.close
       case None => throw new RemoteInvokeException(s"Session[${name}] does not exist.")
     }
@@ -850,4 +851,22 @@ private class InvokeItem(client: MessageClient, target: String, id: Long = 0, na
     if (id > 0) builder.objectID(id)
     builder.create
   }
+}
+
+class BroadcastServer(address: InetAddress, port: Int, message:String, interval: Long = 1000) {
+  private val running = new AtomicBoolean(true)
+  private val thread = new Thread(() => {
+    val socket = new DatagramSocket
+    val arr = message.getBytes("UTF-8")
+    while (running get) {
+      val packet = new DatagramPacket(arr, arr.length, address, port)
+      socket.send(packet)
+      Thread.sleep(interval)
+    }
+    socket.close
+  })
+
+  def start() = thread.start()
+
+  def stop() = running set false
 }

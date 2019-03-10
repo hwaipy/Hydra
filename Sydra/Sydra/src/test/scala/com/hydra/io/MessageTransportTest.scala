@@ -9,8 +9,10 @@ import com.hydra.io.RemoteObject
 import com.hydra.io.BlockingRemoteObject
 import com.hydra.io.SessionListener
 import java.io.IOException
+import java.net.{DatagramPacket, DatagramSocket, InetAddress, MulticastSocket}
 import java.util.concurrent.CountDownLatch
 
+import com.hydra.app.HydraServerApp.{broadcastAddress, broadcastPort}
 import com.hydra.core.MessageEncodingProtocol
 import org.scalatest._
 import com.hydra.core.MessageType._
@@ -585,9 +587,8 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     mc2.stop
   }
 
-
   test("Test kill client.") {
-    class Obj(answer:String) {
+    class Obj(answer: String) {
       def func() = answer
     }
     val mc1 = new MessageClient("TestClient1", "localhost", port, new Obj("Answer"))
@@ -616,5 +617,19 @@ class MessageTransportTest extends FunSuite with BeforeAndAfter with BeforeAndAf
     mc3.stop
   }
 
+  test("Test UDP broadcast.") {
+    val messageExpected = "Hydra Server Test"
+    val broadcastServer = new BroadcastServer(InetAddress.getByName("192.168.25.255"), 20100, messageExpected)
+    broadcastServer.start
+
+    val serverSocket = new DatagramSocket(20100)
+    val buffer = new Array[Byte](1000)
+    val packet = new DatagramPacket(buffer, buffer.length)
+    serverSocket.receive(packet)
+    val message = new String(packet.getData.slice(0, packet.getLength), "UTF-8")
+    assert(message == messageExpected)
+    serverSocket.close()
+    broadcastServer.stop
+  }
 }
 
