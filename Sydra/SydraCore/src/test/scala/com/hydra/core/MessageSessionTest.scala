@@ -1,26 +1,6 @@
 package com.hydra.core
 
-//import com.hydra.io.MessageClient
-//import com.hydra.io.MessageServer
-//import com.hydra.io.MessageSession
-//import com.hydra.io.MessageTransport
-//import com.hydra.io.RemoteInvokeException
-//import com.hydra.io.RemoteObject
-//import com.hydra.io.BlockingRemoteObject
-//import com.hydra.io.SessionListener
-//import java.io.IOException
-//import java.net.{DatagramPacket, DatagramSocket, InetAddress, MulticastSocket}
-//import java.util.concurrent.CountDownLatch
-//
-//import com.hydra.app.HydraServerApp.{broadcastAddress, broadcastPort}
-//import com.hydra.core.MessageEncodingProtocol
 import org.scalatest._
-//import com.hydra.core.MessageType._
-//import com.hydra.io.MessageTransport.FutureDirect
-//
-//import scala.concurrent.Await
-//import scala.concurrent.duration._
-//import scala.language.postfixOps
 
 class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   val manager = new MessageSessionManager
@@ -78,7 +58,7 @@ class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test dynamic invoker.") {
-//        val client = new MessageClient("", "localhost", port, None)
+    val client = new MessageClient("", "localhost", port, None)
     //    val invoker = client.toMessageInvoker()
     //    val m1 = invoker.fun1(a = 1, 2, "3", b = null, c = Vector(1, 2, "3d"))
     //    assert(m1.messageType == Request)
