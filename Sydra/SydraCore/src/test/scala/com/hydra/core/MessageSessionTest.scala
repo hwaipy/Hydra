@@ -1,6 +1,11 @@
 package com.hydra.core
 
+import java.io.IOException
+
 import org.scalatest._
+import com.hydra.core.MessageType._
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
   val manager = new MessageSessionManager
@@ -58,105 +63,52 @@ class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   }
 
   test("Test dynamic invoker.") {
-    val client = new MessageClient("", "localhost", port, None)
-    //    val invoker = client.toMessageInvoker()
-    //    val m1 = invoker.fun1(a = 1, 2, "3", b = null, c = Vector(1, 2, "3d"))
-    //    assert(m1.messageType == Request)
-    //    assert(m1.requestContent == ("fun1", 2 :: "3" :: Nil, Map("a" -> 1, "b" -> null, "c" -> Vector(1, 2, "3d"))))
-    //    intercept[IllegalArgumentException] {
-    //      val m1 = invoker.fun2(To = 1, 2, "3", b = null, c = Vector(1, 2, "3d"))
-    //    }
-    //    val invoker2 = client.toMessageInvoker("OnT")
-    //    val m2 = invoker2.fun2
-    //    assert(m2.messageType == Request)
-    //    assert(m2.requestContent == ("fun2", Nil, Map()))
-    //    assert(m2.to.get == "OnT")
-    //    client.stop.await
+    val client = new MessageClient(new LocalMessageChannel(manager))
+    val invoker = client.messageInvoker()
+    val m1 = invoker.fun1(a = 1, 2, "3", b = null, c = Vector(1, 2, "3d"))
+    assert(m1.messageType == Request)
+    assert(m1.requestContent == ("fun1", 2 :: "3" :: Nil, Map("a" -> 1, "b" -> null, "c" -> Vector(1, 2, "3d"))))
+    intercept[IllegalArgumentException] {
+      val m1 = invoker.fun2(To = 1, 2, "3", b = null, c = Vector(1, 2, "3d"))
+    }
+    val invoker2 = client.messageInvoker("OnT")
+    val m2 = invoker2.fun2
+    assert(m2.messageType == Request)
+    assert(m2.requestContent == ("fun2", Nil, Map()))
+    assert(m2.to.get == "OnT")
   }
 
-  //  test("Test remote invoke and future.") {
-  //    val client1 = new MessageClient("", "localhost", port, None)
-  //    val f1 = client1.start
-  //    f1.await(1000)
-  //    assert(f1.isSuccess)
-  //    val invoker1 = client1.asynchronousInvoker()
-  //    val future1 = invoker1.co
-  //    val latch1 = new CountDownLatch(1)
-  //    var uS1: Any = None
-  //    future1.onComplete { case t =>
-  //      uS1 = t.isSuccess match {
-  //        case true => t.get
-  //        case _ => t.failed.get
-  //      }
-  //      latch1.countDown
-  //    }
-  //    assert(latch1.await(2, java.util.concurrent.TimeUnit.SECONDS))
-  //    assert(uS1.getClass.getSimpleName == "RemoteInvokeException")
-  //    assert(uS1.asInstanceOf[RemoteInvokeException].getMessage == "Method not found: co.")
-  //    client1.stop.await
-  //  }
-  //
-  //  test("Test register client.") {
-  //    val mc1 = new MessageClient("TestClient1", "localhost", port, None)
-  //    val f1 = mc1.start
-  //    f1.await(1000)
-  //    assert(f1.isSuccess)
-  //    val future1 = mc1.connect
-  //    val r1 = Await.result[Any](future1, 1 second)
-  //    assert(r1 == Unit)
-  //    val mc2 = new MessageClient("TestClient2", "localhost", port, None)
-  //    val f2 = mc2.start
-  //    f2.await(1000)
-  //    assert(f2.isSuccess)
-  //    val invoker2 = mc2.blockingInvoker()
-  //    val r2 = invoker2.connect("TestClient2")
-  //    assert(r2 == Unit)
-  //    intercept[RemoteInvokeException] {
-  //      try {
-  //        val r3 = invoker2.connect("TestClient2")
-  //      }
-  //      catch {
-  //        case e: NullPointerException => e.printStackTrace
-  //        case e: Throwable => throw e
-  //      }
-  //    }
-  //    mc1.stop
-  //    mc2.stop
-  //  }
-  //
-  //  test("Test invoke other client") {
-  //    class Target {
-  //      def v8 = "V8 great!"
-  //
-  //      def v9 = throw new IllegalArgumentException("V9 not good.")
-  //
-  //      def v10 = throw new IOException("V10 have problems.")
-  //
-  //      def v(i: Int, b: Boolean) = "OK"
-  //    }
-  //    val mc1 = new MessageClient("T1-Benz", "localhost", port, new Target)
-  //    val f1 = mc1.start.sync
-  //    assert(f1.isDone)
-  //    assert(f1.isSuccess)
-  //    mc1.blockingInvoker().connect("T1-Benz")
-  //    val checker = MessageClient.newClient("localhost", port, "T1-Checher")
-  //    val benzChecker = checker.blockingInvoker("T1-Benz")
-  //    val v8r = benzChecker.v8
-  //    assert(v8r == "V8 great!")
-  //    intercept[RemoteInvokeException] {
-  //      val v9r = benzChecker.v9
-  //    }
-  //    intercept[RemoteInvokeException] {
-  //      val v10r = benzChecker.v10
-  //    }
-  //    assert(benzChecker.v(1, false) == "OK")
-  //    intercept[RemoteInvokeException] {
-  //      benzChecker.v(false, false)
-  //    }
-  //    mc1.stop.await
-  //    checker.stop.await
-  //  }
-  //
+  test("Test remote invoke and future.") {
+    class Target {
+      def v8 = "V8 great!"
+
+      def v9 = throw new IllegalArgumentException("V9 not good.")
+
+      def v10 = throw new IOException("V10 have problems.")
+
+      def v(i: Int, b: Boolean) = "OK"
+    }
+    val service = new MessageClient(new LocalMessageChannel(manager), "T1-Benz", new Target)
+    assert(service.serviceRegistrationFuture.isDefined)
+    Await.result[Any](service.serviceRegistrationFuture.get, 2 seconds)
+    //    val checker = new MessageClient(new LocalMessageChannel(manager))
+    //    val benzChecker = checker.blockingInvoker("T1-Benz")
+    //    val v8r = benzChecker.v8
+    //    assert(v8r == "V8 great!")
+    //    intercept[RemoteInvokeException] {
+    //      val v9r = benzChecker.v9
+    //    }
+    //    intercept[RemoteInvokeException] {
+    //      val v10r = benzChecker.v10
+    //    }
+    //    assert(benzChecker.v(1, false) == "OK")
+    //    intercept[RemoteInvokeException] {
+    //      benzChecker.v(false, false)
+    //    }
+    //    mc1.stop.await
+    //    checker.stop.await
+  }
+
   //  test("Test invoke and return Object") {
   //    val oc = MessageClient.newClient("localhost", port, "T3-Benz", new Object {
   //      def func = new Object() {

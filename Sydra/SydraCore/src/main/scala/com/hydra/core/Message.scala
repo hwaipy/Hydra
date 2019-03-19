@@ -105,11 +105,11 @@ class Message private(val content: Map[String, Any]) {
   }
 
   def to = {
-    get[String](Message.KeyTo)
+    get[Any](Message.KeyTo)
   }
 
   def from = {
-    get[String](Message.KeyFrom)
+    get[Any](Message.KeyFrom)
   }
 
   def objectID = {
@@ -198,14 +198,14 @@ class MessageBuilder private(updateID: Boolean = true) {
     this
   }
 
-  def asResponse(content: Any, responseID: Long, to: Option[String] = None) = {
+  def asResponse(content: Any, responseID: Long, to: Option[Any] = None) = {
     asType(Response, content)
     this.content += Message.KeyResponseID -> responseID
     if (to.isDefined) this.content += Message.KeyTo -> to.get
     this
   }
 
-  def asError(content: Any, responseID: Long, to: Option[String] = None) = {
+  def asError(content: Any, responseID: Long, to: Option[Any] = None) = {
     asType(Error, content)
     this.content += Message.KeyResponseID -> responseID
     if (to.isDefined) this.content += Message.KeyTo -> to.get

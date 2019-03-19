@@ -1,19 +1,19 @@
 package com.hydra.core
 
+import java.lang.Thread.UncaughtExceptionHandler
+import java.util.concurrent.{Executors, ThreadFactory}
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import com.hydra.core.MessageType._
+
 import scala.language.dynamics
+import scala.language.postfixOps
 
 protected abstract class DynamicRemoteObject(val client: MessageClient, val remoteName: String = "", val remoteID: Long = 0) extends Dynamic {
-  //  def asMessageRemoteObject = new MessageRemoteObject(client, remoteName, remoteID, Some(this))
-  //
-  //  def asBlockingRemoteObject(timeout: Duration = 10 second) = new BlockingRemoteObject(client, remoteName, remoteID, timeout, Some(this))
-  //
-  //  def asAsynchronousRemoteObject = new AsynchronousRemoteObject(client, remoteName, remoteID, Some(this))
-
   override def toString() = s"RemoteObject[$remoteName,$remoteID]"
 }
 
@@ -64,8 +64,16 @@ private class InvokeItem(client: MessageClient, target: String, id: Long = 0, na
   }
 }
 
+class MessageClient(channel: MessageChannel, serviceName: Option[String], invokeHandler: Any) {
+  def this(channel: MessageChannel, serviceName: String, invokeHandler: Any = None) = this(channel, Some(serviceName), invokeHandler)
 
-class MessageClient(channel: MessageChannel, serviceName: Option[String] = None, invokeHandler: Any = None) {
+  def this(channel: MessageChannel) = this(channel, None, None)
+
+  val serviceRegistrationFuture = serviceName match {
+    case None => None
+    case Some(name) => Some(asynchronousInvoker().registerAsService(name))
+  }
+
   def sendMessage(msg: Message) = {
     require(msg.messageType == Request)
     channel.future(msg)
@@ -76,6 +84,11 @@ class MessageClient(channel: MessageChannel, serviceName: Option[String] = None,
     Await.result[Any](future, timeout)
   }
 
+  def messageInvoker(target: String = "") = new MessageRemoteObject(this, target)
+
+  def asynchronousInvoker(target: String = "") = new AsynchronousRemoteObject(this, target)
+
+  def blockingInvoker(target: String = "", timeout: Duration = 10 second) = new BlockingRemoteObject(this, target, timeout = timeout)
 }
 
 trait MessageChannel {
@@ -125,6 +138,91 @@ trait MessageChannel {
   //  }
 }
 
+class LocalMessageChannel(manager: MessageSessionManager) extends MessageChannel {
+  private val session = manager.newSession()
+  session.setMessageSendingListener(() => {
+    while (session.getMessageSendingQueueSize > 0) {
+      val sendingMessage = session.takeMessageSendingQueueHead
+      println(s"one message to send: ${sendingMessage}")
+    }
+  })
+
+  def future(message: Message): Future[Any] = {
+
+    //    val futureEntry = new FutureEntry
+    manager.messageDispatch(message.from match {
+      case None => message + (Message.KeyFrom, session.id)
+      case from => message
+    })
+
+    Future[Any] {
+      //      if (singleLatch.getAndIncrement == 0) {
+      //        if (!channelFuture.isDone) throw new RuntimeException(s"ChannelFuture not done: $channelFuture")
+      //        if (!channelFuture.isSuccess) throw new RuntimeException(s"ChannelFuture failed: $channelFuture")
+      //        if (futureEntry.result.isDefined) futureEntry.result.get
+      //        else if (futureEntry.cause.isDefined) throw futureEntry.cause.get
+      //        else throw new RuntimeException("Error state: FutureEntry not defined.")
+      //      }
+    }(new ExecutionContext {
+      def execute(runnable: Runnable): Unit = {
+        SingleThreadExecutionContext.execute(new Runnable() {
+          override def run() {
+            //            waitingMap.synchronized {
+            //              if (waitingMap.contains(id)) throw new IllegalArgumentException("MessageID have been used.")
+            //              waitingMap.put(id, (futureEntry, runnable))
+            //            }
+            //            channelFuture = channel.writeAndFlush(msg)
+            //            try {
+            //              channelFuture.addListener(new ChannelFutureListener() {
+            //                override def operationComplete(future: ChannelFuture) {
+            //                  if (!future.isSuccess) {
+            //                    futureEntry.cause = Some(future.cause)
+            //                    runnable.run
+            //                  }
+            //                }
+            //              })
+            //            } catch {
+            //              case e: Throwable => e.printStackTrace
+            //            }
+          }
+        })
+      }
+
+      def reportFailure(cause: Throwable): Unit = {
+        //              println(s"nn:$cause")
+      }
+    })
+  }
+}
+
+private object SingleThreadExecutionContext extends ExecutionContext with UncaughtExceptionHandler {
+  private lazy val SingleThreadPool = Executors.newSingleThreadExecutor(new ThreadFactory() {
+    private lazy val ThreadCount = new AtomicInteger(0)
+
+    def newThread(runnable: Runnable): Thread = {
+      val t = new Thread(runnable)
+      t.setDaemon(true)
+      t.setName(s"SingleThreadExecutionContextThread-${ThreadCount.getAndIncrement}")
+      t.setUncaughtExceptionHandler(SingleThreadExecutionContext.this)
+      t.setPriority(Thread.NORM_PRIORITY)
+      t
+    }
+  })
+
+  def execute(runnable: Runnable): Unit = {
+    SingleThreadPool.submit(runnable).get
+  }
+
+  def reportFailure(cause: Throwable): Unit = {
+    cause.printStackTrace()
+  }
+
+  def uncaughtException(thread: Thread, cause: Throwable) {
+    cause.printStackTrace()
+  }
+}
+
+
 //class MessageClient(val name: String, host: String, port: Int, invokeHandler: Any = None, autoReconnect: Boolean = false, protocol: String = MessageEncodingProtocol.PROTOCOL_MSGPACK) {
 //
 //  import com.hydra.core.MessageType._
@@ -135,11 +233,6 @@ trait MessageChannel {
 //
 //  def stop = workerGroup.shutdownGracefully
 //
-//  def toMessageInvoker(target: String = "") = new MessageRemoteObject(this, target)
-//
-//  def asynchronousInvoker(target: String = "") = new AsynchronousRemoteObject(this, target)
-//
-//  def blockingInvoker(target: String = "", timeout: Duration = 10 second) = new BlockingRemoteObject(this, target, timeout = timeout)
 //
 //  def connect() = this.asynchronousInvoker().connect(name)
 //

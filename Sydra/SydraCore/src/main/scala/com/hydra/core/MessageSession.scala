@@ -3,6 +3,8 @@ package com.hydra.core
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 import collection.JavaConverters._
+import com.hydra.core.MessageType._
+import java.util.concurrent.LinkedBlockingQueue
 
 class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val creationTime = System.currentTimeMillis
@@ -11,12 +13,11 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val bytesReceived = new AtomicLong(0)
   private val bytesSend = new AtomicLong(0)
   private val serviceName = new AtomicReference[Option[String]](None)
+  private val messageSendingQueue = new LinkedBlockingQueue[Message]()
+  private val messageSendingListener = new AtomicReference[Option[() => Unit]](None)
 
   def close = {
-    println(s"closing ${id}")
-    println(manager.servicesCount)
     manager.unregisterSession(this)
-    println(manager.servicesCount)
   }
 
   def registerAsServcie(serviceName: String) = {
@@ -52,6 +53,24 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   //  }
   //
   //  def summary = (id, name, connectedTime, messageSend.get, messageReceived.get, bytesSend.get, bytesReceived.get)
+  def sendMessage(message: Message) = {
+    messageSendingQueue.put(message)
+    messageSendingListener.get.foreach(l => l())
+  }
+
+  def setMessageSendingListener(listener: () => Unit) = messageSendingListener set Some(listener)
+
+  def getMessageSendingQueueSize = messageSendingQueue.size
+
+  def takeMessageSendingQueueHead = messageSendingQueue.take()
+
+  private class Invoker {
+    def registerAsService(serviceName: String) = MessageSession.this.registerAsServcie("")
+  }
+
+  private val invoker = new Invoker
+
+  def runtimeInvoker = new RuntimeInvoker(invoker)
 }
 
 class MessageSessionManager {
@@ -75,6 +94,52 @@ class MessageSessionManager {
         session.close
         throw new MessageException("Failed in creating new Service.", e)
       }
+    }
+  }
+
+  def messageDispatch(message: Message) = {
+    message.to match {
+      case None => messageDispatchLocal(message)
+      //      case Some(to) => {
+      //        val session = ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get
+      //        if (session == null) {
+      //          writeAndFlush(ctx, m.error("Client has not connected."))
+      //        } else {
+      //          MessageSession.getSession(to) match {
+      //            case None => writeAndFlush(ctx, m.error(s"Target $to does not exists."))
+      //            case Some(toSession) => {
+      //              val m2 = m.builder.+=(Message.KeyFrom -> session.name).create
+      //              toSession.writeAndFlush(m2)
+      //              dealWithForwardedRemoteObject(ctx, m, session, toSession)
+      //            }
+      //          }
+      //        }
+      //      }
+      case Some(a) => println("333333333333333333333333333e")
+    }
+  }
+
+  private def messageDispatchLocal(message: Message) {
+    message.messageType match {
+      case Request => localRequest(message)
+      //        case Response => response(m, ctx)
+      //        case Error => error(m, ctx)
+      //        case _ => MessageTransport.Logger.warn("An unknown Message received.", m)
+    }
+  }
+
+  def localRequest(request: Message) {
+    val fromSession = request.from match {
+      case someID: Some[Int] => getSession(someID.get).get
+      case someName: Some[String] => getService(someName.get).get
+      case None => throw new MessageException(s"Bad request: no FROM.")
+      case _ => throw new MessageException(s"Bad request: invalid FROM.")
+    }
+    try {
+      val response = fromSession.runtimeInvoker.invoke(request)
+      fromSession.sendMessage(response)
+    } catch {
+      case e: Throwable => fromSession.sendMessage(request.error(e.getMessage))
     }
   }
 
