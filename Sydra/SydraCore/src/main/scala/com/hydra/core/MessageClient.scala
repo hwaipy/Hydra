@@ -1,6 +1,7 @@
 package com.hydra.core
 
 import java.lang.Thread.UncaughtExceptionHandler
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import java.util.concurrent.{Executors, ThreadFactory}
 
@@ -9,7 +10,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import com.hydra.core.MessageType._
-import com.hydra.io.{MessageEncoder, MessageGenerator, MessagePacker}
+import com.hydra.io._
 
 import scala.language.dynamics
 import scala.language.postfixOps
@@ -76,7 +77,7 @@ object MessageClient {
   }
 }
 
-class MessageClient(channel: MessageChannel, invokeHandler: Any) {
+class MessageClient(channel: MessageChannel, invokeHandler: Any) extends Dynamic {
   private val invoker = new RuntimeInvoker(invokeHandler)
 
   def sendMessage(msg: Message) = {
@@ -96,10 +97,21 @@ class MessageClient(channel: MessageChannel, invokeHandler: Any) {
   def blockingInvoker(target: String = "", timeout: Duration = 10 second) = new BlockingRemoteObject(this, target, timeout = timeout)
 
   def close = {
+    try {
+      this.unregisterAsService()
+    } catch {
+      case e: Throwable =>
+    }
     channel.close
   }
 
   channel.onRequest set Some((message) => invoker.invoke(message))
+
+  def selectDynamic(name: String): BlockingRemoteObject = new BlockingRemoteObject(this, name)
+
+  def applyDynamic(name: String)(args: Any*): Any = new BlockingRemoteObject(this).applyDynamic(name)(args)
+
+  //  def applyDynamicNamed(name: String)(args: (String, Any)*): Future[Any] = new InvokeItem(client, remoteName, remoteID, name)(args: _*).sendMessage
 }
 
 abstract class MessageChannel {
@@ -167,7 +179,12 @@ abstract class MessageChannel {
             case _ => sendMessage(result)
           }
         } catch {
-          case e: Throwable => sendMessage(request.error(e.getCause.getMessage))
+          case e: Throwable => sendMessage(request.error({
+            e.getCause match {
+              case null => e
+              case cause => cause
+            }
+          }.getMessage))
         }
       }
     })
@@ -204,7 +221,7 @@ abstract class MessageChannel {
   def close: Unit = {}
 }
 
-class LocalStatelessMessageChannel(service: StatelessMessageService) extends MessageChannel {
+class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: String = "MSGPACK") extends MessageChannel {
   private val machineID = MessageService.generateRandomString(15)
   private val token = new AtomicReference[Option[String]](None)
   private val closed = new AtomicBoolean(false)
@@ -213,7 +230,17 @@ class LocalStatelessMessageChannel(service: StatelessMessageService) extends Mes
     while (!closed.get) {
       try {
         val fetchedMessage = service.fetchNewMessage(token.get.get)
-        fetchedMessage.foreach(messageReceived)
+        fetchedMessage.foreach(message => {
+          val enAndDecoder = encoding match {
+            case "MSGPACK" => (new MessagePacker(), new MessageGenerator())
+            case "JSON" => (new MessageJsonPacker(), new MessageJsonGenerator())
+            case _ => throw new UnsupportedOperationException
+          }
+          val bytes = enAndDecoder._1.feed(message).pack()
+          enAndDecoder._2.feed(ByteBuffer.wrap(bytes))
+          val convertedMessage = enAndDecoder._2.next().get
+          messageReceived(convertedMessage)
+        })
       } catch {
         case e: Throwable => e.printStackTrace()
       }
@@ -222,17 +249,25 @@ class LocalStatelessMessageChannel(service: StatelessMessageService) extends Mes
   thread.setDaemon(true)
 
   def sendMessage(message: Message): Unit = {
-    val bytes = new MessagePacker().feed(message).pack()
-    val decoder = new MessageGenerator(bytes.size)
-    decoder.feed(bytes)
-    val newToken = service.messageDispatch(decoder.next().get, new StatelessSessionProperties(machineID, token.get))
+    val enAndDecoder = encoding match {
+      case "MSGPACK" => (new MessagePacker(), new MessageGenerator())
+      case "JSON" => (new MessageJsonPacker(), new MessageJsonGenerator())
+      case _ => throw new UnsupportedOperationException
+    }
+    val bytes = enAndDecoder._1.feed(message).pack()
+    enAndDecoder._2.feed(ByteBuffer.wrap(bytes))
+    val convertedMessage = enAndDecoder._2.next().get
+    val newToken = service.messageDispatch(convertedMessage, new StatelessSessionProperties(machineID, token.get))
     if (!token.get.isDefined) {
       token set Some(newToken)
       thread.start()
     }
   }
 
-  override def close: Unit = closed set true
+  override def close: Unit = {
+    super.close
+    closed set true
+  }
 
 }
 

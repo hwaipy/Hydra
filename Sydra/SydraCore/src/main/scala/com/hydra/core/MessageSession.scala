@@ -1,5 +1,6 @@
 package com.hydra.core
 
+import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
@@ -30,6 +31,12 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
     if (isService) throw new MessageException(s"$toString is already registered as servcie [${this.serviceName.get.get}]")
     this.serviceName set Some(serviceName)
     manager.registerService(this)
+  }
+
+  def unregisterAsServcie() = {
+    if (!isService) throw new MessageException(s"$toString is not registered as servcie.")
+    manager.unregisterService(serviceName.get.get)
+    this.serviceName set None
   }
 
   def isService = serviceName.get.isDefined
@@ -71,21 +78,13 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
 
   private class Invoker {
     def registerAsService(serviceName: String) = MessageSession.this.registerAsServcie(serviceName)
+
+    def unregisterAsService = MessageSession.this.unregisterAsServcie()
   }
 
   private val invoker = new Invoker
 
   def runtimeInvoker = new RuntimeInvoker(invoker)
-
-  //  def setMessageEncoding(encoding: String) = {
-  //    encoding match {
-  //      case MessagePack.encoding => {
-  //        encoder set Some(new MessagePacker())
-  //        decoder set Some(new MessageGenerator())
-  //      }
-  //      case _ => throw new MessageException(s"Invalid encoding: ${encoding}")
-  //    }
-  //  }
 }
 
 class MessageSessionManager {
@@ -133,9 +132,7 @@ class MessageSessionManager {
   private def messageDispatchLocal(message: Message) {
     message.messageType match {
       case Request => localRequest(message)
-      //        case Response => response(m, ctx)
-      //        case Error => error(m, ctx)
-      //        case _ => MessageTransport.Logger.warn("An unknown Message received.", m)
+      case _ => println(s"Undealable message to server: ${message}")
     }
   }
 
@@ -153,6 +150,8 @@ class MessageSessionManager {
       val response = fromSession.runtimeInvoker.invoke(request)
       fromSession.sendMessage(response)
     } catch {
+      case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => fromSession.sendMessage(request.error(e.getMessage))
+      case e: InvocationTargetException => fromSession.sendMessage(request.error(e.getCause.getMessage))
       case e: Throwable => fromSession.sendMessage(request.error(e.getMessage))
     }
   }
