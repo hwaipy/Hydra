@@ -1,10 +1,13 @@
 package com.hydra.core
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
+
 import collection.JavaConverters._
 import com.hydra.core.MessageType._
-import java.util.concurrent.LinkedBlockingQueue
+
+import scala.collection.mutable
+import scala.util.Random
 
 class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val creationTime = System.currentTimeMillis
@@ -15,8 +18,11 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val serviceName = new AtomicReference[Option[String]](None)
   private val messageSendingQueue = new LinkedBlockingQueue[Message]()
   private val messageSendingListener = new AtomicReference[Option[() => Unit]](None)
+  private[core] val lastVisited = new AtomicLong(System.currentTimeMillis)
+  private[core] val properties = new ConcurrentHashMap[String, String]()
 
   def close = {
+    setMessageSendingListener(() => {})
     manager.unregisterSession(this)
   }
 
@@ -30,11 +36,6 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
 
   def getServiceName = serviceName.get
 
-  //  def writeAndFlush(msg: Message) = {
-  //    MessageTransport.Logger.info(s"New message is send to $ctx: $msg")
-  //    ctx.writeAndFlush(msg)
-  //  }
-  //
   override def toString = s"MessageSession[$id${
     serviceName.get match {
       case None => ""
@@ -64,13 +65,27 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
 
   def takeMessageSendingQueueHead = messageSendingQueue.take()
 
+  def pollMessageSendingQueueHead(timeout: Long, unit: TimeUnit) = messageSendingQueue.poll(timeout, unit)
+
+  def pollMessageSendingQueueHead = messageSendingQueue.poll()
+
   private class Invoker {
-    def registerAsService(serviceName: String) = MessageSession.this.registerAsServcie("")
+    def registerAsService(serviceName: String) = MessageSession.this.registerAsServcie(serviceName)
   }
 
   private val invoker = new Invoker
 
   def runtimeInvoker = new RuntimeInvoker(invoker)
+
+  //  def setMessageEncoding(encoding: String) = {
+  //    encoding match {
+  //      case MessagePack.encoding => {
+  //        encoder set Some(new MessagePacker())
+  //        decoder set Some(new MessageGenerator())
+  //      }
+  //      case _ => throw new MessageException(s"Invalid encoding: ${encoding}")
+  //    }
+  //  }
 }
 
 class MessageSessionManager {
@@ -100,22 +115,18 @@ class MessageSessionManager {
   def messageDispatch(message: Message) = {
     message.to match {
       case None => messageDispatchLocal(message)
-      //      case Some(to) => {
-      //        val session = ctx.channel.attr[MessageSession](MessageServerHandler.KeySession).get
-      //        if (session == null) {
-      //          writeAndFlush(ctx, m.error("Client has not connected."))
-      //        } else {
-      //          MessageSession.getSession(to) match {
-      //            case None => writeAndFlush(ctx, m.error(s"Target $to does not exists."))
-      //            case Some(toSession) => {
-      //              val m2 = m.builder.+=(Message.KeyFrom -> session.name).create
-      //              toSession.writeAndFlush(m2)
-      //              dealWithForwardedRemoteObject(ctx, m, session, toSession)
-      //            }
-      //          }
-      //        }
-      //      }
-      case Some(a) => println("333333333333333333333333333e")
+      case Some(to) => {
+        val sessionOption = to match {
+          case id: Int => getSession(id)
+          case name: String => getService(name)
+          case a => throw new MessageException(s"Invalid TO: $to")
+        }
+        val session = sessionOption match {
+          case None => throw new MessageException(s"Invalid TO: $to")
+          case Some(s) => s
+        }
+        session.sendMessage(message)
+      }
     }
   }
 
@@ -130,8 +141,11 @@ class MessageSessionManager {
 
   def localRequest(request: Message) {
     val fromSession = request.from match {
-      case someID: Some[Int] => getSession(someID.get).get
-      case someName: Some[String] => getService(someName.get).get
+      case some: Some[Any] => some.get match {
+        case id: Int => getSession(id).get
+        case name: String => getService(name).get
+        case a => throw new MessageException(s"Invalid FROM: ${a}")
+      }
       case None => throw new MessageException(s"Bad request: no FROM.")
       case _ => throw new MessageException(s"Bad request: invalid FROM.")
     }
@@ -178,3 +192,74 @@ class MessageSessionManager {
 
   def servicesCount = serviceMap.size
 }
+
+object MessageService {
+  private val random = new Random()
+  private val alphanumeric = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".toCharArray
+
+  private[core] def generateRandomString(length: Int) = new String((0 until length).toArray.map(_ => alphanumeric(random.nextInt(alphanumeric.size))))
+
+  private[core] val KeyClientMachineID = "ClientMachineID"
+}
+
+abstract class MessageService[T, V](val manager: MessageSessionManager) {
+
+  def messageDispatch(message: Message, t: T): V
+
+  protected def messageDispatch(message: Message, from: Int): Unit = manager.messageDispatch(message + (Message.KeyFrom, from))
+}
+
+class StatelessMessageService(manager: MessageSessionManager) extends MessageService[StatelessSessionProperties, String](manager) {
+  val statelessSessions = new ConcurrentHashMap[String, Int]()
+  val fetchingMap = new mutable.HashMap[Int, Any]()
+
+  //TODO check and remove dead sessions
+
+  def messageDispatch(message: Message, properties: StatelessSessionProperties) = {
+    val sessionIDAndToken = properties.sessionToken match {
+      case Some(token) => {
+        val id = statelessSessions.getOrDefault(token, Int.MinValue)
+        if (id == Int.MinValue) throw new MessageException(s"Invalid Stateless session: invalid token.")
+        val session = manager.getSession(id) match {
+          case None => throw new MessageException(s"Invalid Stateless session: invalid token, session does not exist.")
+          case Some(session) => session
+        }
+        val machineID = session.properties.get(MessageService.KeyClientMachineID) match {
+          case null => throw new MessageException(s"Invalid Stateless session: no related machine ID.")
+          case mid => mid
+        }
+        if (machineID != properties.clientMachineID) throw new MessageException(s"Invalid Stateless session: machine ID mismatch.")
+        (id, token)
+      }
+      case None => {
+        val newToken = generateStatelessSessionToken(properties.clientMachineID)
+        val session = manager.newSession()
+        session.properties.put(MessageService.KeyClientMachineID, properties.clientMachineID)
+        statelessSessions.put(newToken, session.id)
+        (session.id, newToken)
+      }
+    }
+    messageDispatch(message, sessionIDAndToken._1)
+    sessionIDAndToken._2
+  }
+
+  private def generateStatelessSessionToken(clientMachineID: String) = {
+    MessageService.generateRandomString(20)
+  }
+
+  def fetchNewMessage(token: String, timeout: Long = 10, unit: TimeUnit = TimeUnit.SECONDS): Option[Message] = {
+    val session = statelessSessions.getOrDefault(token, Int.MinValue) match {
+      case Int.MinValue => throw new MessageException(s"Session token invalid.")
+      case sessionID => manager.getSession(sessionID) match {
+        case None => throw new MessageException(s"Session ID ${sessionID} invalid.")
+        case Some(s) => s
+      }
+    }
+    session.pollMessageSendingQueueHead(timeout, unit) match {
+      case null => None
+      case message => Some(message)
+    }
+  }
+}
+
+class StatelessSessionProperties(val clientMachineID: String, val sessionToken: Option[String]) {}
