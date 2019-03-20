@@ -27,19 +27,19 @@ class MessageTest extends FunSuite with BeforeAndAfter {
   }
 
   test("Test MessageID and its increcement") {
-    val m0 = Message.newBuilder.create
-    val id0 = m0.messageID
-    for (i <- Range(0, 100)) {
-      val mi = Message.newBuilder.create
-      assert(mi.messageID == id0 + 1 + i)
-    }
-    Vector(
-      Message.wrap(Map()),
-      Message.wrap(Map(Message.KeyMessageID -> "-1")),
-      Message.wrap(Map(Message.KeyMessageID -> None)),
-      Message.wrap(Map(Message.KeyMessageID -> 1.2))
-    ).foreach(m => { intercept[IllegalArgumentException] { m.messageID } })
-    assert(Message.wrap(Map(Message.KeyMessageID -> 100)).messageID == 100)
+//    val m0 = Message.newBuilder.create
+//    val id0 = m0.messageID
+//    for (i <- Range(0, 100)) {
+//      val mi = Message.newBuilder.create
+//      assert(mi.messageID == id0 + 1 + i)
+//    }
+//    Vector(
+//      Message.wrap(Map()),
+//      Message.wrap(Map(Message.KeyMessageID -> "-1")),
+//      Message.wrap(Map(Message.KeyMessageID -> None)),
+//      Message.wrap(Map(Message.KeyMessageID -> 1.2))
+//    ).foreach(m => { intercept[IllegalArgumentException] { m.messageID } })
+//    assert(Message.wrap(Map(Message.KeyMessageID -> 100)).messageID == 100)
   }
 
   test("Test get information") {

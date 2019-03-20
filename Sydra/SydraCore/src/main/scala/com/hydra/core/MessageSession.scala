@@ -1,7 +1,7 @@
 package com.hydra.core
 
 import java.lang.reflect.InvocationTargetException
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, Executors, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
 import collection.JavaConverters._
@@ -91,6 +91,8 @@ class MessageSessionManager {
   private val SessionIDPool = new AtomicInteger(0)
   private val sessionMap = new ConcurrentHashMap[Int, MessageSession]()
   private val serviceMap = new ConcurrentHashMap[String, MessageSession]()
+  private val dispatchingMessageQueue = new LinkedBlockingQueue[Message]()
+  private val executor = Executors.newSingleThreadExecutor()
 
   def newSession() = {
     val session = new MessageSession(SessionIDPool.getAndIncrement(), this)
@@ -111,49 +113,74 @@ class MessageSessionManager {
     }
   }
 
-  def messageDispatch(message: Message) = {
-    message.to match {
-      case None => messageDispatchLocal(message)
-      case Some(to) => {
-        val sessionOption = to match {
-          case id: Int => getSession(id)
-          case name: String => getService(name)
-          case a => throw new MessageException(s"Invalid TO: $to")
-        }
-        val session = sessionOption match {
-          case None => throw new MessageException(s"Invalid TO: $to")
-          case Some(s) => s
-        }
-        session.sendMessage(message)
+  def messageDispatch(message: Message) = dispatchingMessageQueue.offer(message)
+
+  executor.submit(new Runnable {
+    override def run() = while (!executor.isShutdown) {
+      dispatchingMessageQueue.poll(1, TimeUnit.SECONDS) match {
+        case null =>
+        case message => doMessageDispatch(message)
       }
     }
-  }
+  })
 
-  private def messageDispatchLocal(message: Message) {
-    message.messageType match {
-      case Request => localRequest(message)
-      case _ => println(s"Undealable message to server: ${message}")
-    }
-  }
+  def stop = executor.shutdown()
 
-  def localRequest(request: Message) {
-    val fromSession = request.from match {
+  private def doMessageDispatch(message: Message) = {
+    val fromSession = message.from match {
       case some: Some[Any] => some.get match {
-        case id: Int => getSession(id).get
-        case name: String => getService(name).get
-        case a => throw new MessageException(s"Invalid FROM: ${a}")
+        case id: Int => getSession(id)
+        case name: String => getService(name)
+        case a => {
+          println(s"Invalid FROM: ${a}")
+          None
+        }
       }
-      case None => throw new MessageException(s"Bad request: no FROM.")
-      case _ => throw new MessageException(s"Bad request: invalid FROM.")
+      case None => {
+        println(s"Bad request: no FROM.")
+        None
+      }
+      case _ => {
+        println(s"Bad request: invalid FROM.")
+        None
+      }
     }
-    try {
-      val response = fromSession.runtimeInvoker.invoke(request)
-      fromSession.sendMessage(response)
-    } catch {
-      case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => fromSession.sendMessage(request.error(e.getMessage))
-      case e: InvocationTargetException => fromSession.sendMessage(request.error(e.getCause.getMessage))
-      case e: Throwable => fromSession.sendMessage(request.error(e.getMessage))
+    fromSession match {
+      case None => println("No fromSession.")
+      case Some(from) => try {
+        message.to match {
+          case None => messageDispatchLocal(message, from)
+          case Some(to) => {
+            val sessionOption = to match {
+              case id: Int => getSession(id)
+              case name: String => getService(name)
+              case a => throw new MessageException(s"Invalid TO: $to")
+            }
+            val session = sessionOption match {
+              case None => throw new MessageException(s"Invalid TO: $to")
+              case Some(s) => s
+            }
+            session.sendMessage(message)
+          }
+        }
+      } catch {
+        case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => from.sendMessage(message.error(e.getMessage))
+        case e: InvocationTargetException => from.sendMessage(message.error(e.getCause.getMessage))
+        case e: Throwable => from.sendMessage(message.error(e.getMessage))
+      }
     }
+  }
+
+  private def messageDispatchLocal(message: Message, fromSession: MessageSession) {
+    message.messageType match {
+      case Request => localRequest(message, fromSession)
+      case _ => throw new MessageException(s"Undealable message to server: ${message}")
+    }
+  }
+
+  def localRequest(request: Message, fromSession: MessageSession) {
+    val response = fromSession.runtimeInvoker.invoke(request)
+    fromSession.sendMessage(response)
   }
 
   private[core] def unregisterSession(session: MessageSession): Unit = {
@@ -208,6 +235,22 @@ abstract class MessageService[T, V](val manager: MessageSessionManager) {
   protected def messageDispatch(message: Message, from: Int): Unit = manager.messageDispatch(message + (Message.KeyFrom, from))
 }
 
+
+/*
+* Thread model in StatelessMessageService and MessageSessionManager:
+* 1. invoke messageDispatch to submit a Message to the service. This method simply put the message into a blocking queue
+* and returns immediately with current Token.
+* 2. A MessageDispatch Thread will work in the background. This thread fetch messages from the blocking queue and dispatch
+* them, either forward to the target Session's queue, or deal with it and return to the current Session's queue.
+*
+*
+*
+*
+*
+*
+*
+*
+*/
 class StatelessMessageService(manager: MessageSessionManager) extends MessageService[StatelessSessionProperties, String](manager) {
   val statelessSessions = new ConcurrentHashMap[String, Int]()
   val fetchingMap = new mutable.HashMap[Int, Any]()
@@ -258,6 +301,10 @@ class StatelessMessageService(manager: MessageSessionManager) extends MessageSer
       case null => None
       case message => Some(message)
     }
+  }
+
+  def stop = {
+    manager.stop
   }
 }
 

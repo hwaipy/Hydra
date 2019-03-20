@@ -31,7 +31,9 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
   }
 
   def hydramessage() = Action { implicit request: Request[AnyContent] => {
-    println("hahaha")
+    println(request.headers)
+
+
     Ok(views.html.tutorial())
   }
   }

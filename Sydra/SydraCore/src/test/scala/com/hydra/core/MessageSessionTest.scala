@@ -15,7 +15,8 @@ class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
   override def beforeAll() {
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
+    service.stop
   }
 
   before {
@@ -114,7 +115,8 @@ class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
 
       def begin() = {
         val storage = session.blockingInvoker("Storage")
-        storage.ask()
+        val ask = storage.ask()
+        ask
       }
     }
     class StorageHandle {
@@ -125,7 +127,7 @@ class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     val s1 = MessageClient.create(new LocalStatelessMessageChannel(service), "PXITDC", pxiTDCHandler)
     pxiTDCHandler.session = s1
     val slocal = MessageClient.create(new LocalStatelessMessageChannel(service))
-    val invoker = slocal.blockingInvoker("PXITDC", 2 second)
+    val invoker = slocal.blockingInvoker("PXITDC", 10 second)
     assert(invoker.begin() == "YES")
     s1.close
     sto.close
@@ -244,7 +246,7 @@ class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
     val s1 = MessageClient.create(new LocalStatelessMessageChannel(service, "JSON"), "PXITDC", pxiTDCHandler)
     pxiTDCHandler.session = s1
     val slocal = MessageClient.create(new LocalStatelessMessageChannel(service))
-    val invoker = slocal.blockingInvoker("PXITDC", 2 second)
+    val invoker = slocal.blockingInvoker("PXITDC", 10 second)
     assert(invoker.begin() == "YES")
     s1.close
     sto.close
