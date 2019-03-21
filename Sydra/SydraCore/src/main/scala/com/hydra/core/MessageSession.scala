@@ -18,12 +18,11 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val bytesSend = new AtomicLong(0)
   private val serviceName = new AtomicReference[Option[String]](None)
   private val messageSendingQueue = new LinkedBlockingQueue[Message]()
-  private val messageSendingListener = new AtomicReference[Option[() => Unit]](None)
+  private val messageFetchers = new LinkedBlockingQueue[Tuple2[(Option[Message]) => Unit, Long]]()
   private[core] val lastVisited = new AtomicLong(System.currentTimeMillis)
   private[core] val properties = new ConcurrentHashMap[String, String]()
 
   def close = {
-    setMessageSendingListener(() => {})
     manager.unregisterSession(this)
   }
 
@@ -61,20 +60,23 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   //  }
   //
   //  def summary = (id, name, connectedTime, messageSend.get, messageReceived.get, bytesSend.get, bytesReceived.get)
-  def sendMessage(message: Message) = {
-    messageSendingQueue.put(message)
-    messageSendingListener.get.foreach(l => l())
+  def sendMessage(message: Message) = messageSendingQueue.put(message)
+
+  def addMessageFetcher(fetcher: (Option[Message]) => Unit) = messageFetchers.offer((fetcher, System.currentTimeMillis()))
+
+  //  def getMessageSendingQueueSize = messageSendingQueue.size
+  //
+  //  def takeMessageSendingQueueHead = messageSendingQueue.take()
+  //
+  //  def pollMessageSendingQueueHead(timeout: Long, unit: TimeUnit) = messageSendingQueue.poll(timeout, unit)
+  //
+  //  def pollMessageSendingQueueHead = messageSendingQueue.poll()
+
+  private[core] def completeMessageFetch = while (messageSendingQueue.size > 0 && messageFetchers.size > 0) {
+    val fetcher = messageFetchers.take()
+    val message = messageSendingQueue.take()
+    fetcher(Some(message))
   }
-
-  def setMessageSendingListener(listener: () => Unit) = messageSendingListener set Some(listener)
-
-  def getMessageSendingQueueSize = messageSendingQueue.size
-
-  def takeMessageSendingQueueHead = messageSendingQueue.take()
-
-  def pollMessageSendingQueueHead(timeout: Long, unit: TimeUnit) = messageSendingQueue.poll(timeout, unit)
-
-  def pollMessageSendingQueueHead = messageSendingQueue.poll()
 
   private class Invoker {
     def registerAsService(serviceName: String) = MessageSession.this.registerAsServcie(serviceName)
@@ -87,12 +89,25 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   def runtimeInvoker = new RuntimeInvoker(invoker)
 }
 
+/*
+* Thread model in MessageSessionManager:
+* 1. invoke messageDispatch to submit a Message to the service. This method simply put the message into a blocking queue
+* and returns immediately with current Token.
+* 2. A MessageDispatch Thread will work in the background. This thread fetch messages from the blocking queue and dispatch
+* them, either forward to the target Session's queue, or deal with it and return to the current Session's queue.
+* 3. A MessageSend Thread will work in the background. This thread will perform several tasks one by one. a) Session with
+* new message. Notified when a message is put in a Session's queue. Check if this message can be send. b) Message fetching.
+* Notified when a message fetcher is registered in a Session. Check if any message can be send. c) Clean. Performed periodically.
+* Check for any potential Message-Fetcher match. Check for overdue Fetchers and Sessions.
+*/
 class MessageSessionManager {
   private val SessionIDPool = new AtomicInteger(0)
   private val sessionMap = new ConcurrentHashMap[Int, MessageSession]()
   private val serviceMap = new ConcurrentHashMap[String, MessageSession]()
   private val dispatchingMessageQueue = new LinkedBlockingQueue[Message]()
-  private val executor = Executors.newSingleThreadExecutor()
+  private val messageDispatchExecutor = Executors.newSingleThreadExecutor()
+  private val messageSendExecutor = Executors.newSingleThreadExecutor()
+  private val timer = Executors.newScheduledThreadPool(1)
 
   def newSession() = {
     val session = new MessageSession(SessionIDPool.getAndIncrement(), this)
@@ -115,16 +130,34 @@ class MessageSessionManager {
 
   def messageDispatch(message: Message) = dispatchingMessageQueue.offer(message)
 
-  executor.submit(new Runnable {
-    override def run() = while (!executor.isShutdown) {
+  messageDispatchExecutor.submit(new Runnable {
+    override def run() = while (!messageDispatchExecutor.isShutdown) {
       dispatchingMessageQueue.poll(1, TimeUnit.SECONDS) match {
         case null =>
         case message => doMessageDispatch(message)
       }
     }
   })
+  timer.scheduleWithFixedDelay(new Runnable {
+    override def run() = messageSendExecutor.submit(new Runnable {
+      override def run() = checkClean
+    })
+  }, 1, 1, TimeUnit.SECONDS)
+  //  messageSendExecutor.
 
-  def stop = executor.shutdown()
+  private def checkClean = {
+    println("cleaning")
+  }
+
+  private def checkMessage = {}
+
+  private def checkFetcher = {}
+
+  def stop = {
+    messageDispatchExecutor.shutdown()
+    messageSendExecutor.shutdown()
+    timer.shutdown()
+  }
 
   private def doMessageDispatch(message: Message) = {
     val fromSession = message.from match {
@@ -235,22 +268,6 @@ abstract class MessageService[T, V](val manager: MessageSessionManager) {
   protected def messageDispatch(message: Message, from: Int): Unit = manager.messageDispatch(message + (Message.KeyFrom, from))
 }
 
-
-/*
-* Thread model in StatelessMessageService and MessageSessionManager:
-* 1. invoke messageDispatch to submit a Message to the service. This method simply put the message into a blocking queue
-* and returns immediately with current Token.
-* 2. A MessageDispatch Thread will work in the background. This thread fetch messages from the blocking queue and dispatch
-* them, either forward to the target Session's queue, or deal with it and return to the current Session's queue.
-*
-*
-*
-*
-*
-*
-*
-*
-*/
 class StatelessMessageService(manager: MessageSessionManager) extends MessageService[StatelessSessionProperties, String](manager) {
   val statelessSessions = new ConcurrentHashMap[String, Int]()
   val fetchingMap = new mutable.HashMap[Int, Any]()
