@@ -2,7 +2,7 @@ package com.hydra.core
 
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.{ConcurrentHashMap, Executors, LinkedBlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import collection.JavaConverters._
 import com.hydra.core.MessageType._
@@ -19,6 +19,7 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val serviceName = new AtomicReference[Option[String]](None)
   private val messageSendingQueue = new LinkedBlockingQueue[Message]()
   private val messageFetchers = new LinkedBlockingQueue[Tuple2[(Option[Message]) => Unit, Long]]()
+  private val lastFetched = new AtomicLong(creationTime)
   private[core] val lastVisited = new AtomicLong(System.currentTimeMillis)
   private[core] val properties = new ConcurrentHashMap[String, String]()
 
@@ -60,9 +61,12 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   //  }
   //
   //  def summary = (id, name, connectedTime, messageSend.get, messageReceived.get, bytesSend.get, bytesReceived.get)
-  def sendMessage(message: Message) = messageSendingQueue.put(message)
+  //  def sendMessage(message: Message) = messageSendingQueue.put(message)
 
-  def addMessageFetcher(fetcher: (Option[Message]) => Unit) = messageFetchers.offer((fetcher, System.currentTimeMillis()))
+  def addMessageFetcher(fetcher: (Option[Message]) => Unit) = {
+    messageFetchers.offer((fetcher, System.currentTimeMillis()))
+    lastFetched set System.currentTimeMillis()
+  }
 
   //  def getMessageSendingQueueSize = messageSendingQueue.size
   //
@@ -73,10 +77,32 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   //  def pollMessageSendingQueueHead = messageSendingQueue.poll()
 
   private[core] def completeMessageFetch = while (messageSendingQueue.size > 0 && messageFetchers.size > 0) {
-    val fetcher = messageFetchers.take()
-    val message = messageSendingQueue.take()
-    fetcher(Some(message))
+    val fetcher = messageFetchers.poll()
+    val message = messageSendingQueue.poll()
+    try {
+      fetcher(Some(message))
+    } catch {
+      case e: Throwable => println(e)
+    }
   }
+
+  private[core] def completeOverdueFetchers(before: Long) = {
+    val cont = new AtomicBoolean(true)
+    while (messageFetchers.size > 0 && cont.get) {
+      val peek = messageFetchers.peek()
+      if (peek._2 < before) {
+        val fetcher = messageFetchers.poll()._1
+        try {
+          fetcher(None)
+        } catch {
+          case e: Throwable => println(e)
+        }
+      }
+      else cont set false
+    }
+  }
+
+  private[core] def isDiscarded(before: Long) = lastFetched.get < before
 
   private class Invoker {
     def registerAsService(serviceName: String) = MessageSession.this.registerAsServcie(serviceName)
@@ -159,6 +185,10 @@ class MessageSessionManager {
     timer.shutdown()
   }
 
+  private def sendMessageToSession(message: Message, session: MessageSession) = {
+
+  }
+
   private def doMessageDispatch(message: Message) = {
     val fromSession = message.from match {
       case some: Some[Any] => some.get match {
@@ -193,13 +223,13 @@ class MessageSessionManager {
               case None => throw new MessageException(s"Invalid TO: $to")
               case Some(s) => s
             }
-            session.sendMessage(message)
+            sendMessageToSession(message, session)
           }
         }
       } catch {
-        case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => from.sendMessage(message.error(e.getMessage))
-        case e: InvocationTargetException => from.sendMessage(message.error(e.getCause.getMessage))
-        case e: Throwable => from.sendMessage(message.error(e.getMessage))
+        case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => sendMessageToSession(message.error(e.getMessage), from)
+        case e: InvocationTargetException => sendMessageToSession(message.error(e.getCause.getMessage), from)
+        case e: Throwable => sendMessageToSession(message.error(e.getMessage), from)
       }
     }
   }
@@ -213,7 +243,7 @@ class MessageSessionManager {
 
   def localRequest(request: Message, fromSession: MessageSession) {
     val response = fromSession.runtimeInvoker.invoke(request)
-    fromSession.sendMessage(response)
+    sendMessageToSession(response, fromSession)
   }
 
   private[core] def unregisterSession(session: MessageSession): Unit = {
