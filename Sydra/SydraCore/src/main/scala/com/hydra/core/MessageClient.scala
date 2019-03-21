@@ -3,7 +3,7 @@ package com.hydra.core
 import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import java.util.concurrent.{Executors, ThreadFactory}
+import java.util.concurrent.{Executors, ThreadFactory, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -14,7 +14,7 @@ import com.hydra.io._
 
 import scala.language.dynamics
 import scala.language.postfixOps
-import scala.util.Random
+import scala.util.{Failure, Success}
 
 protected abstract class DynamicRemoteObject(val client: MessageClient, val remoteName: String = "", val remoteID: Long = 0) extends Dynamic {
   override def toString() = s"RemoteObject[$remoteName,$remoteID]"
@@ -225,28 +225,20 @@ class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: S
   private val machineID = MessageService.generateRandomString(15)
   private val token = new AtomicReference[Option[String]](None)
   private val closed = new AtomicBoolean(false)
+  private val fetchThreadPool = Executors.newScheduledThreadPool(50)
 
-  val thread = new Thread(() => {
-    while (!closed.get) {
-      try {
-        val fetchedMessage = service.fetchNewMessage(token.get.get)
-        fetchedMessage.foreach(message => {
-          val enAndDecoder = encoding match {
-            case "MSGPACK" => (new MessagePacker(), new MessageGenerator())
-            case "JSON" => (new MessageJsonPacker(), new MessageJsonGenerator())
-            case _ => throw new UnsupportedOperationException
-          }
-          val bytes = enAndDecoder._1.feed(message).pack()
-          enAndDecoder._2.feed(ByteBuffer.wrap(bytes))
-          val convertedMessage = enAndDecoder._2.next().get
-          messageReceived(convertedMessage)
-        })
-      } catch {
-        case e: Throwable => e.printStackTrace()
-      }
-    }
-  })
-  thread.setDaemon(true)
+  fetchThreadPool.scheduleWithFixedDelay(() => if (token.get.isDefined) {
+    val future = service.fetchNewMessage(token.get.get)
+
+    val executionContext = ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor())
+    future onComplete {
+      case Success(post) => println(post)
+      case Failure(t) => println("An error has occurred: " + t.getMessage)
+    }(executionContext)
+
+    val messageOption = Await.result(future, 1 minute)
+    messageOption.foreach(messageReceived)
+  }, 1, 1, TimeUnit.SECONDS)
 
   def sendMessage(message: Message): Unit = {
     val enAndDecoder = encoding match {
@@ -260,15 +252,14 @@ class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: S
     val newToken = service.messageDispatch(convertedMessage, new StatelessSessionProperties(machineID, token.get))
     if (!token.get.isDefined) {
       token set Some(newToken)
-      thread.start()
     }
   }
 
   override def close: Unit = {
     super.close
     closed set true
+    fetchThreadPool.shutdown()
   }
-
 }
 
 private object SingleThreadExecutionContext extends ExecutionContext with UncaughtExceptionHandler {

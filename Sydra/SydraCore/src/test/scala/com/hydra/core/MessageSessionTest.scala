@@ -271,22 +271,22 @@ class MessageSessionTest extends FunSuite with BeforeAndAfter with BeforeAndAfte
 
       def v(i: Int, b: Boolean) = "OK"
     }
-    val mc1 = MessageClient.create(new LocalStatelessMessageChannel(service, "JSON"), "T1_Benz", new Target)
+    val mc1 = MessageClient.create(new LocalStatelessMessageChannel(service, "JSON"), "T11_Benz", new Target)
     val checker1 = MessageClient.create(new LocalStatelessMessageChannel(service, "JSON"))
     val checker2 = MessageClient.create(new LocalStatelessMessageChannel(service, "JSON"))
-    val v8r1 = checker1.T1_Benz.v8
+    val v8r1 = checker1.T11_Benz.v8
     assert(v8r1 == "V8 great!")
     intercept[MessageException] {
-      val v9r = checker1.T1_Benz.v9
+      val v9r = checker1.T11_Benz.v9
     }
     intercept[MessageException] {
-      val v10r = checker1.T1_Benz.v10
+      val v10r = checker1.T11_Benz.v10
     }
-    assert(checker1.T1_Benz.v(1, false) == "OK")
+    assert(checker1.T11_Benz.v(1, false) == "OK")
     intercept[MessageException] {
-      checker1.T1_Benz.v(false, false)
+      checker1.T11_Benz.v(false, false)
     }
-    val benzChecker2 = checker1.blockingInvoker("T1_Benz")
+    val benzChecker2 = checker1.blockingInvoker("T11_Benz")
     val v8r2 = benzChecker2.v8
     assert(v8r2 == "V8 great!")
     intercept[MessageException] {

@@ -113,7 +113,9 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private class Invoker {
     def registerAsService(serviceName: String) = MessageSession.this.registerAsServcie(serviceName)
 
-    def unregisterAsService = MessageSession.this.unregisterAsServcie()
+    def unregisterAsService() = MessageSession.this.unregisterAsServcie()
+
+    def ping() = Unit
   }
 
   private val invoker = new Invoker
@@ -170,11 +172,9 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
       }
     }
   })
-  timer.scheduleWithFixedDelay(new Runnable {
-    override def run() = messageSendExecutor.submit(new Runnable {
-      override def run() = checkClean
-    })
-  }, 1, 1, TimeUnit.SECONDS)
+  timer.scheduleWithFixedDelay(() => messageSendExecutor.submit(new Runnable {
+    override def run() = checkClean
+  }), 1, 1, TimeUnit.SECONDS)
 
   private def checkClean = {
     sessionMap.values().asScala.toList.foreach(session => {
@@ -182,7 +182,7 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
         session.completeMessageFetch
         val overdue = System.currentTimeMillis() - sessionOverdue
         session.completeOverdueFetchers(overdue)
-        if (session.isDiscarded(overdue)) {
+        if (session.isDiscarded(overdue) || !session.running.get) {
           session.completeOverdueFetchers(Long.MaxValue)
           session.close
         }
@@ -194,6 +194,12 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
 
   def stop = {
     messageDispatchExecutor.shutdown()
+    messageSendExecutor.submit(new Runnable {
+      override def run(): Unit = {
+        sessionMap.values().asScala.toList.foreach(_.close)
+        checkClean
+      }
+    })
     messageSendExecutor.shutdown()
     timer.shutdown()
   }
@@ -242,7 +248,7 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
               case a => throw new MessageException(s"Invalid TO: $to")
             }
             val session = sessionOption match {
-              case None => throw new MessageException(s"Invalid TO: $to")
+              case None => throw new MessageException(s"TO not exits: $to")
               case Some(s) => s
             }
             session.sendMessage(message)
@@ -358,7 +364,7 @@ class StatelessMessageService(manager: MessageSessionManager) extends MessageSer
     MessageService.generateRandomString(20)
   }
 
-  def fetchNewMessage(token: String, timeout: Long = 10, unit: TimeUnit = TimeUnit.SECONDS): Future[Option[Message]] = {
+  def fetchNewMessage(token: String): Future[Option[Message]] = {
     val session = statelessSessions.getOrDefault(token, Int.MinValue) match {
       case Int.MinValue => throw new MessageException(s"Session token invalid.")
       case sessionID => manager.getSession(sessionID) match {

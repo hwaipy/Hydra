@@ -568,6 +568,7 @@ class HttpSession:
         self.__waitingMapLock = threading.Lock()
         self.unpacker = msgpack.Unpacker(raw=False)
         self.messageQueue = queue.Queue()
+        self.hydraToken = None
 
     # class __MessageClientSystemLevelHandler:
     #     def __init__(self, session):
@@ -586,8 +587,8 @@ class HttpSession:
     #         self.session._remoteObjectFinalized(remoteObjectID, finalizedClient)
 
     def start(self):
-        ThreadPool()
-        # r = requests.post(self.url, data = {'key':'value'})
+        self.blockingInvoker().ping()
+        # r = requests.post(self.url, data="12444")
         # print(r.status_code)
         # for head in r.headers:
         #     print('{}: {}'.format(head, r.headers[head]))
@@ -648,8 +649,6 @@ class HttpSession:
         return DynamicRemoteObject(self, toMessage=False, blocking=True, target=target, objectID=0, timeout=timeout)
 
     def __sendMessage__(self, message):
-        print('send message')
-
         class InvokeFuture:
             @classmethod
             def newFuture(cls):
@@ -733,11 +732,22 @@ class HttpSession:
             raise ProtocolException("MessageID have been used.")
         self.__waitingMap[id] = (resultMap, onFinish)
         self.__waitingMapLock.release()
-    #     self.communicator.sendLater(message)
+
+        def sendInAnotherThread():
+            mb = message.pack()
+            r = requests.post(self.url, data=mb, headers={'Content-Type': 'application/msgpack'})
+            print(r.status_code)
+            for head in r.headers:
+                print('{}: {}'.format(head, r.headers(head)))
+            token = r.cookies.get('HydraToken')
+            self.hydraToken = token
+
+        threading.Thread(target=sendInAnotherThread).start()
         return future
 
     def __dataFetcher(self, socket):
         print('fetching')
+
     #     try:
     #         data = self.socket.recv(10000000)
     #     except Exception as e:
