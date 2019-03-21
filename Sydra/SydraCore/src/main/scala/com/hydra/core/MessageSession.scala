@@ -3,12 +3,12 @@ package com.hydra.core
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.{ConcurrentHashMap, Executors, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
-
 import collection.JavaConverters._
 import com.hydra.core.MessageType._
-
 import scala.collection.mutable
+import scala.concurrent.{Future, ExecutionContext}
 import scala.util.Random
+import scala.language.postfixOps
 
 class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val creationTime = System.currentTimeMillis
@@ -22,9 +22,11 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val lastFetched = new AtomicLong(creationTime)
   private[core] val lastVisited = new AtomicLong(System.currentTimeMillis)
   private[core] val properties = new ConcurrentHashMap[String, String]()
+  private[core] val running = new AtomicBoolean(true)
 
-  def close = {
+  private[core] def close = {
     manager.unregisterSession(this)
+    running set false
   }
 
   def registerAsServcie(serviceName: String) = {
@@ -61,11 +63,15 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   //  }
   //
   //  def summary = (id, name, connectedTime, messageSend.get, messageReceived.get, bytesSend.get, bytesReceived.get)
-  //  def sendMessage(message: Message) = messageSendingQueue.put(message)
+  def sendMessage(message: Message) = {
+    messageSendingQueue.put(message)
+    manager.notifyMessageFetchMatch(this)
+  }
 
   def addMessageFetcher(fetcher: (Option[Message]) => Unit) = {
     messageFetchers.offer((fetcher, System.currentTimeMillis()))
     lastFetched set System.currentTimeMillis()
+    manager.notifyMessageFetchMatch(this)
   }
 
   //  def getMessageSendingQueueSize = messageSendingQueue.size
@@ -77,7 +83,7 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   //  def pollMessageSendingQueueHead = messageSendingQueue.poll()
 
   private[core] def completeMessageFetch = while (messageSendingQueue.size > 0 && messageFetchers.size > 0) {
-    val fetcher = messageFetchers.poll()
+    val fetcher = messageFetchers.poll()._1
     val message = messageSendingQueue.poll()
     try {
       fetcher(Some(message))
@@ -126,7 +132,7 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
 * Notified when a message fetcher is registered in a Session. Check if any message can be send. c) Clean. Performed periodically.
 * Check for any potential Message-Fetcher match. Check for overdue Fetchers and Sessions.
 */
-class MessageSessionManager {
+class MessageSessionManager(val sessionOverdue: Long = 30000) {
   private val SessionIDPool = new AtomicInteger(0)
   private val sessionMap = new ConcurrentHashMap[Int, MessageSession]()
   private val serviceMap = new ConcurrentHashMap[String, MessageSession]()
@@ -169,15 +175,22 @@ class MessageSessionManager {
       override def run() = checkClean
     })
   }, 1, 1, TimeUnit.SECONDS)
-  //  messageSendExecutor.
 
   private def checkClean = {
-    println("cleaning")
+    sessionMap.values().asScala.toList.foreach(session => {
+      try {
+        session.completeMessageFetch
+        val overdue = System.currentTimeMillis() - sessionOverdue
+        session.completeOverdueFetchers(overdue)
+        if (session.isDiscarded(overdue)) {
+          session.completeOverdueFetchers(Long.MaxValue)
+          session.close
+        }
+      } catch {
+        case e: Throwable => println(e)
+      }
+    })
   }
-
-  private def checkMessage = {}
-
-  private def checkFetcher = {}
 
   def stop = {
     messageDispatchExecutor.shutdown()
@@ -185,8 +198,17 @@ class MessageSessionManager {
     timer.shutdown()
   }
 
-  private def sendMessageToSession(message: Message, session: MessageSession) = {
-
+  private[core] def notifyMessageFetchMatch(session: MessageSession) = {
+    messageSendExecutor.submit(new Runnable {
+      override def run(): Unit = try {
+        session.completeMessageFetch
+        if (!session.running.get) {
+          session.completeOverdueFetchers(Long.MaxValue)
+        }
+      } catch {
+        case e: Throwable => println(e)
+      }
+    })
   }
 
   private def doMessageDispatch(message: Message) = {
@@ -223,13 +245,13 @@ class MessageSessionManager {
               case None => throw new MessageException(s"Invalid TO: $to")
               case Some(s) => s
             }
-            sendMessageToSession(message, session)
+            session.sendMessage(message)
           }
         }
       } catch {
-        case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => sendMessageToSession(message.error(e.getMessage), from)
-        case e: InvocationTargetException => sendMessageToSession(message.error(e.getCause.getMessage), from)
-        case e: Throwable => sendMessageToSession(message.error(e.getMessage), from)
+        case e: Throwable if (e.isInstanceOf[IllegalArgumentException] || e.isInstanceOf[IllegalStateException]) => from.sendMessage(message.error(e.getMessage))
+        case e: InvocationTargetException => from.sendMessage(message.error(e.getCause.getMessage))
+        case e: Throwable => from.sendMessage(message.error(e.getMessage))
       }
     }
   }
@@ -243,7 +265,7 @@ class MessageSessionManager {
 
   def localRequest(request: Message, fromSession: MessageSession) {
     val response = fromSession.runtimeInvoker.invoke(request)
-    sendMessageToSession(response, fromSession)
+    fromSession.sendMessage(response)
   }
 
   private[core] def unregisterSession(session: MessageSession): Unit = {
@@ -336,7 +358,7 @@ class StatelessMessageService(manager: MessageSessionManager) extends MessageSer
     MessageService.generateRandomString(20)
   }
 
-  def fetchNewMessage(token: String, timeout: Long = 10, unit: TimeUnit = TimeUnit.SECONDS): Option[Message] = {
+  def fetchNewMessage(token: String, timeout: Long = 10, unit: TimeUnit = TimeUnit.SECONDS): Future[Option[Message]] = {
     val session = statelessSessions.getOrDefault(token, Int.MinValue) match {
       case Int.MinValue => throw new MessageException(s"Session token invalid.")
       case sessionID => manager.getSession(sessionID) match {
@@ -344,10 +366,21 @@ class StatelessMessageService(manager: MessageSessionManager) extends MessageSer
         case Some(s) => s
       }
     }
-    session.pollMessageSendingQueueHead(timeout, unit) match {
-      case null => None
-      case message => Some(message)
-    }
+    val messageOptionRef = new AtomicReference[Option[Message]](None)
+    Future[Option[Message]] {
+      messageOptionRef get
+    }(new ExecutionContext {
+      def execute(runnable: Runnable): Unit = {
+        session.addMessageFetcher((messageOption) => {
+          messageOptionRef set messageOption
+          runnable.run()
+        })
+      }
+
+      def reportFailure(cause: Throwable): Unit = {
+        println(s"mm:$cause")
+      }
+    })
   }
 
   def stop = {
