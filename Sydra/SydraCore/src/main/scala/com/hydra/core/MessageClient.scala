@@ -229,13 +229,6 @@ class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: S
 
   fetchThreadPool.scheduleWithFixedDelay(() => if (token.get.isDefined) {
     val future = service.fetchNewMessage(token.get.get)
-
-    val executionContext = ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor())
-    future onComplete {
-      case Success(post) => println(post)
-      case Failure(t) => println("An error has occurred: " + t.getMessage)
-    }(executionContext)
-
     val messageOption = Await.result(future, 1 minute)
     messageOption.foreach(messageReceived)
   }, 1, 1, TimeUnit.SECONDS)

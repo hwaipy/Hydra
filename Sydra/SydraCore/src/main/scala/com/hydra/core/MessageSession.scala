@@ -116,6 +116,8 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
     def unregisterAsService() = MessageSession.this.unregisterAsServcie()
 
     def ping() = Unit
+
+    def getServiceList() = manager.getServices
   }
 
   private val invoker = new Invoker

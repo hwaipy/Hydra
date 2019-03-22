@@ -159,10 +159,10 @@ class Message:
 
     @classmethod
     def unpack(cls, bytes):
-        unpacker = msgpack.Unpacker(encoding='utf-8')
+        unpacker = msgpack.Unpacker(raw=False)
         unpacker.feed(bytes)
         m1 = unpacker.__next__()
-        return m1
+        return Message(m1)
 
 
 class MessageBuilder:
@@ -554,12 +554,12 @@ class Session:
 
 class HttpSession:
     @classmethod
-    def create(cls, url, invoker=None, serviceName=""):
+    def create(cls, url, invoker=None, serviceName=None):
         session = HttpSession(url, invoker, serviceName)
         session.start()
         return session
 
-    def __init__(self, url, invoker, serviceName=""):
+    def __init__(self, url, invoker=None, serviceName=None):
         self.url = url
         self.serviceName = serviceName
         self.invoker = invoker
@@ -569,75 +569,20 @@ class HttpSession:
         self.unpacker = msgpack.Unpacker(raw=False)
         self.messageQueue = queue.Queue()
         self.hydraToken = None
-
-    # class __MessageClientSystemLevelHandler:
-    #     def __init__(self, session):
-    #         self.session = session
-    #
-    #     def remoteClientConnected(self, remoteClientName):
-    #         pass
-    #
-    #     def remoteClientDisconnected(self, remoteClientName):
-    #         self.session._remoteObjectFinalized(None, remoteClientName)
-    #
-    #     def remoteObjectDistributed(self, remoteObjectID, distributedClient):
-    #         self.session._remoteObjectDistributed(remoteObjectID, distributedClient)
-    #
-    #     def remoteObjectFinalized(self, remoteObjectID, finalizedClient):
-    #         self.session._remoteObjectFinalized(remoteObjectID, finalizedClient)
+        self.fetchThread = threading.Thread(target=self.__fetchLoop)
+        self.defaultblockingInvokerTimeout = None
 
     def start(self):
-        self.blockingInvoker().ping()
-        # r = requests.post(self.url, data="12444")
-        # print(r.status_code)
-        # for head in r.headers:
-        #     print('{}: {}'.format(head, r.headers[head]))
+        if (self.serviceName == "" or self.serviceName == None):
+            response = self.blockingInvoker().ping()
+        else:
+            response = self.blockingInvoker().registerAsService(self.serviceName)
+        self.fetchThread.start()
 
-    #     def createCommunicator():
-    #         sct = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #         sct.connect(self.address)
-    #         self.socket = sct
-    #     self.communicator = Utils.BlockingCommunicator(self.socket, self.__dataFetcher, self.__dataSender)
-    #     self.communicator.start()
-    #     self.blockingInvoker().connect(self.serviceName)
-    #
-    #     def waitCommunicatorToStop():
-    #         loopStepDuration = 0.3
-    #         pingDuration = 5
-    #         pingTimePast = 0
-    #         while True:
-    #             time.sleep(loopStepDuration)
-    #             if not self.communicator.isRunning():
-    #                 break
-    #             pingTimePast += loopStepDuration
-    #             if pingTimePast >= pingDuration:
-    #                 pingTimePast = 0
-    #                 try:
-    #                     self.blockingInvoker(timeout=5).ping()
-    #                 except Exception as e:
-    #                     return
-    #
-    #     def communicatorControlLoop():
-    #         while self.__running:
-    #             if self.communicator.isRunning():
-    #                 waitCommunicatorToStop()
-    #                 if not self.__running:
-    #                     break
-    #                 print('Connection break. Try again.')
-    #             try:
-    #                 createCommunicator()
-    #             except BaseException as e:
-    #                 print('Can not Connect.')
-    #             finally:
-    #                 time.sleep(5 + random.randint(1, 5000) / 1000.0)
-    #
-    #     createCommunicator()
-    #     threading.Thread(target=communicatorControlLoop, name="CommunicatorControlLoop").start()
-    #
-    # def stop(self):
-    #     self.__running = False
-    #     self.communicator.stop()
-    #     self.socket.shutdown(socket.SHUT_RDWR)
+    def stop(self):
+        if self.serviceName is not None:
+            self.blockingInvoker().unregisterAsService()
+        self.__running = False
 
     def messageInvoker(self, target=None):
         return DynamicRemoteObject(self, toMessage=True, blocking=False, target=target, objectID=0, timeout=None)
@@ -649,169 +594,177 @@ class HttpSession:
         return DynamicRemoteObject(self, toMessage=False, blocking=True, target=target, objectID=0, timeout=timeout)
 
     def __sendMessage__(self, message):
-        class InvokeFuture:
-            @classmethod
-            def newFuture(cls):
-                future = InvokeFuture()
-                return (future, future.__onFinish, future.__resultMap)
+        if (message is not None):
+            if (message.messageType() == Message.Type.Request):
+                id = message.messageID()
+                (future, onFinish, resultMap) = InvokeFuture.newFuture()
+                self.__waitingMapLock.acquire()
+                if self.__waitingMap.__contains__(id):
+                    raise ProtocolException("MessageID have been used.")
+                self.__waitingMap[id] = (resultMap, onFinish)
+                self.__waitingMapLock.release()
 
-            def __init__(self):
-                self.__done = False
-                self.__result = None
-                self.__exception = None
-                self.__onComplete = None
-                self.__metux = threading.Lock()
-                self.__resultMap = {}
-                self.__awaitSemaphore = threading.Semaphore(0)
+                threading.Thread(target=self.__makeHttpRequest, args=[message.pack()]).start()
+                return future
+            else:
+                threading.Thread(target=self.__makeHttpRequest, args=[message.pack()]).start()
+        else:
+            threading.Thread(target=self.__makeHttpRequest, args=[b'']).start()
 
-            def isDone(self):
-                return self.__done
-
-            def isSuccess(self):
-                return self.__exception is None
-
-            def result(self):
-                return self.__result
-
-            def exception(self):
-                return self.__exception
-
-            def onComplete(self, func):
-                self.__metux.acquire()
-                self.__onComplete = func
-                if self.__done:
-                    self.__onComplete()
-                self.__metux.release()
-
-            def waitFor(self, timeout=None):
-                # For Python 3 only.
-                # if self.__awaitSemaphore.acquire(True, timeout):
-                #     self.__awaitSemaphore.release()
-                #     return True
-                # else:
-                #     return False
-
-                # For Python 2 & 3
-                timeStep = 0.1 if timeout is None else timeout / 10
-                startTime = time.time()
-                while True:
-                    acq = self.__awaitSemaphore.acquire(False)
-                    if acq:
-                        return acq
-                    else:
-                        passedTime = time.time() - startTime
-                        if (timeout is not None) and (passedTime >= timeout):
-                            return False
-                        time.sleep(timeStep)
-
-            def sync(self, timeout=None):
-                if self.waitFor(timeout):
-                    if self.isSuccess():
-                        return self.__result
-                    elif isinstance(self.__exception, BaseException):
-                        raise self.__exception
-                    else:
-                        raise ProtocolException('Error state in InvokeFuture.')
-                else:
-                    raise ProtocolException('Time out!')
-
-            def __onFinish(self):
-                self.__done = True
-                if self.__resultMap.__contains__('result'):
-                    self.__result = self.__resultMap['result']
-                if self.__resultMap.__contains__('error'):
-                    self.__exception = ProtocolException(self.__resultMap['error'])
-                if self.__onComplete is not None:
-                    self.__onComplete()
-                self.__awaitSemaphore.release()
-
-        id = message.messageID()
-        (future, onFinish, resultMap) = InvokeFuture.newFuture()
-        self.__waitingMapLock.acquire()
-        if self.__waitingMap.__contains__(id):
-            raise ProtocolException("MessageID have been used.")
-        self.__waitingMap[id] = (resultMap, onFinish)
-        self.__waitingMapLock.release()
-
-        def sendInAnotherThread():
-            mb = message.pack()
-            r = requests.post(self.url, data=mb, headers={'Content-Type': 'application/msgpack'})
-            print(r.status_code)
+    def __makeHttpRequest(self, bytes):
+        headers = {'Content-Type': 'application/msgpack'}
+        if self.hydraToken is not None:
+            headers['Cookie'] = 'HydraToken={}'.format(self.hydraToken)
+        r = requests.post(self.url, data=bytes, headers=headers)
+        if (r.status_code == 200):
             for head in r.headers:
-                print('{}: {}'.format(head, r.headers(head)))
+                print('{}: {}'.format(head, r.headers[head]))
             token = r.cookies.get('HydraToken')
             self.hydraToken = token
+            if (len(r.content) > 0):
+                responseMessage = Message.unpack(r.content)
+                self.__messageDeal(responseMessage)
+        else:
+            print("wrong!!!!!!! {}".format(r.status_code))
 
-        threading.Thread(target=sendInAnotherThread).start()
-        return future
+    def __fetchLoop(self):
+        while self.__running:
+            self.__makeHttpRequest(b'')
 
-    def __dataFetcher(self, socket):
-        print('fetching')
+    def __messageDeal(self, message):
+        type = message.messageType()
+        if type is Message.Type.Request:
+            (name, args, kwargs) = message.requestContent()
+            try:
+                method = getattr(self.invoker, name)
+                noResponse = message.get(Message.KeyNoResponse)
+                if callable(method):
+                    try:
+                        result = method(*args, **kwargs)
+                        response = message.response(result)
+                        if noResponse is not True:
+                            self.__sendMessage__(response)
+                    except BaseException as e:
+                        error = message.error(e.__str__())
+                        self.__sendMessage__(error)
+                    return
+            except BaseException as e:
+                response = message.error('InvokeError: Command {} not found.'.format(name))
+                self.__sendMessage__(response)
 
-    #     try:
-    #         data = self.socket.recv(10000000)
-    #     except Exception as e:
-    #         print(e)
-    #         data = []
-    #     if len(data) == 0:
-    #         raise RuntimeError('Connection closed.')
-    #     self.unpacker.feed(data)
-    #     for packed in self.unpacker:
-    #         message = Message(packed)
-    #         self.__messageDeal(message)
-    #
-    def __dataSender(self, message):
-        mb = message.pack(self.__remoteObjectWarpper(message))
-        # s = self.socket.send(mb)
-        print('sending')
+        elif (type is Message.Type.Response) or (type is Message.Type.Error):
+            if type is Message.Type.Response:
+                (result, id) = message.responseContent()
+            else:
+                (error, id) = message.errorContent()
+            self.__waitingMapLock.acquire()
+            if self.__waitingMap.__contains__(id):
+                (futureEntry, runnable) = self.__waitingMap[id]
+                if type is Message.Type.Response:
+                    futureEntry['result'] = result
+                else:
+                    futureEntry['error'] = error
+                runnable()
+            else:
+                print('ResponseID not recognized: {}'.format(message))
+            self.__waitingMapLock.release()
+        else:
+            print('A Wrong Message: {}'.format(message))
 
-    # def __messageDeal(self, message):
-    #     type = message.messageType()
-    #     if type is Message.Type.Request:
-    #         (name, args, kwargs) = message.requestContent()
-    #         try:
-    #             objectID = message.getObjectID()
-    #             if objectID is None:
-    #                 objectID = 0
-    #             if not self.__remoteReferenceKeyMap.__contains__(objectID):
-    #                 raise IndexError()
-    #             invoker = self.__remoteReferenceKeyMap[objectID][0]
-    #             # method = invoker.__getattribute__(name)
-    #             method = getattr(invoker, name)
-    #             noResponse = message.get(Message.KeyNoResponse)
-    #             if callable(method):
-    #                 try:
-    #                     result = method(*args, **kwargs)
-    #                     response = message.response(result)
-    #                     if noResponse is not True:
-    #                         self.communicator.sendLater(response)
-    #                 except BaseException as e:
-    #                     error = message.error(e.__str__())
-    #                     self.communicator.sendLater(error)
-    #                 return
-    #         except BaseException as e:
-    #             response = message.error('InvokeError: Command {} not found.'.format(name))
-    #             self.communicator.sendLater(response)
-    #
-    #     elif (type is Message.Type.Response) or (type is Message.Type.Error):
-    #         if type is Message.Type.Response:
-    #             (result, id) = message.responseContent()
-    #         else:
-    #             (error, id) = message.errorContent()
-    #         self.__waitingMapLock.acquire()
-    #         if self.__waitingMap.__contains__(id):
-    #             (futureEntry, runnable) = self.__waitingMap[id]
-    #             if type is Message.Type.Response:
-    #                 futureEntry['result'] = result
-    #             else:
-    #                 futureEntry['error'] = error
-    #             runnable()
-    #         else:
-    #             print('ResponseID not recognized: {}'.format(message))
-    #         self.__waitingMapLock.release()
-    #     else:
-    #         print('A Wrong Message: {}'.format(message))
-    #
+    def __getattr__(self, item):
+        return InvokeTarget(self, item)
+
+
+class InvokeFuture:
+    @classmethod
+    def newFuture(cls):
+        future = InvokeFuture()
+        return (future, future.__onFinish, future.__resultMap)
+
+    def __init__(self):
+        self.__done = False
+        self.__result = None
+        self.__exception = None
+        self.__onComplete = None
+        self.__metux = threading.Lock()
+        self.__resultMap = {}
+        self.__awaitSemaphore = threading.Semaphore(0)
+
+    def isDone(self):
+        return self.__done
+
+    def isSuccess(self):
+        return self.__exception is None
+
+    def result(self):
+        return self.__result
+
+    def exception(self):
+        return self.__exception
+
+    def onComplete(self, func):
+        self.__metux.acquire()
+        self.__onComplete = func
+        if self.__done:
+            self.__onComplete()
+        self.__metux.release()
+
+    def waitFor(self, timeout=None):
+        # For Python 3 only.
+        # if self.__awaitSemaphore.acquire(True, timeout):
+        #     self.__awaitSemaphore.release()
+        #     return True
+        # else:
+        #     return False
+
+        # For Python 2 & 3
+        timeStep = 0.1 if timeout is None else timeout / 10
+        startTime = time.time()
+        while True:
+            acq = self.__awaitSemaphore.acquire(False)
+            if acq:
+                return acq
+            else:
+                passedTime = time.time() - startTime
+                if (timeout is not None) and (passedTime >= timeout):
+                    return False
+                time.sleep(timeStep)
+
+    def sync(self, timeout=None):
+        if self.waitFor(timeout):
+            if self.isSuccess():
+                return self.__result
+            elif isinstance(self.__exception, BaseException):
+                raise self.__exception
+            else:
+                raise ProtocolException('Error state in InvokeFuture.')
+        else:
+            raise ProtocolException('Time out!')
+
+    def __onFinish(self):
+        self.__done = True
+        if self.__resultMap.__contains__('result'):
+            self.__result = self.__resultMap['result']
+        if self.__resultMap.__contains__('error'):
+            self.__exception = ProtocolException(self.__resultMap['error'])
+        if self.__onComplete is not None:
+            self.__onComplete()
+        self.__awaitSemaphore.release()
+
+
+class InvokeTarget:
+    def __init__(self, session, item):
+        self.session = session
+        self.name = item
+
+    def __getattr__(self, item):
+        item = u'{}'.format(item)
+        return self.session.blockingInvoker(self.name, self.session.defaultblockingInvokerTimeout).__getattr__(item)
+
+    def __call__(self, *args, **kwargs):
+        invoker = self.session.blockingInvoker(None, self.session.defaultblockingInvokerTimeout)
+        func = invoker.__getattr__(self.name)
+        return func(*args, **kwargs)
 
 
 class RemoteObject(object):
@@ -860,6 +813,24 @@ class DynamicRemoteObject(RemoteObject):
 
 if __name__ == '__main__':
     print('Pydra Demo')
-    session = HttpSession.create('http://localhost:9000/hydra/message')
-    time.sleep(1)
-    session.stop()
+
+
+    class TT:
+        def testFun(self, a, b):
+            return a + b + 1
+
+
+    session = HttpSession.create('http://localhost:9000/hydra/message', TT(), 'S1')
+    # time.sleep(1)
+
+    # for i in range(0, 10):
+    #     sl = session.blockingInvoker().getServiceList()
+    #     print(sl)
+    # session.getfff
+    # session.stop()
+
+    try:
+        print(session.getServiceList())
+        print(session.S1.testFun(100, 2000))
+    finally:
+        session.stop()
