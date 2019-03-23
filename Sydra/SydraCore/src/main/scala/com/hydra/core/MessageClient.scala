@@ -1,9 +1,13 @@
 package com.hydra.core
 
 import java.lang.Thread.UncaughtExceptionHandler
+import java.net.{HttpURLConnection, URL}
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import java.util.concurrent.{Executors, ThreadFactory, TimeUnit}
+import java.util.concurrent.{CountDownLatch, Executors, ThreadFactory, TimeUnit}
+
+import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -14,6 +18,9 @@ import com.hydra.io._
 
 import scala.language.dynamics
 import scala.language.postfixOps
+import akka.http.scaladsl.model._
+import akka.stream.ActorMaterializer
+
 import scala.util.{Failure, Success}
 
 protected abstract class DynamicRemoteObject(val client: MessageClient, val remoteName: String = "", val remoteID: Long = 0) extends Dynamic {
@@ -68,11 +75,21 @@ private class InvokeItem(client: MessageClient, target: String, id: Long = 0, na
 }
 
 object MessageClient {
-  def create(channel: MessageChannel, invokeHandler: Any = None): MessageClient = new MessageClient(channel, invokeHandler)
+  def create(channel: MessageChannel): MessageClient = create(channel, "", None)
 
   def create(channel: MessageChannel, serviceName: String, invokeHandler: Any): MessageClient = {
-    val client = create(channel, invokeHandler)
-    client.blockingInvoker().registerAsService(serviceName)
+    val client = new MessageClient(channel, invokeHandler)
+    serviceName match {
+      case "" => client.blockingInvoker().ping()
+      case name => try {
+        client.blockingInvoker().registerAsService(serviceName)
+      } catch {
+        case e: MessageException => {
+          client.close
+          throw e
+        }
+      }
+    }
     client
   }
 }
@@ -98,9 +115,11 @@ class MessageClient(channel: MessageChannel, invokeHandler: Any) extends Dynamic
 
   def close = {
     try {
+      println("before unreg")
       this.unregisterAsService()
+      println("after unreg")
     } catch {
-      case e: Throwable =>
+      case e: Throwable => println(e.getMessage)
     }
     channel.close
   }
@@ -255,8 +274,192 @@ class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: S
   }
 }
 
+class HttpMessageChannel(url: String, encoding: String = "MSGPACK") extends MessageChannel {
+
+  //  implicit val system = ActorSystem()
+  //  implicit val materializer = ActorMaterializer()
+  implicit val executionContext: ExecutionContext = SingleThreadExecutionContext
+  private val token = new AtomicReference[Option[String]](None)
+  //  private val contentType = ContentType(MediaType.customWithFixedCharset("application", encoding.toLowerCase(), HttpCharsets.`UTF-8`))
+  private val closed = new AtomicBoolean(false)
+  private val fetchExecutor = Executors.newSingleThreadExecutor((runnable) => {
+    val thread = new Thread(runnable)
+    thread.setDaemon(true)
+    thread
+  })
+  private val sendMessageExecutor = Executors.newCachedThreadPool((runnable) => {
+    val thread = new Thread(runnable)
+    thread.setDaemon(true)
+    thread
+  })
+
+  private def startFetchLoop: Unit = {
+    fetchExecutor.submit(new Runnable {
+      override def run(): Unit = {
+        while (!closed.get) {
+          try {
+            if (!makeHttpRequest(None)) Thread.sleep(1000)
+          }
+          catch {
+            case e: Throwable => {
+              e.printStackTrace()
+              Thread.sleep(1000)
+            }
+          }
+          println("loop done once")
+        }
+      }
+    })
+  }
+
+  def sendMessage(message: Message) = sendMessageExecutor.submit(new Runnable {
+    override def run(): Unit = makeHttpRequest(Some(message))
+  })
+
+  private def makeHttpRequest(messageOption: Option[Message]): Boolean = {
+    val bytes = messageOption match {
+      case None => new Array[Byte](0)
+      case Some(message) => {
+        encoding match {
+          case "MSGPACK" => new MessagePacker()
+          case "JSON" => new MessageJsonPacker()
+          case _ => throw new UnsupportedOperationException
+        }
+      }.feed(message).pack()
+    }
+    val connection = new URL(url).openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod("POST")
+    connection.setRequestProperty("Content-Type", s"application/${encoding.toLowerCase()}")
+    connection.setDoInput(true)
+    if (token.get isDefined) connection.setRequestProperty("Cookie", s"HydraToken=${token.get.get}")
+    if (bytes.size > 0) {
+      connection.setDoOutput(true)
+      val out = connection.getOutputStream
+      out.write(bytes)
+      out.close()
+    }
+    connection.getResponseCode match {
+      case 200 => {
+        connection.getHeaderField("Set-Cookie") match {
+          case null =>
+          case setCookie => {
+            setCookie.split("; *").filter(_.startsWith("HydraToken=")).foreach(c => {
+              val newToken = c.substring("HydraToken=".size)
+              if (token.get.isEmpty) startFetchLoop
+              token set Some(newToken)
+              println(s"new token set: $token")
+            })
+          }
+        }
+        val contentLength = connection.getHeaderField("Content-Length") match {
+          case null => 0
+          case l => l.toInt
+        }
+        if (contentLength > 10e6) throw new IllegalArgumentException("Response too large.")
+        if (contentLength > 0) {
+          val decoder = encoding match {
+            case "MSGPACK" => new MessageGenerator()
+            case "JSON" => new MessageJsonGenerator()
+            case _ => throw new UnsupportedOperationException
+          }
+          val in = connection.getInputStream
+          val readBytes = in.readNBytes(contentLength)
+          in.close()
+          decoder.feed(ByteBuffer.wrap(readBytes))
+          decoder.next() match {
+            case Some(responseMessage) => {
+              println(s"message got: $responseMessage")
+              messageReceived(responseMessage)
+            }
+            case None =>
+          }
+        }
+        true
+      }
+      case rc => {
+        println(s"Invalid response: ${rc}")
+        false
+      }
+    }
+  }
+
+  //  private def makeHttpRequest(messageOption: Option[Message]) = {
+  //    val bytes = messageOption match {
+  //      case None => new Array[Byte](0)
+  //      case Some(message) => {
+  //        println(s"sending: ${message}")
+  //        encoding match {
+  //          case "MSGPACK" => new MessagePacker()
+  //          case "JSON" => new MessageJsonPacker()
+  //          case _ => throw new UnsupportedOperationException
+  //        }
+  //      }.feed(message).pack()
+  //    }
+  //    val requestPre = HttpRequest(
+  //      method = HttpMethods.POST,
+  //      uri = url,
+  //      entity = HttpEntity(contentType, bytes)
+  //    )
+  //    val request = token get match {
+  //      case None => requestPre
+  //      case Some(tk) => requestPre.withHeaders(List(akka.http.scaladsl.model.headers.Cookie("HydraToken", tk)))
+  //    }
+  //    val response = Http().singleRequest(request)
+  //    println("req ed")
+  //    response onComplete {
+  //      case Success(response) => response.status match {
+  //        case StatusCodes.OK => {
+  //          println(s"OK for ${}")
+  //          val optionalCookie = response.getHeader("Set-Cookie")
+  //          if (optionalCookie.isPresent) {
+  //            val cookie = optionalCookie.get.asInstanceOf[akka.http.scaladsl.model.headers.`Set-Cookie`].cookie
+  //            if (cookie.name == "HydraToken") {
+  //              if (token.get.isEmpty) startFetchLoop
+  //              token set Some(cookie.value)
+  //            }
+  //          }
+  //          val contentLength = response.entity.contentLengthOption.get
+  //          if (contentLength > 10e6) throw new IllegalArgumentException("Response too large.")
+  //          if (contentLength > 0) {
+  //            val decoder = encoding match {
+  //              case "MSGPACK" => new MessageGenerator()
+  //              case "JSON" => new MessageJsonGenerator()
+  //              case _ => throw new UnsupportedOperationException
+  //            }
+  //            response.entity.dataBytes.runForeach(bs => {
+  //              try {
+  //                decoder.feed(bs.asByteBuffer)
+  //                decoder.next() match {
+  //                  case Some(responseMessage) => {
+  //                    println(s"message got: $responseMessage")
+  //                    messageReceived(responseMessage)
+  //                  }
+  //                  case None =>
+  //                }
+  //              }
+  //              catch {
+  //                case e: Throwable => e.printStackTrace()
+  //              }
+  //            })
+  //          }
+  //        }
+  //        case _ => println(s"Invalid response: ${response.status}")
+  //      }
+  //      case Failure(exception) => exception.printStackTrace()
+  //    }
+  //    response
+  //  }
+
+  override def close: Unit = {
+    closed set true
+    super.close
+    fetchExecutor.shutdown()
+    sendMessageExecutor.shutdown()
+  }
+}
+
 private object SingleThreadExecutionContext extends ExecutionContext with UncaughtExceptionHandler {
-  private lazy val SingleThreadPool = Executors.newSingleThreadExecutor(new ThreadFactory() {
+  private lazy val SingleThreadPool = Executors.newSingleThreadExecutor(new ThreadFactory {
     private lazy val ThreadCount = new AtomicInteger(0)
 
     def newThread(runnable: Runnable): Thread = {

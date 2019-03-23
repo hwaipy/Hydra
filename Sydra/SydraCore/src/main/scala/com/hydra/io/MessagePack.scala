@@ -175,6 +175,8 @@ class MessageGenerator(val bufferSize: Int = 10 * 1024 * 1024) extends MessageDe
 
   def next(): Option[Message] = {
     val unpacker = org.msgpack.core.MessagePack.newDefaultUnpacker(buffer.array, buffer.position(), buffer.limit() - buffer.position());
+//    println(s"unpacking ${buffer.position()}, ${buffer.limit() - buffer.position()}")
+//    println(buffer.array().slice(buffer.position(), buffer.limit() - buffer.position()).toList)
     try {
       val value = unpacker.unpackValue()
       val unpackCursor = unpacker.getTotalReadBytes()

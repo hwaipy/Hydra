@@ -229,6 +229,11 @@ class MessageJsonGenerator(prefix: Boolean = false, val bufferSize: Int = 10 * 1
     }
   }
 
+  def jsValue2Message(jsValue: JsValue): Option[Message] = toObject(jsValue) match {
+    case o: Map[_, Any] => Some(Message.wrap(o.asInstanceOf[Map[String, Any]]))
+    case o => throw new IOException(s"Message is not a MAP")
+  }
+
   def remaining: Int = buffer.limit() - buffer.position()
 
   def getStatistics = (messageGenerated.get, bytesConverted.get)

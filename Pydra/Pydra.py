@@ -617,15 +617,19 @@ class HttpSession:
             headers['Cookie'] = 'HydraToken={}'.format(self.hydraToken)
         r = requests.post(self.url, data=bytes, headers=headers)
         if (r.status_code == 200):
-            for head in r.headers:
-                print('{}: {}'.format(head, r.headers[head]))
+            # for head in r.headers:
+            #     print('{}: {}'.format(head, r.headers[head]))
+            # print()
             token = r.cookies.get('HydraToken')
-            self.hydraToken = token
+            if token is not None:
+                self.hydraToken = token
             if (len(r.content) > 0):
                 responseMessage = Message.unpack(r.content)
                 self.__messageDeal(responseMessage)
         else:
             print("wrong!!!!!!! {}".format(r.status_code))
+            import random
+            time.sleep(random.Random().random())
 
     def __fetchLoop(self):
         while self.__running:
@@ -812,25 +816,16 @@ class DynamicRemoteObject(RemoteObject):
 
 
 if __name__ == '__main__':
-    print('Pydra Demo')
-
-
     class TT:
         def testFun(self, a, b):
             return a + b + 1
 
-
     session = HttpSession.create('http://localhost:9000/hydra/message', TT(), 'S1')
-    # time.sleep(1)
-
-    # for i in range(0, 10):
-    #     sl = session.blockingInvoker().getServiceList()
-    #     print(sl)
-    # session.getfff
-    # session.stop()
-
-    try:
+    while True:
         print(session.getServiceList())
-        print(session.S1.testFun(100, 2000))
-    finally:
-        session.stop()
+        time.sleep(1)
+    # try:
+    #     print(session.getServiceList())
+    #     print(session.S1.testFun(100, 2000))
+    # finally:
+    #     session.stop()

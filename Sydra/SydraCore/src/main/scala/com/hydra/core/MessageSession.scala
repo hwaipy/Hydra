@@ -115,7 +115,7 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
 
     def unregisterAsService() = MessageSession.this.unregisterAsServcie()
 
-    def ping() = Unit
+    def ping() = {}
 
     def getServiceList() = manager.getServices
   }
@@ -182,9 +182,8 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
     sessionMap.values().asScala.toList.foreach(session => {
       try {
         session.completeMessageFetch
-        val overdue = System.currentTimeMillis() - sessionOverdue
-        session.completeOverdueFetchers(overdue)
-        if (session.isDiscarded(overdue) || !session.running.get) {
+        session.completeOverdueFetchers(System.currentTimeMillis() - sessionOverdue / 2)
+        if (session.isDiscarded(System.currentTimeMillis() - sessionOverdue) || !session.running.get) {
           session.completeOverdueFetchers(Long.MaxValue)
           session.close
         }

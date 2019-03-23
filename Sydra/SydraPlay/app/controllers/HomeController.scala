@@ -74,6 +74,11 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
                 decoder.feed(bytes.asByteBuffer)
                 decoder.next
               }
+              case "application/json" => {
+                val jsValue = request.body.asJson.get
+                val decoder = new MessageJsonGenerator()
+                decoder.jsValue2Message(jsValue)
+              }
               case _ => throw new UnsupportedOperationException
             }
           } match {
@@ -94,14 +99,22 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
                 val encoder = new MessagePacker()
                 encoder.feed(responseMessage).pack()
               }
+              case "application/json" => {
+                val encoder = new MessageJsonPacker()
+                encoder.feed(responseMessage).pack()
+              }
               case _ => throw new UnsupportedOperationException
             }
           }
+          //          println(s"${content.size}: ${messageOption} -> ${content.toList}")
           val result = Result(
             header = ResponseHeader(200),
             body = HttpEntity.Strict(ByteString(content), Some("application/msgpack"))
           )
-          result.withCookies(new Cookie("HydraToken", newToken))
+          token == Some(newToken) match {
+            case true => result
+            case false => result.withCookies(new Cookie("HydraToken", newToken))
+          }
         }
       }
       futureResult
