@@ -1,0 +1,11 @@
+name := "PXIController"
+version := "0.1.0"
+scalaVersion := "2.12.8"
+organization := "com.hydra"
+libraryDependencies += "com.hydra" %% "sydra" % "0.6.0"
+libraryDependencies += "org.pegdown" % "pegdown" % "1.6.0"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
+libraryDependencies += "org.rxtx" % "rxtx" % "2.1.7"
+scalacOptions ++= Seq("-feature")
+scalacOptions ++= Seq("-deprecation")
+scalacOptions ++= Seq("-Xlint")
