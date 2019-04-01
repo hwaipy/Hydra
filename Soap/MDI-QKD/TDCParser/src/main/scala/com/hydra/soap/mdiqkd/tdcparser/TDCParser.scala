@@ -14,7 +14,7 @@ import com.hydra.io.MessageClient
 import scalafx.scene.control._
 import com.hydra.`type`.NumberTypeConversions._
 import com.hydra.core.{MessageGenerator, MessagePack}
-import org.mongodb.scala.bson.{BsonArray, BsonDouble, BsonInt64}
+import org.mongodb.scala.bson.{BsonArray, BsonDouble, BsonInt32, BsonInt64}
 import org.mongodb.scala.{Completed, Document, MongoClient, Observer}
 import org.python.google.common.util.concurrent.AtomicDouble
 
@@ -104,7 +104,7 @@ object TDCParser extends JFXApp {
     histogramStrategyBobTime,
   )
 
-  def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double], coincidenceMap: Map[String, List[Long]]) = {
+  def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double], qberSection: List[List[Int]], homSection: List[List[Double]], channelMonitorSyncEvents: List[Long]) = {
     def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
 
     val vAllPulses = getV(histogramStrategyAllPulses.title)
@@ -175,8 +175,10 @@ object TDCParser extends JFXApp {
     if (!DEBUG) storageInvoker.FSFileAppendFrame("", reportPath, bytes)
 
     val seq1 = (reportMap ++ qberReport).map(z => (z._1, BsonDouble(z._2))).toSeq
-    val seq2 = coincidenceMap.map(z => (z._1, BsonArray(z._2.map(l => BsonInt64(l))))).toSeq
-    val reportDoc = Document.fromSeq(seq1 ++ seq2)
+    val seq2 = Seq(("QBERSections", BsonArray(qberSection.map(li => BsonArray(li.map(i => BsonInt32(i)))))))
+    val seq3 = Seq(("HOMSections", BsonArray(homSection.map(ld => BsonArray(ld.map(d => BsonDouble(d)))))))
+    val seq4 = Seq(("ChannelMonitorSync", BsonArray(channelMonitorSyncEvents.map(event => BsonInt64(event)))))
+    val reportDoc = Document.fromSeq(seq1 ++ seq2 ++ seq3 ++ seq4)
     collection.insertOne(reportDoc).subscribe(new Observer[Completed] {
 
       override def onNext(result: Completed): Unit = println("Inserted")
@@ -272,12 +274,12 @@ object TDCParser extends JFXApp {
       qberReport.put("Channel 1 in Window", channel1InWindow)
       qberReport.put("Channel 2 in Window", channel2InWindow)
 
-      val homResults = mdiqkdQBER("X-X, 0&0 with delays").asInstanceOf[List[Int]]
+      val homResults = mdiqkdQBER("X-X, 0&0 with delays").asInstanceOf[List[Double]]
       qberReport.put("HOM Count", homResults(0))
       qberReport.put("HOM Side Count", homResults(1))
       qberReport.put("HOM Dip", if (homResults(1) == 0) Double.NaN else homResults(0).toDouble / homResults(1))
 
-      val homResultsAll = mdiqkdQBER("All, 0&0 with delays").asInstanceOf[List[Int]]
+      val homResultsAll = mdiqkdQBER("All, 0&0 with delays").asInstanceOf[List[Double]]
       qberReport.put("HOM Count All", homResultsAll(0))
       qberReport.put("HOM Side Count All", homResultsAll(1))
       qberReport.put("HOM Dip All", if (homResultsAll(1) == 0) Double.NaN else homResultsAll(0).toDouble / homResultsAll(1))
@@ -291,19 +293,26 @@ object TDCParser extends JFXApp {
       qberReport.put("QBER X Count", ssPhaseCorrect + ssPhaseWrong)
       qberReport.put("QBER X", if (ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble / (ssPhaseCorrect + ssPhaseWrong))
 
-      val basisStrings = List("O", "X", "Y", "Z")
-      val coincidenceMap = new mutable.HashMap[String, List[Long]]()
-      Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => List("Correct", "Wrong").foreach(cw => {
-        val msg = s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, ${cw}"
-        qberReport.put(msg, mdiqkdQBER(msg))
-        val coincidences = mdiqkdQBER(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, ${cw}").asInstanceOf[List[Long]]
-        coincidenceMap.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, ${cw}", coincidences)
-      })))
+      //      val basisStrings = List("O", "X", "Y", "Z")
+      //      val coincidenceMap = new mutable.HashMap[String, List[Long]]()
+      //      Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => List("Correct", "Wrong").foreach(cw => {
+      //        val msg = s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, ${cw}"
+      //        qberReport.put(msg, mdiqkdQBER(msg))
+      //        val coincidences = mdiqkdQBER(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, ${cw}").asInstanceOf[List[Long]]
+      //        coincidenceMap.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, ${cw}", coincidences)
+      //      })))
 
       val time: Long = mdiqkdQBER("Time")
       qberReport.put("Time", time)
 
-      updateReport(reports, qberReport.toMap, coincidenceMap.toMap)
+      val qberSections = mdiqkdQBER("QBER Sections").asInstanceOf[List[List[Int]]]
+      //QBER Sections Detail: 100*32 Array. 100 for 100 sections. 32 for (Alice[O,X,Y,Z] * 4 + Bob[O,X,Y,Z]) * 2 + (0 for Correct and 1 for Wrong)
+      val homSections = mdiqkdQBER("HOM Sections").asInstanceOf[List[List[Double]]]
+      //HOM Sections Detail: 100*4 Array. 100 for 100 sections. 4 for: X-X, 0&0 without and with delays; All, 0&0 without and with delays
+      //      println(qberSections)
+      //      println(homSections)
+
+      updateReport(reports, qberReport.toMap, qberSections, homSections, mdiqkdQBER("ChannelMonitorSync").asInstanceOf[List[Long]])
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
     }
   }

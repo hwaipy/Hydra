@@ -66,7 +66,7 @@ class FineTimeCalibrator {
     private int max = 250;
 
     private int update(int fineTime) {
-      if (fineTime >= 1000 && fineTime < 0) {
+      if (fineTime >= counts.length || fineTime < 0) {
         return max;
       }
       counts[fineTime]++;

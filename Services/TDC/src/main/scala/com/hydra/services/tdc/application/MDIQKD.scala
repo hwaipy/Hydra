@@ -103,8 +103,8 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
 
 
 class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
-  configuration("AliceRandomNumbers") = Range(0, 1000).toList
-  configuration("BobRandomNumbers") = Range(0, 1000).toList
+  configuration("AliceRandomNumbers") = Range(0, 1000).map(_ => 0).toList
+  configuration("BobRandomNumbers") = Range(0, 1000).map(_ => 0).toList
   configuration("Period") = 10000.0
   configuration("Delay") = 3000.0
   configuration("TriggerChannel") = 0
@@ -112,9 +112,8 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("Channel 2") = 3
   configuration("Gate") = 2000.0
   configuration("PulseDiff") = 3000.0
-  //  val mongoClient = MongoClient("mongodb://MDIQKD:freespace@192.168.25.27:27019")
-  //  val database = mongoClient.getDatabase("Freespace_MDI_QKD")
-  //  val collection = database.getCollection("Coincidences")
+  configuration("QBERSectionCount") = 100
+  configuration("ChannelMonitorSyncChannel") = 2
 
   override def configure(key: String, value: Any) = key match {
     case "AliceRandomNumbers" => value.asInstanceOf[List[Int]] != null
@@ -147,6 +146,14 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       val sc: Int = value
       sc >= 0 && sc < channelCount
     }
+    case "QBERSectionCount" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
+    case "ChannelMonitorSyncChannel" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
   }
 
   override protected def analysis(dataBlock: DataBlock) = {
@@ -159,6 +166,8 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val channel2: Int = configuration("Channel 2")
     val gate: Double = configuration("Gate")
     val pulseDiff: Double = configuration("PulseDiff")
+    val qberSectionCount: Int = configuration("QBERSectionCount")
+    val channelMonitorSyncChannel: Int = configuration("ChannelMonitorSyncChannel")
 
     val triggerList = dataBlock.content(triggerChannel)
     val signalList1 = dataBlock.content(channel1)
@@ -169,9 +178,9 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val validItem1s = item1s.filter(_._3 >= 0)
     val validItem2s = item2s.filter(_._3 >= 0)
 
-    def generateCoincidences(iterator1: Iterator[Tuple3[Long, Long, Int]], iterator2: Iterator[Tuple3[Long, Long, Int]]) = {
-      val item1Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
-      val item2Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
+    def generateCoincidences(iterator1: Iterator[Tuple4[Long, Long, Int, Long]], iterator2: Iterator[Tuple4[Long, Long, Int, Long]]) = {
+      val item1Ref = new AtomicReference[Tuple4[Long, Long, Int, Long]]()
+      val item2Ref = new AtomicReference[Tuple4[Long, Long, Int, Long]]()
 
       def fillRef = {
         if (item1Ref.get == null && iterator1.hasNext) item1Ref set iterator1.next
@@ -188,7 +197,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
         else if (item1._2 > item2._2) item2Ref set null
         else if (item1._2 < item2._2) item1Ref set null
         else {
-          resultBuffer += new Coincidence(item1._3, item2._3, randomNumbersAlice(item1._2 % randomNumbersAlice.size), randomNumbersBob(item1._2 % randomNumbersBob.size), item1._1, item1._2)
+          resultBuffer += new Coincidence(item1._3, item2._3, randomNumbersAlice(item1._2 % randomNumbersAlice.size), randomNumbersBob(item1._2 % randomNumbersBob.size), item1._4, item1._1, item1._2)
           item1Ref set null
           item2Ref set null
         }
@@ -197,7 +206,6 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     }
 
     val coincidences = generateCoincidences(validItem1s.iterator, validItem2s.iterator)
-    //    println(s"Coincidences: ${validItem1s.size} * ${validItem2s.size} / 100M = ${(validItem1s.size).toDouble*(validItem2s.size)/(1e8)}, actual = ${coincidences.size}")
     val basisMatchedCoincidences = coincidences.filter(_.basisMatched)
     val validCoincidences = basisMatchedCoincidences.filter(_.valid)
 
@@ -211,27 +219,61 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put("Valid Coincidence Count", validCoincidences.size)
 
     val basisStrings = List("O", "X", "Y", "Z")
+    val qberSections = Range(0, qberSectionCount).toArray.map(i => new Array[Int](4 * 4 * 2))
     Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => {
       val coincidences = validCoincidences.filter(c => c.randomNumberAlice.intensity == basisAlice && c.randomNumberBob.intensity == basisBob)
       map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Correct", coincidences.filter(_.isCorrect).size)
       map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Wrong", coincidences.filterNot(_.isCorrect).size)
-      if (coincidences.size > 1e6) println(s"error: too many coincidences [${coincidences.size}]") else {
-        map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, Correct", coincidences.filter(_.isCorrect).map(c => Array(c.triggerTime, c.pulseIndex)))
-        map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, Wrong", coincidences.filterNot(_.isCorrect).map(c => Array(c.triggerTime, c.pulseIndex)))
+    }))
+    validCoincidences.foreach(c => {
+      val sectionIndex = ((c.triggerTime - dataBlock.dataTimeBegin) / (dataBlock.dataTimeEnd - dataBlock.dataTimeBegin) * qberSectionCount).toInt
+      val category = (c.randomNumberAlice.intensity * 4 + c.randomNumberBob.intensity) * 2 + (if (c.isCorrect) 0 else 1)
+      if (category > 100) {
+        println(c.randomNumberAlice.RN)
+        println(c.randomNumberBob.RN)
+        println(c.isCorrect)
+        println(randomNumbersAlice.map(_.RN).toList)
       }
+      if (sectionIndex < qberSections.size) qberSections(sectionIndex)(category) += 1
+    })
+    map.put(s"QBER Sections", qberSections)
+    map.put(s"QBER Sections Detail", s"100*32 Array. 100 for 100 sections. 32 for (Alice[O,X,Y,Z] * 4 + Bob[O,X,Y,Z]) * 2 + (0 for Correct and 1 for Wrong)")
+
+    val ccs0Coincidences = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0))
+    val ccsOtherCoincidences = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3, i._4)).iterator)
+      .filter(_.basisMatched).filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)))
+    val ccs0 = ccs0Coincidences.size
+    val ccsOther = ccsOtherCoincidences.map(_.size)
+    map.put("X-X, 0&0 with delays", List(ccs0, ccsOther.sum.toDouble / ccsOther.size))
+    val ccsAll0Coincidences = coincidences.filter(c => (c.r1 == 0) && (c.r2 == 0))
+    val ccsAllOtherCoincidences = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3, i._4)).iterator).filter(c => (c.r1 == 0) && (c.r2 == 0)))
+    val ccsAll0 = ccsAll0Coincidences.size
+    val ccsAllOther = ccsAllOtherCoincidences.map(_.size)
+    map.put("All, 0&0 with delays", List(ccsAll0, ccsAllOther.sum.toDouble / ccsAllOther.size))
+
+    def statisticCoincidenceSection(cll: List[List[Coincidence]]) = {
+      val sections = new Array[Int](qberSectionCount)
+      cll.foreach(cl => cl.foreach(c => {
+        val sectionIndex = ((c.triggerTime - dataBlock.dataTimeBegin) / (dataBlock.dataTimeEnd - dataBlock.dataTimeBegin) * qberSectionCount).toInt
+        sections(sectionIndex) += 1
+      }))
+      sections.map(c => c.toDouble / cll.size)
+    }
+
+    val homSections = Array(List(ccs0Coincidences), ccsOtherCoincidences, List(ccsAll0Coincidences), ccsAllOtherCoincidences).map(statisticCoincidenceSection)
+    map.put(s"HOM Sections", homSections)
+    map.put(s"HOM Sections Detail", s"100*4 Array. 100 for 100 sections. 4 for: X-X, 0&0 without and with delays; All, 0&0 without and with delays")
+
+    val channelMonitorSyncList = dataBlock.content(channelMonitorSyncChannel)
+    map.put("ChannelMonitorSync", Array[Long](dataBlock.dataTimeBegin, dataBlock.dataTimeEnd) ++ (channelMonitorSyncList.size match {
+      case s if s > 10 => {
+        println("Error: counting rate at ChannelMonitorSyncChannel exceed 10!")
+        new Array[Long](0)
+      }
+      case s => channelMonitorSyncList
     }))
 
-    val ccs0 = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
-    val ccsOther = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3)).iterator)
-      .filter(_.basisMatched).filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
-    )
-    map.put("X-X, 0&0 with delays", List(ccs0, ccsOther.sum / ccsOther.size))
-
-    val ccsAll0 = coincidences.filter(c => (c.r1 == 0) && (c.r2 == 0)).size
-    val ccsAllOther = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3)).iterator).filter(c => (c.r1 == 0) && (c.r2 == 0)).size)
-    map.put("All, 0&0 with delays", List(ccsAll0, ccsAllOther.sum / ccsAllOther.size))
-
-    map.put("Time", dataBlock.time)
+    map.put("Time", dataBlock.creationTime)
     map.toMap
   }
 
@@ -247,7 +289,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       val pulseIndex = ((time - currentTriggerRef.get) / period).toLong
       val delta = (time - currentTriggerRef.get - period * pulseIndex).toLong
       val p = if (math.abs(delta - delay) < gate / 2) 0 else if (math.abs(delta - delay - pulseDiff) < gate / 2) 1 else -1
-      ((currentTriggerRef.get / period / randomNumberSize).toLong, pulseIndex, p)
+      ((currentTriggerRef.get / period / randomNumberSize).toLong, pulseIndex, p, currentTriggerRef.get)
     })
     meta
   }
@@ -290,7 +332,7 @@ class RandomNumber(val RN: Int) {
   }
 }
 
-class Coincidence(val r1: Int, val r2: Int, val randomNumberAlice: RandomNumber, val randomNumberBob: RandomNumber, val triggerTime: Long, val pulseIndex: Long) {
+class Coincidence(val r1: Int, val r2: Int, val randomNumberAlice: RandomNumber, val randomNumberBob: RandomNumber, val triggerTime: Long, val triggerIndex: Long, val pulseIndex: Long) {
   val basisMatched = randomNumberAlice.intensity == randomNumberBob.intensity
   val valid = (r1 == 0 && r2 == 1) || (r1 == 1 && r2 == 0)
   val isCorrect = randomNumberAlice.encode != randomNumberBob.encode

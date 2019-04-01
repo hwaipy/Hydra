@@ -1,6 +1,7 @@
 package com.hydra.services.tdc.device.adapters;
 
 import com.hydra.services.tdc.device.TDCDataAdapter;
+
 import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
@@ -163,6 +164,7 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
     private void parseToTimeEvent(int position) {
         byte[] array = dataBuffer.array();
         int channel = array[position + 6] - 0x40;
+        if (channel > 16 || channel < 0) return;
         for (int i = 0; i < 8; i++) {
             unitLong[i] = array[position + i];
             if (unitLong[i] < 0) {

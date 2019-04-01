@@ -1,0 +1,10 @@
+name := "ADCMonitor"
+version := "0.1.0"
+scalaVersion := "2.12.8"
+organization := "com.hydra"
+libraryDependencies += "org.scala-lang" % "scala-reflect" % "2.12.8"
+libraryDependencies += "org.scala-lang" % "scala-compiler" % "2.12.8"
+libraryDependencies += "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2"
+scalacOptions ++= Seq("-feature")
+scalacOptions ++= Seq("-deprecation")
+fork := true

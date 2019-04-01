@@ -1,6 +1,5 @@
 package com.hydra.services.tdc
 
-import java.io.{FileOutputStream, PrintWriter}
 import java.net.ServerSocket
 import java.nio.LongBuffer
 import java.util.concurrent.Executors
@@ -90,6 +89,7 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
 
   private val timeEvents = Range(0, channelCount).map(_ => ArrayBuffer[Long]()).toList
   private var unitEndTime = Long.MinValue
+  private val timeUnitSize = 1000000000000l
 
   private def feedTimeEvent(channel: Int, time: Long) {
     if (time > unitEndTime) {
@@ -102,12 +102,12 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
   private def flush() {
     val data = timeEvents.zipWithIndex.map(z => z._1.toArray.map(t => t + delays(z._2))).toArray
     timeEvents.foreach(_.clear)
-    dataBlocks += new DataBlock(data, System.currentTimeMillis())
-    unitEndTime += 1000000000000l
+    dataBlocks += new DataBlock(data, System.currentTimeMillis(), unitEndTime - timeUnitSize, unitEndTime)
+    unitEndTime += timeUnitSize
   }
 }
 
-class DataBlock(val content: Array[Array[Long]], val time:Long)
+class DataBlock(val content: Array[Array[Long]], val creationTime: Long, val dataTimeBegin: Long, val dataTimeEnd: Long)
 
 abstract class DataAnalyser {
   protected val on = new AtomicBoolean(false)
@@ -137,9 +137,9 @@ class CounterAnalyser(channelCount: Int) extends DataAnalyser {
 
   override protected def analysis(dataBlock: DataBlock) = {
     val r = dataBlock.content.map(list => list.size).toList
-//    val pw = new PrintWriter(new FileOutputStream("o.csv", true))
-//    pw.println(r)
-//    pw.close()
+    //    val pw = new PrintWriter(new FileOutputStream("o.csv", true))
+    //    pw.println(r)
+    //    pw.close()
     r
   }
 }
