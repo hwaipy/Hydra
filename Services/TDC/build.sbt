@@ -6,6 +6,7 @@ libraryDependencies += "com.hydra" %% "sydra" % "0.6.0"
 libraryDependencies += "org.pegdown" % "pegdown" % "1.6.0"
 libraryDependencies += "com.hwaipy" %% "hydrogen" % "0.3.0"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
+libraryDependencies += "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2"
 scalacOptions ++= Seq("-feature")
 scalacOptions ++= Seq("-deprecation")
 scalacOptions ++= Seq("-Xlint")

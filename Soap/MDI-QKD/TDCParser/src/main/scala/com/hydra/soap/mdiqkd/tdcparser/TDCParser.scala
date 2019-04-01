@@ -14,6 +14,8 @@ import com.hydra.io.MessageClient
 import scalafx.scene.control._
 import com.hydra.`type`.NumberTypeConversions._
 import com.hydra.core.{MessageGenerator, MessagePack}
+import org.mongodb.scala.bson.{BsonArray, BsonDouble, BsonInt64}
+import org.mongodb.scala.{Completed, Document, MongoClient, Observer}
 import org.python.google.common.util.concurrent.AtomicDouble
 
 import scala.collection.mutable
@@ -52,7 +54,7 @@ object TDCParser extends JFXApp {
     }
   }
 
-  val client = MessageClient.newClient(parameters.named.get("host") match {
+  lazy val client = MessageClient.newClient(parameters.named.get("host") match {
     case Some(host) => host
     case None => "192.168.25.27"
   }, parameters.named.get("port") match {
@@ -70,6 +72,9 @@ object TDCParser extends JFXApp {
 
   val reportPath = "/test/tdc/mdireport.fs"
   storageInvoker.FSFileInitialize("", reportPath)
+  val mongoClient: MongoClient = MongoClient("mongodb://MDIQKD:freespace@192.168.25.27:27019")
+  val database = mongoClient.getDatabase("Freespace_MDI_QKD")
+  val collection = database.getCollection("TDCReport")
 
   val visualBounds = Screen.primary.visualBounds
   val frameSize = new Dimension2D(visualBounds.width * 0.9, visualBounds.height * 0.6)
@@ -99,9 +104,7 @@ object TDCParser extends JFXApp {
     histogramStrategyBobTime,
   )
 
-  def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double]) = {
-    println("In update report")
-
+  def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double], coincidenceMap: Map[String, List[Long]]) = {
     def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
 
     val vAllPulses = getV(histogramStrategyAllPulses.title)
@@ -143,10 +146,12 @@ object TDCParser extends JFXApp {
       System.lineSeparator() +
       f"HOM with First Pulses of X Encoding" + System.lineSeparator() +
       f"Count: ${qberReport("HOM Count")}" + System.lineSeparator() +
+      f"Side Count: ${qberReport("HOM Side Count")}" + System.lineSeparator() +
       f"Dip: ${qberReport("HOM Dip")}%.3f" + System.lineSeparator() +
       System.lineSeparator() +
       f"HOM with All First Pulses" + System.lineSeparator() +
       f"Count: ${qberReport("HOM Count All")}" + System.lineSeparator() +
+      f"Side Count: ${qberReport("HOM Side Count All")}" + System.lineSeparator() +
       f"Dip: ${qberReport("HOM Dip All")}%.3f" + System.lineSeparator() +
       System.lineSeparator() +
       f"Coincidences in Z: ${qberReport("QBER Z Count")}" + System.lineSeparator() +
@@ -169,6 +174,17 @@ object TDCParser extends JFXApp {
 
     if (!DEBUG) storageInvoker.FSFileAppendFrame("", reportPath, bytes)
 
+    val seq1 = (reportMap ++ qberReport).map(z => (z._1, BsonDouble(z._2))).toSeq
+    val seq2 = coincidenceMap.map(z => (z._1, BsonArray(z._2.map(l => BsonInt64(l))))).toSeq
+    val reportDoc = Document.fromSeq(seq1 ++ seq2)
+    collection.insertOne(reportDoc).subscribe(new Observer[Completed] {
+
+      override def onNext(result: Completed): Unit = println("Inserted")
+
+      override def onError(e: Throwable): Unit = e.printStackTrace()
+
+      override def onComplete(): Unit = println("Completed")
+    })
     println("done update report")
   }
 
@@ -212,7 +228,6 @@ object TDCParser extends JFXApp {
     assertThread("TDCParser")
     val size: Long = storageInvoker.metaData("", path, false).asInstanceOf[Map[String, Any]]("Size")
     if (size != recentSize.get) {
-      println("in update results")
       recentSize.set(size)
       val frameBytes = storageInvoker.FSFileReadTailFrames("", path, 0, 1).asInstanceOf[List[Array[Byte]]](0)
       val mg = new MessageGenerator()
@@ -259,10 +274,12 @@ object TDCParser extends JFXApp {
 
       val homResults = mdiqkdQBER("X-X, 0&0 with delays").asInstanceOf[List[Int]]
       qberReport.put("HOM Count", homResults(0))
+      qberReport.put("HOM Side Count", homResults(1))
       qberReport.put("HOM Dip", if (homResults(1) == 0) Double.NaN else homResults(0).toDouble / homResults(1))
 
       val homResultsAll = mdiqkdQBER("All, 0&0 with delays").asInstanceOf[List[Int]]
       qberReport.put("HOM Count All", homResultsAll(0))
+      qberReport.put("HOM Side Count All", homResultsAll(1))
       qberReport.put("HOM Dip All", if (homResultsAll(1) == 0) Double.NaN else homResultsAll(0).toDouble / homResultsAll(1))
 
       val ssTimeCorrect: Int = mdiqkdQBER("Z-Z, Correct")
@@ -275,15 +292,18 @@ object TDCParser extends JFXApp {
       qberReport.put("QBER X", if (ssPhaseCorrect + ssPhaseWrong == 0) Double.NaN else ssPhaseWrong.toDouble / (ssPhaseCorrect + ssPhaseWrong))
 
       val basisStrings = List("O", "X", "Y", "Z")
+      val coincidenceMap = new mutable.HashMap[String, List[Long]]()
       Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => List("Correct", "Wrong").foreach(cw => {
         val msg = s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, ${cw}"
         qberReport.put(msg, mdiqkdQBER(msg))
+        val coincidences = mdiqkdQBER(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, ${cw}").asInstanceOf[List[Long]]
+        coincidenceMap.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, ${cw}", coincidences)
       })))
 
       val time: Long = mdiqkdQBER("Time")
       qberReport.put("Time", time)
 
-      updateReport(reports, qberReport.toMap)
+      updateReport(reports, qberReport.toMap, coincidenceMap.toMap)
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
     }
   }
@@ -531,4 +551,5 @@ object TDCParser extends JFXApp {
   class HistogramStrategy(val title: String, acceptedRNDs: Array[Int], val regions: Map[String, Tuple2[Double, Double]], val autoFit: Boolean = false) {
     def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
   }
+
 }

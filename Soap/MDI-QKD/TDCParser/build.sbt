@@ -9,6 +9,7 @@ libraryDependencies += "com.hydra" %% "tdc" % "0.2.0"
 libraryDependencies += "org.scalafx" %% "scalafx" % "11-R16"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
 libraryDependencies += "org.python" % "jython" % "2.7.0"
+libraryDependencies += "org.mongodb.scala" %% "mongo-scala-driver" % "2.4.2"
 scalacOptions ++= Seq("-feature")
 scalacOptions ++= Seq("-deprecation")
 scalacOptions ++= Seq("-Xlint")

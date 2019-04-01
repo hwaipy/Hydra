@@ -1,8 +1,11 @@
 package com.hydra.services.tdc.application
 
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+
 import com.hydra.services.tdc.{DataAnalyser, DataBlock, Histogram}
 import com.hydra.`type`.NumberTypeConversions._
+//import org.mongodb.scala.{Completed, MongoClient, Observer}
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -57,7 +60,7 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     val timeBobChannel: Int = configuration("TimeBobChannel")
     val signalChannel: Int = configuration("SignalChannel")
     val binCount: Int = configuration("BinCount")
-    val map = mutable.HashMap[String, Any]("TriggerChannel" -> triggerChannel,"SignalChannel" -> signalChannel, "Delay" -> delay, "Period" -> period)
+    val map = mutable.HashMap[String, Any]("TriggerChannel" -> triggerChannel, "SignalChannel" -> signalChannel, "Delay" -> delay, "Period" -> period)
 
     val signalList = dataBlock.content(signalChannel)
     val triggerList = dataBlock.content(triggerChannel)
@@ -80,14 +83,14 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     map.toMap
   }
 
-  private def meta(signalList: Array[Long], triggerList: Array[Long], delay: Double, period:Double, randomNumbers: Array[RandomNumber])={
+  private def meta(signalList: Array[Long], triggerList: Array[Long], delay: Double, period: Double, randomNumbers: Array[RandomNumber]) = {
     val triggerIterator = triggerList.iterator
-    val currentTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else 0)
-    val nextTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
+    val currentTriggerRef = new AtomicLong(if (triggerIterator.hasNext) triggerIterator.next() else 0)
+    val nextTriggerRef = new AtomicLong(if (triggerIterator.hasNext) triggerIterator.next() else Long.MaxValue)
     signalList.map(time => {
-      while(time>=nextTriggerRef.get){
+      while (time >= nextTriggerRef.get) {
         currentTriggerRef set nextTriggerRef.get
-        nextTriggerRef.set(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
+        nextTriggerRef.set(if (triggerIterator.hasNext) triggerIterator.next() else Long.MaxValue)
       }
       val pulseIndex = ((time - delay - currentTriggerRef.get) / period).toLong
       val randomNumberIndex = (pulseIndex % randomNumbers.size).toInt
@@ -109,6 +112,9 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("Channel 2") = 3
   configuration("Gate") = 2000.0
   configuration("PulseDiff") = 3000.0
+  //  val mongoClient = MongoClient("mongodb://MDIQKD:freespace@192.168.25.27:27019")
+  //  val database = mongoClient.getDatabase("Freespace_MDI_QKD")
+  //  val collection = database.getCollection("Coincidences")
 
   override def configure(key: String, value: Any) = key match {
     case "AliceRandomNumbers" => value.asInstanceOf[List[Int]] != null
@@ -166,20 +172,22 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     def generateCoincidences(iterator1: Iterator[Tuple3[Long, Long, Int]], iterator2: Iterator[Tuple3[Long, Long, Int]]) = {
       val item1Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
       val item2Ref = new AtomicReference[Tuple3[Long, Long, Int]]()
+
       def fillRef = {
         if (item1Ref.get == null && iterator1.hasNext) item1Ref set iterator1.next
         if (item2Ref.get == null && iterator2.hasNext) item2Ref set iterator2.next
         item1Ref.get != null && item2Ref.get != null
       }
+
       val resultBuffer = new ArrayBuffer[Coincidence]()
-      while(fillRef) {
+      while (fillRef) {
         val item1 = item1Ref.get
         val item2 = item2Ref.get
         if (item1._1 > item2._1) item2Ref set null
         else if (item1._1 < item2._1) item1Ref set null
         else if (item1._2 > item2._2) item2Ref set null
         else if (item1._2 < item2._2) item1Ref set null
-        else{
+        else {
           resultBuffer += new Coincidence(item1._3, item2._3, randomNumbersAlice(item1._2 % randomNumbersAlice.size), randomNumbersBob(item1._2 % randomNumbersBob.size), item1._1, item1._2)
           item1Ref set null
           item2Ref set null
@@ -189,7 +197,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     }
 
     val coincidences = generateCoincidences(validItem1s.iterator, validItem2s.iterator)
-//    println(s"Coincidences: ${validItem1s.size} * ${validItem2s.size} / 100M = ${(validItem1s.size).toDouble*(validItem2s.size)/(1e8)}, actual = ${coincidences.size}")
+    //    println(s"Coincidences: ${validItem1s.size} * ${validItem2s.size} / 100M = ${(validItem1s.size).toDouble*(validItem2s.size)/(1e8)}, actual = ${coincidences.size}")
     val basisMatchedCoincidences = coincidences.filter(_.basisMatched)
     val validCoincidences = basisMatchedCoincidences.filter(_.valid)
 
@@ -203,38 +211,42 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put("Valid Coincidence Count", validCoincidences.size)
 
     val basisStrings = List("O", "X", "Y", "Z")
-    Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob =>{
+    Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => {
       val coincidences = validCoincidences.filter(c => c.randomNumberAlice.intensity == basisAlice && c.randomNumberBob.intensity == basisBob)
       map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Correct", coincidences.filter(_.isCorrect).size)
       map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Wrong", coincidences.filterNot(_.isCorrect).size)
+      if (coincidences.size > 1e6) println(s"error: too many coincidences [${coincidences.size}]") else {
+        map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, Correct", coincidences.filter(_.isCorrect).map(c => Array(c.triggerTime, c.pulseIndex)))
+        map.put(s"${basisStrings(basisAlice)}-${basisStrings(basisBob)}, Coincidences, Wrong", coincidences.filterNot(_.isCorrect).map(c => Array(c.triggerTime, c.pulseIndex)))
+      }
     }))
 
     val ccs0 = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
-    val ccsOther = Range(10,15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i=>(i._1 + delta, i._2, i._3)).iterator)
+    val ccsOther = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3)).iterator)
       .filter(_.basisMatched).filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)).size
     )
     map.put("X-X, 0&0 with delays", List(ccs0, ccsOther.sum / ccsOther.size))
 
     val ccsAll0 = coincidences.filter(c => (c.r1 == 0) && (c.r2 == 0)).size
-    val ccsAllOther = Range(10,15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i=>(i._1 + delta, i._2, i._3)).iterator).filter(c => (c.r1 == 0) && (c.r2 == 0)).size)
+    val ccsAllOther = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3)).iterator).filter(c => (c.r1 == 0) && (c.r2 == 0)).size)
     map.put("All, 0&0 with delays", List(ccsAll0, ccsAllOther.sum / ccsAllOther.size))
 
     map.put("Time", dataBlock.time)
     map.toMap
   }
 
-  private def analysisSingleChannel(triggerList: Array[Long], signalList: Array[Long], period:Double, delay:Double, gate:Double, pulseDiff:Double, randomNumberSize:Int) = {
+  private def analysisSingleChannel(triggerList: Array[Long], signalList: Array[Long], period: Double, delay: Double, gate: Double, pulseDiff: Double, randomNumberSize: Int) = {
     val triggerIterator = triggerList.iterator
-    val currentTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else 0)
-    val nextTriggerRef = new AtomicLong(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
+    val currentTriggerRef = new AtomicLong(if (triggerIterator.hasNext) triggerIterator.next() else 0)
+    val nextTriggerRef = new AtomicLong(if (triggerIterator.hasNext) triggerIterator.next() else Long.MaxValue)
     val meta = signalList.map(time => {
-      while(time>=nextTriggerRef.get){
+      while (time >= nextTriggerRef.get) {
         currentTriggerRef set nextTriggerRef.get
-        nextTriggerRef.set(if(triggerIterator.hasNext)triggerIterator.next() else Long.MaxValue)
+        nextTriggerRef.set(if (triggerIterator.hasNext) triggerIterator.next() else Long.MaxValue)
       }
       val pulseIndex = ((time - currentTriggerRef.get) / period).toLong
       val delta = (time - currentTriggerRef.get - period * pulseIndex).toLong
-      val p = if(math.abs(delta - delay) < gate/2) 0 else if (math.abs(delta - delay - pulseDiff) < gate/2) 1 else -1
+      val p = if (math.abs(delta - delay) < gate / 2) 0 else if (math.abs(delta - delay - pulseDiff) < gate / 2) 1 else -1
       ((currentTriggerRef.get / period / randomNumberSize).toLong, pulseIndex, p)
     })
     meta
@@ -246,29 +258,29 @@ object RandomNumber {
 
   val ALL_RANDOM_NUMBERS = Array(0, 1, 2, 3, 4, 5, 6, 7).map(RandomNumber(_))
 
-//  private val random = new Random()
-//
-//  def generateRandomNumbers(length: Int, signalRatio: Double, decoyRatio: Double) = Range(0, length).map(_ => {
-//    val amp = random.nextDouble() match {
-//      case d if d < signalRatio => 0xC
-//      case d if d < signalRatio + decoyRatio => 0x8
-//      case _ => 0x0
-//    }
-//    val encode = random.nextInt(4)
-//    new RandomNumber(amp | encode)
-//  }).toArray
+  //  private val random = new Random()
+  //
+  //  def generateRandomNumbers(length: Int, signalRatio: Double, decoyRatio: Double) = Range(0, length).map(_ => {
+  //    val amp = random.nextDouble() match {
+  //      case d if d < signalRatio => 0xC
+  //      case d if d < signalRatio + decoyRatio => 0x8
+  //      case _ => 0x0
+  //    }
+  //    val encode = random.nextInt(4)
+  //    new RandomNumber(amp | encode)
+  //  }).toArray
 }
 
 class RandomNumber(val RN: Int) {
-  def isVacuum = (RN/2) == 0
+  def isVacuum = (RN / 2) == 0
 
-  def isX = (RN/2) == 1
+  def isX = (RN / 2) == 1
 
-  def isY = (RN/2) == 2
+  def isY = (RN / 2) == 2
 
-  def isZ = (RN/2) == 3
+  def isZ = (RN / 2) == 3
 
-  def intensity = RN/2
+  def intensity = RN / 2
 
   def encode = RN % 2
 
@@ -278,8 +290,8 @@ class RandomNumber(val RN: Int) {
   }
 }
 
-class Coincidence(val r1:Int, val r2:Int, val randomNumberAlice: RandomNumber, val randomNumberBob: RandomNumber, val triggerTime: Long, val pulseIndex: Long){
-  val basisMatched = randomNumberAlice.intensity  == randomNumberBob.intensity
+class Coincidence(val r1: Int, val r2: Int, val randomNumberAlice: RandomNumber, val randomNumberBob: RandomNumber, val triggerTime: Long, val pulseIndex: Long) {
+  val basisMatched = randomNumberAlice.intensity == randomNumberBob.intensity
   val valid = (r1 == 0 && r2 == 1) || (r1 == 1 && r2 == 0)
   val isCorrect = randomNumberAlice.encode != randomNumberBob.encode
 }

@@ -7,7 +7,6 @@ import com.hydra.io.{BlockingRemoteObject, MessageClient}
 import com.hydra.services.tdc.adapters.SimpleTDCDataAdapter
 import com.hydra.services.tdc.application.{MDIQKDEncodingAnalyser, MDIQKDQBERAnalyser}
 import com.hydra.services.tdc.device.adapters.GroundTDCDataAdapter
-//import com.hydra.services.tdc.test.SimpleTDCDataGenerator
 
 import scala.collection.mutable
 import scala.io.Source
@@ -35,8 +34,8 @@ object TDCProcess extends App {
 
   if (DEBUG) {
     println("DEBUG mode, starting SimpleTDCDataGenerator.")
-//    SimpleTDCDataGenerator.launch(port, 1000)
-//    process.configureAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> SimpleTDCDataGenerator.randomNumbers.map(_.RN).toList))
+    //    SimpleTDCDataGenerator.launch(port, 1000)
+    //    process.configureAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> SimpleTDCDataGenerator.randomNumbers.map(_.RN).toList))
   }
 
   Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
@@ -44,7 +43,7 @@ object TDCProcess extends App {
   client.stop
   process.stop
   if (DEBUG) {
-//    SimpleTDCDataGenerator.shutdown()
+    //    SimpleTDCDataGenerator.shutdown()
   }
 }
 

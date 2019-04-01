@@ -11,7 +11,7 @@ import scala.io.Source
 
 object PXIController extends App {
   val properties = new Properties
-  val propertiesIn = new FileInputStream(new File("PhaseScanner.properties"))
+  val propertiesIn = new FileInputStream(new File("PIX.properties"))
   properties.load(propertiesIn)
   propertiesIn.close()
 

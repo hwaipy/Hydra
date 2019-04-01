@@ -28,6 +28,12 @@ class PyMathService:
             import traceback
             msg = traceback.format_exc() # 方式1
             print(msg)
+            return 0.0
+
+    def sinFit(self, xs, ys, paraW=None):
+        return SinFit.sinFit(xs, ys, paraW)
+
+
 
 invoker = PyMathService()
 session = Pydra.Session.newSession((server, int(port)), invoker, clientName)
