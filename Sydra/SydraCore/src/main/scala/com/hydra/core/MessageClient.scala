@@ -4,10 +4,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.net.{HttpURLConnection, URL}
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import java.util.concurrent.{CountDownLatch, Executors, ThreadFactory, TimeUnit}
-
-import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
+import java.util.concurrent.{Executors, ThreadFactory, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -18,10 +15,6 @@ import com.hydra.io._
 
 import scala.language.dynamics
 import scala.language.postfixOps
-import akka.http.scaladsl.model._
-import akka.stream.ActorMaterializer
-
-import scala.util.{Failure, Success}
 
 protected abstract class DynamicRemoteObject(val client: MessageClient, val remoteName: String = "", val remoteID: Long = 0) extends Dynamic {
   override def toString() = s"RemoteObject[$remoteName,$remoteID]"
@@ -115,11 +108,9 @@ class MessageClient(channel: MessageChannel, invokeHandler: Any) extends Dynamic
 
   def close = {
     try {
-      println("before unreg")
       this.unregisterAsService()
-      println("after unreg")
     } catch {
-      case e: Throwable => println(e.getMessage)
+      case e: Throwable => //println(e.getMessage)
     }
     channel.close
   }
@@ -306,7 +297,6 @@ class HttpMessageChannel(url: String, encoding: String = "MSGPACK") extends Mess
               Thread.sleep(1000)
             }
           }
-          println("loop done once")
         }
       }
     })
@@ -347,7 +337,6 @@ class HttpMessageChannel(url: String, encoding: String = "MSGPACK") extends Mess
               val newToken = c.substring("HydraToken=".size)
               if (token.get.isEmpty) startFetchLoop
               token set Some(newToken)
-              println(s"new token set: $token")
             })
           }
         }
@@ -368,7 +357,6 @@ class HttpMessageChannel(url: String, encoding: String = "MSGPACK") extends Mess
           decoder.feed(ByteBuffer.wrap(readBytes))
           decoder.next() match {
             case Some(responseMessage) => {
-              println(s"message got: $responseMessage")
               messageReceived(responseMessage)
             }
             case None =>

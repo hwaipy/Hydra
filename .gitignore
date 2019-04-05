@@ -23,3 +23,4 @@ project/plugins/project/
 __pycache__/
 
 .storagespace
+node_modules/

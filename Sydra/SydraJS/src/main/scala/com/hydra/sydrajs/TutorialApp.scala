@@ -17,7 +17,6 @@ object TutorialApp {
 
   @JSExportTopLevel("addClickedMessage")
   def addClickedMessage(): Unit = {
-    $("body").append("<p>You clicked the button!</p>")
-    //    appendPar(document.body, "You clicked the button!")
+    $("body").append("<p>You clicked the button! YES!</p>")
   }
 }
