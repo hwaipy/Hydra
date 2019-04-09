@@ -1,7 +1,9 @@
 package com.hydra.sydrajs
 
+import java.math.BigInteger
 import org.scalajs.dom
 import dom.document
+
 import scala.scalajs.js.annotation.JSExportTopLevel
 import org.querki.jquery._
 
