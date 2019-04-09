@@ -174,7 +174,7 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
         long fineTime = ((unitLong[3] & 0x10) << 4) | unitLong[7];
         long coarseTime = (unitLong[4]) | (unitLong[5] << 8)
                 | (unitLong[2] << 16) | ((unitLong[3] & 0x0F) << 24);
-        if (coarseTime < lastCoarseTime && (lastCoarseTime > COARSE_TIME_LIMIT / 2) && (coarseTime < COARSE_TIME_LIMIT / 2)) {
+        if (coarseTime < lastCoarseTime && (lastCoarseTime > COARSE_TIME_LIMIT * 0.9) && (coarseTime < COARSE_TIME_LIMIT * 0.1)) {
             carry++;
 //            System.out.println("We are now carrying to" + carry + ": lastCT=" + lastCoarseTime + ", currentCT=" + coarseTime);
         }

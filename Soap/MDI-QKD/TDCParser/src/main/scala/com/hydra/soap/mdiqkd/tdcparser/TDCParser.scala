@@ -25,7 +25,6 @@ import scalafx.scene.Scene
 import scalafx.scene.chart.{AreaChart, NumberAxis, ValueAxis, XYChart}
 
 import scala.collection.mutable.ArrayBuffer
-//import collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import com.hydra.services.tdc.application.RandomNumber
 import scalafx.collections.ObservableBuffer
@@ -104,7 +103,7 @@ object TDCParser extends JFXApp {
     histogramStrategyBobTime,
   )
 
-  def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double], qberSection: List[List[Int]], homSection: List[List[Double]], channelMonitorSyncEvents: List[Long]) = {
+  def updateReport(reports: Map[String, Map[String, Double]], qberReport: Map[String, Double], qberSection: List[List[Int]], homSection: List[List[Double]], countSection: List[List[Int]], channelMonitorSyncEvents: List[Long]) = {
     def getV(title: String) = List("Pulse1", "Pulse2", "Vacuum", "RandomNumberCount").map(reports(title)(_))
 
     val vAllPulses = getV(histogramStrategyAllPulses.title)
@@ -177,8 +176,9 @@ object TDCParser extends JFXApp {
     val seq1 = (reportMap ++ qberReport).map(z => (z._1, BsonDouble(z._2))).toSeq
     val seq2 = Seq(("QBERSections", BsonArray(qberSection.map(li => BsonArray(li.map(i => BsonInt32(i)))))))
     val seq3 = Seq(("HOMSections", BsonArray(homSection.map(ld => BsonArray(ld.map(d => BsonDouble(d)))))))
-    val seq4 = Seq(("ChannelMonitorSync", BsonArray(channelMonitorSyncEvents.map(event => BsonInt64(event)))))
-    val reportDoc = Document.fromSeq(seq1 ++ seq2 ++ seq3 ++ seq4)
+    val seq4 = Seq(("CountSections", BsonArray(countSection.map(ld => BsonArray(ld.map(d => BsonInt32(d)))))))
+    val seq5 = Seq(("ChannelMonitorSync", BsonArray(channelMonitorSyncEvents.map(event => BsonInt64(event)))))
+    val reportDoc = Document.fromSeq(seq1 ++ seq2 ++ seq3 ++ seq4 ++ seq5)
     collection.insertOne(reportDoc).subscribe(new Observer[Completed] {
 
       override def onNext(result: Completed): Unit = println("Inserted")
@@ -308,11 +308,13 @@ object TDCParser extends JFXApp {
       val qberSections = mdiqkdQBER("QBER Sections").asInstanceOf[List[List[Int]]]
       //QBER Sections Detail: 100*32 Array. 100 for 100 sections. 32 for (Alice[O,X,Y,Z] * 4 + Bob[O,X,Y,Z]) * 2 + (0 for Correct and 1 for Wrong)
       val homSections = mdiqkdQBER("HOM Sections").asInstanceOf[List[List[Double]]]
-      //HOM Sections Detail: 100*4 Array. 100 for 100 sections. 4 for: X-X, 0&0 without and with delays; All, 0&0 without and with delays
+      //HOM Sections Detail: 4*100 Array. 100 for 100 sections. 4 for: X-X, 0&0 without and with delays; All, 0&0 without and with delays
+      val countSections = mdiqkdQBER("Count Sections").asInstanceOf[List[List[Int]]]
+      //Count Sections Detail: 100*2 Array. 100 for 100 sections. 2 for signalList1 and signalList2
       //      println(qberSections)
       //      println(homSections)
 
-      updateReport(reports, qberReport.toMap, qberSections, homSections, mdiqkdQBER("ChannelMonitorSync").asInstanceOf[List[Long]])
+      updateReport(reports, qberReport.toMap, qberSections, homSections, countSections, mdiqkdQBER("ChannelMonitorSync").asInstanceOf[List[Long]])
       //      evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
     }
   }
@@ -400,7 +402,6 @@ object TDCParser extends JFXApp {
     val recentPeriod = new AtomicDouble(0)
     val recentXData = new AtomicReference[Array[Double]](new Array[Double](0))
     val recentHistogram = new AtomicReference[Array[Double]](new Array[Double](0))
-
     val historyHistograms = new ListBuffer[Array[Double]]()
 
     def updateHistogram(startTime: Double, period: Double, integrated: Boolean, histograms: Map[Int, List[Int]], randomNumberCounts: Map[Int, Int]) = {
@@ -411,6 +412,7 @@ object TDCParser extends JFXApp {
       } else {
         recentHistogram set histogramViewed.toArray.map(i => i.toDouble)
       }
+
       val binWidth = period / 1000.0 / histogramViewed.size
       recentXData set Range(0, recentHistogram.get.size).map(i => (xAxis.lowerBound.value + binWidth * (i + 0.5))).toArray
       recentStartTime set startTime

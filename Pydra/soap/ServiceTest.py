@@ -1,15 +1,22 @@
-from Pydra import Session
+from Pydra import HttpSession
 import time
 
 if __name__ == '__main__':
-    session = Session.newSession(('192.168.25.27', 20102))
-    invoker = session.blockingInvoker("ArduinoClient")
-    invoker.setGains("7", "4", "7", "0", "7", "7", "0", "0")
-    while True:
-        result = invoker.measure(100)
-        rss = result.split(',')[:8]
-        # rsses = ['{}'.format(float(r)/1024) for r in rss]
-        # print(',  '.join(rsses))
-        print(',  '.join(rss))
-        time.sleep(1)
+    class Invoker:
+        def func(self):
+            return "1rqwf"
 
+    for i in range(0,10):
+        service = HttpSession.create("http://sheldon.local/hydra/message", Invoker(), 'PydraTestService[{}]'.format(i))
+
+    startTime = time.time()
+    while True:
+        try:
+            fetcher = HttpSession.create("http://sheldon.local/hydra/message")
+            for serviceName in fetcher.getServiceList():
+                fetcher.blockingInvoker(serviceName).func()
+            print('done {}'.format(time.time() - startTime))
+            fetcher.stop()
+            time.sleep(0.1)
+        except Exception as e:
+            print(e)

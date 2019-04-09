@@ -103,8 +103,6 @@ if __name__ == '__main__':
     clientName = sysArgs.get('clientName', 'HMC7044EvalTest')
 
     invoker = HMC7044Eval()
-    invoker.setDelay(1, 10010.58)
-    exit()
     session = Pydra.Session.newSession((server, int(port)), invoker, clientName)
 
 

@@ -65,7 +65,7 @@ if __name__ == '__main__':
     sys.exit(0)
 
     session1 = Pydra.Session.newSession(('192.168.25.27', 20102), FTDC('192.168.25.4'), 'FTDC-Alice')
-    # session2 = Pydra.Session.newSession(('192.168.25.27', 20102), FTDC('192.168.25.7'), 'FTDC-Bob')
+    session2 = Pydra.Session.newSession(('192.168.25.27', 20102), FTDC('192.168.25.7'), 'FTDC-Bob')
     for line in sys.stdin:
         if line == 'q\n':
             break
