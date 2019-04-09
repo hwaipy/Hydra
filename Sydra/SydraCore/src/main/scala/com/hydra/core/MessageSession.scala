@@ -10,7 +10,12 @@ import scala.concurrent.{Future, ExecutionContext}
 import scala.util.Random
 import scala.language.postfixOps
 
+object MessageSession {
+  val sessionCount = new AtomicInteger(0)
+}
+
 class MessageSession(val id: Int, val manager: MessageSessionManager) {
+  MessageSession.sessionCount.incrementAndGet()
   private val creationTime = System.currentTimeMillis
   private val messageReceived = new AtomicInteger(0)
   private val messageSend = new AtomicInteger(0)
@@ -123,6 +128,11 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   private val invoker = new Invoker
 
   def runtimeInvoker = new RuntimeInvoker(invoker)
+
+  override def finalize(): Unit = {
+    super.finalize()
+    MessageSession.sessionCount.decrementAndGet()
+  }
 }
 
 /*
@@ -309,6 +319,8 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
   def sessionsCount = sessionMap.size
 
   def servicesCount = serviceMap.size
+
+  def debugCollectionSizes() = List(sessionMap.size, serviceMap.size, dispatchingMessageQueue.size)
 }
 
 object MessageService {
@@ -329,9 +341,16 @@ abstract class MessageService[T, V](val manager: MessageSessionManager) {
 
 class StatelessMessageService(manager: MessageSessionManager) extends MessageService[StatelessSessionProperties, String](manager) {
   val statelessSessions = new ConcurrentHashMap[String, Int]()
-  val fetchingMap = new mutable.HashMap[Int, Any]()
-
-  //TODO check and remove dead sessions
+  private val timer = Executors.newScheduledThreadPool(1)
+  timer.scheduleWithFixedDelay(() => statelessSessions.keys.asScala.toList.foreach(key => {
+    statelessSessions.get(key) match {
+      case id if id == null =>
+      case id => manager.getSession(id) match {
+        case None => statelessSessions.remove(key)
+        case Some(session) =>
+      }
+    }
+  }), 1, 1, TimeUnit.SECONDS)
 
   def messageDispatch(message: Message, properties: StatelessSessionProperties) = {
     val sessionIDAndToken = properties.sessionToken match {

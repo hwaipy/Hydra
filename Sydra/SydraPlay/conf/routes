@@ -6,6 +6,7 @@
 # An example controller showing a sample home page
 GET     /                                   controllers.HomeController.index
 GET     /explore                            controllers.HomeController.explore
+GET     /dashboard                            controllers.HomeController.dashboard
 GET     /tutorial                           controllers.HomeController.tutorial
 POST    /hydra/message                      controllers.HomeController.hydramessage
 

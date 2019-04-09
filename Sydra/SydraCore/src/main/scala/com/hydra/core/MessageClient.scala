@@ -231,7 +231,7 @@ abstract class MessageChannel {
   def close: Unit = {}
 }
 
-class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: String = "MSGPACK") extends MessageChannel {
+class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: String = "MSGPACK", internalDelay: Long = 1000) extends MessageChannel {
   private val machineID = MessageService.generateRandomString(15)
   private val token = new AtomicReference[Option[String]](None)
   private val closed = new AtomicBoolean(false)
@@ -241,7 +241,7 @@ class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: S
     val future = service.fetchNewMessage(token.get.get)
     val messageOption = Await.result(future, 1 minute)
     messageOption.foreach(messageReceived)
-  }, 1, 1, TimeUnit.SECONDS)
+  }, internalDelay, internalDelay, TimeUnit.MILLISECONDS)
 
   def sendMessage(message: Message): Unit = {
     val enAndDecoder = encoding match {
