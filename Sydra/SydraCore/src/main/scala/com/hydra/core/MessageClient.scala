@@ -266,12 +266,8 @@ class LocalStatelessMessageChannel(service: StatelessMessageService, encoding: S
 }
 
 class HttpMessageChannel(url: String, encoding: String = "MSGPACK") extends MessageChannel {
-
-  //  implicit val system = ActorSystem()
-  //  implicit val materializer = ActorMaterializer()
   implicit val executionContext: ExecutionContext = SingleThreadExecutionContext
   private val token = new AtomicReference[Option[String]](None)
-  //  private val contentType = ContentType(MediaType.customWithFixedCharset("application", encoding.toLowerCase(), HttpCharsets.`UTF-8`))
   private val closed = new AtomicBoolean(false)
   private val fetchExecutor = Executors.newSingleThreadExecutor((runnable) => {
     val thread = new Thread(runnable)

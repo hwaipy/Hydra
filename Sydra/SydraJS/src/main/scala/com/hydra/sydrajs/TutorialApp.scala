@@ -1,11 +1,8 @@
 package com.hydra.sydrajs
 
-import java.math.BigInteger
-import org.scalajs.dom
-import dom.document
-
 import scala.scalajs.js.annotation.JSExportTopLevel
 import org.querki.jquery._
+import org.scalajs.dom.ext.Ajax
 
 object TutorialApp {
   def main(args: Array[String]): Unit = {
@@ -20,5 +17,14 @@ object TutorialApp {
   @JSExportTopLevel("addClickedMessage")
   def addClickedMessage(): Unit = {
     $("body").append("<p>You clicked the button! YES!</p>")
+
+
+
+    val url = "http://localhost/hydra/message"
+//    Ajax.post(url).onComplete{ case xhr =>
+//      target.appendChild(
+//        pre(xhr.responseText).render
+//      )
+//    }
   }
 }
