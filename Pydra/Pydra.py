@@ -626,7 +626,7 @@ class HttpSession:
         else:
             print("wrong!!!!!!! {}".format(r.status_code))
             import random
-            time.sleep(random.Random().random())
+            time.sleep(10 + random.Random().random())
 
     def __fetchLoop(self):
         while self.__running:

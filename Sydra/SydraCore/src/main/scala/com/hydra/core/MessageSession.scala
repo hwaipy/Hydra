@@ -91,11 +91,14 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   //
   //  def pollMessageSendingQueueHead = messageSendingQueue.poll()
 
-  private[core] def completeMessageFetch = while (messageSendingQueue.size > 0 && messageFetchers.size > 0) {
+  private[core] def completeMessageFetch = while ((messageFetchers.size > 1) || (messageSendingQueue.size > 0 && messageFetchers.size > 0)) {
     val fetcher = messageFetchers.poll()._1
-    val message = messageSendingQueue.poll()
+    val messageOption = messageSendingQueue.poll() match {
+      case null => None
+      case message => Some(message)
+    }
     try {
-      fetcher(Some(message))
+      fetcher(messageOption)
     } catch {
       case e: Throwable => println(e)
     }

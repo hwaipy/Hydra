@@ -226,7 +226,7 @@ class HttpSession {
                 proxyFunction.name1 = prop
                 return new Proxy(proxyFunction, {
                     get: function (obj, name) {
-                        console.log(`!!! ${name}   ${typeof name}`)
+                        return session.asynchronousInvoker(proxyFunction.name1)[name]
                     },
                     apply: function (target, thisArg, argList) {
                         return session.asynchronousInvoker()[proxyFunction.name1]()
@@ -240,35 +240,30 @@ class HttpSession {
         console.log(`Uncaughted error: ${error}`)
     }) {
         this.url = url
-        this.handler = handler
+        this.handler = new RuntimeInovker(handler ? handler : {})
         this.serviceName = serviceName
         this.token = undefined
         this.onReady = onReady
         this.onUncaughtError = onUncaughtError
-        //         self.__running = True
         this.waitingMap = {}
-//         self.messageQueue = queue.Queue()
-//         self.hydraToken = None
-//         self.fetchThread = threading.Thread(target=self.__fetchLoop)
-//         self.defaultblockingInvokerTimeout = None
     }
 
     start() {
-        if (self.serviceName === "" || self.serviceName == null || self.serviceName == undefined) {
-            this.asynchronousInvoker().ping()
-            // response = self.blockingInvoker().ping()
+        if (this.serviceName === "" || this.serviceName == null || this.serviceName == undefined) {
+            var startFuture = this.asynchronousInvoker().ping()
         } else {
-            // response = self.blockingInvoker().registerAsService(self.serviceName)
+            var startFuture = this.asynchronousInvoker().registerAsService(this.serviceName)
         }
-//         self.fetchThread.start()
+        var session = this
+        startFuture.onSuccess(function (response) {
+            if (session.onReady) {
+                session.startAjaxLoop()
+                session.onReady()
+                session.onReady = undefined
+            }
+        })
     }
 
-//
-//     def stop(self):
-//         if self.serviceName is not None:
-//             self.blockingInvoker().unregisterAsService()
-//         self.__running = False
-//
     messageInvoker(target) {
         return this.createDynamicRemoteObject(target, true)
     }
@@ -287,16 +282,18 @@ class HttpSession {
                 this.makeHttpRequest(buffer)
                 return invokeFuture
             } else {
-                throw '122'
-//                 threading.Thread(target=self.__makeHttpRequest, args=[message.pack()]).start()
+                this.makeHttpRequest(message.pack())
             }
         } else {
-            throw '111'
-            this.makeHttpRequest()
+            var invokeFuture = new InvokeFuture(this)
+            this.makeHttpRequest(buffer, function (status) {
+                invokeFuture.response(status)
+            })
+            return invokeFuture
         }
     }
 
-    makeHttpRequest(bytes) {
+    makeHttpRequest(bytes, returned) {
         var xhr = new XMLHttpRequest()
         xhr.open("POST", this.url, true)
         xhr.setRequestHeader('Content-Type', 'application/msgpack')
@@ -308,49 +305,47 @@ class HttpSession {
                 var data = this.response
                 var newToken = this.getResponseHeader("InteractionFree-Token")
                 if (newToken) session.token = newToken
-                if (session.onReady) {
-                    session.onReady()
-                    session.onReady = undefined
-                }
                 var binary = new Uint8Array(data)
                 if (binary.length > 0) {
                     var msg = Message.unpack(binary)
                     session.messageDeal(msg)
                 }
             } else {
-                console.log('hehehe')
+                throw 'hehehe'
                 //             print("wrong!!!!!!! {}".format(r.status_code))
 //             import random
 //             time.sleep(random.Random().random())
             }
+            if (returned) returned(this.status)
         }
         xhr.send(bytes)
     }
 
-//     def __fetchLoop(self):
-//         while self.__running:
-//             self.__makeHttpRequest(b'')
-//
+    startAjaxLoop() {
+        var session = this
+
+        function doAjax(status) {
+            if (status && status != 200) {
+                throw 'not 200 here!'
+            }
+            var future = session.sendMessage()
+            future.onSuccess(doAjax)
+        }
+
+        doAjax()
+    }
+
     messageDeal(message) {
         var type = message.messageType()
         if (type === MessageType.REQUEST) {
-//             (name, args, kwargs) = message.requestContent()
-//             try:
-//                 method = getattr(self.invoker, name)
-//                 noResponse = message.get(Message.KeyNoResponse)
-//                 if callable(method):
-//                     try:
-//                         result = method(*args, **kwargs)
-//                         response = message.response(result)
-//                         if noResponse is not True:
-//                             self.__sendMessage__(response)
-//                     except BaseException as e:
-//                         error = message.error(e.__str__())
-//                         self.__sendMessage__(error)
-//                     return
-//             except BaseException as e:
-//                 response = message.error('InvokeError: Command {} not found.'.format(name))
-//                 self.__sendMessage__(response)
+            var requestContent = message.requestContent()
+            try {
+                var result = this.handler.invoke(requestContent[0], requestContent[1])
+                var response = message.response(result)
+                this.sendMessage(response)
+            } catch (err) {
+                this.sendMessage(message.error(err))
+            }
         } else if (type === MessageType.RESPONSE) {
             var responseContent = message.responseContent()
             var content = responseContent[0]
@@ -366,17 +361,9 @@ class HttpSession {
             delete this.waitingMap[responseID]
             invokeFuture.error(errorContent)
         } else {
-            //             print('A Wrong Message: {}'.format(message))
+            console.log(`A Wrong Message: ${message}`)
         }
     }
-
-//     def __getattr__(self, item):
-    // var handler = {
-    //     get: function (obj, prop) {
-    //         return prop in obj ? obj[prop] : 37
-    //     }
-    // };
-//         return InvokeTarget(self, item)
 
     createDynamicRemoteObject(target, toMessage = false) {
         return new Proxy({session: this, target: target, toMessage: toMessage}, {
@@ -387,9 +374,7 @@ class HttpSession {
                     if (this.target != null && this.target != undefined && this.target != '') builder.to(this.target)
                     var message = builder.create()
                     if (this.toMessage) return message
-                    else return this.session.sendMessage(message, function () {
-                        console.log('calling back')
-                    })
+                    else return this.session.sendMessage(message)
                 }
             }
         })

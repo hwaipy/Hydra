@@ -56,17 +56,18 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
       if (contentLength > 10000000) throw new IllegalArgumentException("To much data!")
       val contentType = request.headers("Content-Type")
       val token = request.headers.get("InteractionFree-Token")
-      val machineID = s"${
-        request.headers.get("Remote-Address") match {
-          case None => "NoRemoteAddress"
-          case Some(ra) => ra.substring(0, ra.lastIndexOf(":"))
-        }
-      }-${
-        request.headers.get("User-Agent") match {
-          case None => "NoUserAgent"
-          case Some(ua) => ua
-        }
-      }"
+      //      val machineID = s"${
+      //        request.headers.get("Remote-Address") match {
+      //          case None => "NoRemoteAddress"
+      //          case Some(ra) => ra.substring(0, ra.lastIndexOf(":"))
+      //        }
+      //      }-${
+      //        request.headers.get("User-Agent") match {
+      //          case None => "NoUserAgent"
+      //          case Some(ua) => ua
+      //        }
+      //      }"
+      val machineID = "MachineID"
       val newToken = contentLength match {
         case l if l > 0 => {
           val message = {
@@ -111,7 +112,7 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
           }
           val result = Result(
             header = ResponseHeader(200),
-            body = HttpEntity.Strict(ByteString(content), Some("application/msgpack"))
+            body = HttpEntity.Strict(ByteString(content), Some(contentType.toLowerCase))
           )
           token == Some(newToken) match {
             case true => result
@@ -122,8 +123,17 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
       futureResult
     } catch {
       case e: Throwable => {
+        println(request.headers)
         e.printStackTrace()
-        null
+        val futureResult: Future[Result] = Future[Result] {
+          val content = new Array[Byte](0)
+          val result = Result(
+            header = ResponseHeader(499),
+            body = HttpEntity.Strict(ByteString("Client Closed"), Some("text/html"))
+          )
+          result
+        }
+        futureResult
       }
     }
   }
