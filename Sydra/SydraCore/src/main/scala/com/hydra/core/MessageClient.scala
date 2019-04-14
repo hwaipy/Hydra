@@ -317,7 +317,7 @@ class HttpMessageChannel(url: String, encoding: String = "MSGPACK") extends Mess
     connection.setRequestMethod("POST")
     connection.setRequestProperty("Content-Type", s"application/${encoding.toLowerCase()}")
     connection.setDoInput(true)
-    if (token.get isDefined) connection.setRequestProperty("Cookie", s"HydraToken=${token.get.get}")
+    if (token.get isDefined) connection.setRequestProperty("InteractionFree-Token", s"${token.get.get}")
     if (bytes.size > 0) {
       connection.setDoOutput(true)
       val out = connection.getOutputStream
@@ -326,14 +326,11 @@ class HttpMessageChannel(url: String, encoding: String = "MSGPACK") extends Mess
     }
     connection.getResponseCode match {
       case 200 => {
-        connection.getHeaderField("Set-Cookie") match {
+        connection.getHeaderField("InteractionFree-Token") match {
           case null =>
-          case setCookie => {
-            setCookie.split("; *").filter(_.startsWith("HydraToken=")).foreach(c => {
-              val newToken = c.substring("HydraToken=".size)
-              if (token.get.isEmpty) startFetchLoop
-              token set Some(newToken)
-            })
+          case newToken => {
+            if (token.get.isEmpty) startFetchLoop
+            token set Some(newToken)
           }
         }
         val contentLength = connection.getHeaderField("Content-Length") match {

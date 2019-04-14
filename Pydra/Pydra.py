@@ -614,10 +614,10 @@ class HttpSession:
     def __makeHttpRequest(self, bytes):
         headers = {'Content-Type': 'application/msgpack'}
         if self.hydraToken is not None:
-            headers['Cookie'] = 'HydraToken={}'.format(self.hydraToken)
+            headers['InteractionFree-Token'] = '{}'.format(self.hydraToken)
         r = requests.post(self.url, data=bytes, headers=headers)
         if (r.status_code == 200):
-            token = r.cookies.get('HydraToken')
+            token = r.headers.get('InteractionFree-Token')
             if token is not None:
                 self.hydraToken = token
             if (len(r.content) > 0):
@@ -816,6 +816,7 @@ if __name__ == '__main__':
     class TT:
         def testFun(self, a, b):
             return a + b + 1
+
 
     session = HttpSession.create('http://localhost:9000/hydra/message', TT(), 'S1')
     while True:

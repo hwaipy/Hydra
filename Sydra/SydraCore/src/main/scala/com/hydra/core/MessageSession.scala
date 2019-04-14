@@ -3,10 +3,14 @@ package com.hydra.core
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.{ConcurrentHashMap, Executors, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
+
+import akka.actor.Status.Failure
+
 import collection.JavaConverters._
 import com.hydra.core.MessageType._
+
 import scala.collection.mutable
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 import scala.language.postfixOps
 

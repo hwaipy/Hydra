@@ -53,11 +53,9 @@ class MessageClientTest extends FunSuite with BeforeAndAfter with BeforeAndAfter
         checker.T1_Benz.v(false, false)
       }
     } finally {
-      println("try close provider")
       try provider.close catch {
         case e: Throwable => e.printStackTrace()
       }
-      println("closed provider")
       checker.close
     }
   }

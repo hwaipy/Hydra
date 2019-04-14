@@ -55,8 +55,7 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
       val contentLength: Int = request.headers("Content-Length").toInt
       if (contentLength > 10000000) throw new IllegalArgumentException("To much data!")
       val contentType = request.headers("Content-Type")
-      val cookies = request.cookies
-      val token = cookies.get("HydraToken").map(_.value)
+      val token = request.headers.get("InteractionFree-Token")
       val machineID = s"${
         request.headers.get("Remote-Address") match {
           case None => "NoRemoteAddress"
@@ -110,14 +109,13 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
               case _ => throw new UnsupportedOperationException
             }
           }
-          //          println(s"${content.size}: ${messageOption} -> ${content.toList}")
           val result = Result(
             header = ResponseHeader(200),
             body = HttpEntity.Strict(ByteString(content), Some("application/msgpack"))
           )
           token == Some(newToken) match {
             case true => result
-            case false => result.withCookies(new Cookie("HydraToken", newToken))
+            case false => result.withHeaders("InteractionFree-Token" -> newToken)
           }
         }
       }

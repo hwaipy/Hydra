@@ -213,20 +213,40 @@ class MessageBuilder {
 MessageBuilder.MessageIDs = 0
 
 class HttpSession {
-    static create(url, invoker, serviceName) {
-        var session = new HttpSession(url, invoker, serviceName)
+    static create(url, onReady, invoker, serviceName, onUncaughtError) {
+        var session = new HttpSession(url, onReady, invoker, serviceName, onUncaughtError)
         session.start()
-        return session
+        return new Proxy(session, {
+            get: function (obj, prop) {
+                if (prop in obj) return obj[prop]
+
+                function proxyFunction() {
+                }
+
+                proxyFunction.name1 = prop
+                return new Proxy(proxyFunction, {
+                    get: function (obj, name) {
+                        console.log(`!!! ${name}   ${typeof name}`)
+                    },
+                    apply: function (target, thisArg, argList) {
+                        return session.asynchronousInvoker()[proxyFunction.name1]()
+                    }
+                })
+            },
+        })
     }
 
-    constructor(url, handler, serviceName) {
+    constructor(url, onReady, handler, serviceName, onUncaughtError = function (error) {
+        console.log(`Uncaughted error: ${error}`)
+    }) {
         this.url = url
         this.handler = handler
         this.serviceName = serviceName
-//         self.__running = True
-//         self.__waitingMap = {}
-//         self.__waitingMapLock = threading.Lock()
-//         self.unpacker = msgpack.Unpacker(raw=False)
+        this.token = undefined
+        this.onReady = onReady
+        this.onUncaughtError = onUncaughtError
+        //         self.__running = True
+        this.waitingMap = {}
 //         self.messageQueue = queue.Queue()
 //         self.hydraToken = None
 //         self.fetchThread = threading.Thread(target=self.__fetchLoop)
@@ -235,7 +255,7 @@ class HttpSession {
 
     start() {
         if (self.serviceName === "" || self.serviceName == null || self.serviceName == undefined) {
-            this.createDynamicRemoteObject().ping()
+            this.asynchronousInvoker().ping()
             // response = self.blockingInvoker().ping()
         } else {
             // response = self.blockingInvoker().registerAsService(self.serviceName)
@@ -254,47 +274,18 @@ class HttpSession {
     }
 
     asynchronousInvoker(target) {
-        // return new DynamicRemoteObject(this,target,toMessage=False, blocking=False, target=target, objectID=0, timeout=None)
+        return this.createDynamicRemoteObject(target, false)
     }
 
     sendMessage(message) {
         if (message != undefined) {
             if (message.messageType() == MessageType.REQUEST) {
                 var id = message.messageID()
-                console.log(message.content)
                 var buffer = message.pack()
-
-                // var blob = new Blob(message.pack(), {type: 'application/msgpack'});
-                // $.post(this.url, blob, function (data, status) {
-                //     alert("Data: " + data + "\nStatus: " + status);
-                // });
-
-                var xhr = new XMLHttpRequest()
-                xhr.open("POST", this.url, true)
-                xhr.setRequestHeader('Content-Type', 'application/msgpack')
-                xhr.onload = function () {
-                    if (this.status == 200) {
-                        console.log('200!!!')
-                        console.log(this.getAllResponseHeaders())
-                        var data = this.response
-                        var msg = msgpack.decode(new Uint8Array(data))
-                        onResponse(msg)
-                    } else {
-                        console.log('hehehe')
-                    }
-                }
-                xhr.send(buffer)
-
-
-//                 (future, onFinish, resultMap) = InvokeFuture.newFuture()
-//                 self.__waitingMapLock.acquire()
-//                 if self.__waitingMap.__contains__(id):
-//                     raise ProtocolException("MessageID have been used.")
-//                 self.__waitingMap[id] = (resultMap, onFinish)
-//                 self.__waitingMapLock.release()
-//
-//                 threading.Thread(target=self.__makeHttpRequest, args=[message.pack()]).start()
-//                 return future
+                var invokeFuture = new InvokeFuture(this)
+                this.waitingMap[id] = invokeFuture
+                this.makeHttpRequest(buffer)
+                return invokeFuture
             } else {
                 throw '122'
 //                 threading.Thread(target=self.__makeHttpRequest, args=[message.pack()]).start()
@@ -305,33 +296,44 @@ class HttpSession {
         }
     }
 
-//     def __makeHttpRequest(self, bytes):
-//         headers = {'Content-Type': 'application/msgpack'}
-//         if self.hydraToken is not None:
-//             headers['Cookie'] = 'HydraToken={}'.format(self.hydraToken)
-//         r = requests.post(self.url, data=bytes, headers=headers)
-//         if (r.status_code == 200):
-//             # for head in r.headers:
-//             #     print('{}: {}'.format(head, r.headers[head]))
-//             # print()
-//             token = r.cookies.get('HydraToken')
-//             if token is not None:
-//                 self.hydraToken = token
-//             if (len(r.content) > 0):
-//                 responseMessage = Message.unpack(r.content)
-//                 self.__messageDeal(responseMessage)
-//         else:
-//             print("wrong!!!!!!! {}".format(r.status_code))
+    makeHttpRequest(bytes) {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", this.url, true)
+        xhr.setRequestHeader('Content-Type', 'application/msgpack')
+        if (this.token) xhr.setRequestHeader('InteractionFree-Token', this.token)
+        xhr.responseType = "arraybuffer"
+        var session = this
+        xhr.onload = function () {
+            if (this.status == 200) {
+                var data = this.response
+                var newToken = this.getResponseHeader("InteractionFree-Token")
+                if (newToken) session.token = newToken
+                if (session.onReady) {
+                    session.onReady()
+                    session.onReady = undefined
+                }
+                var binary = new Uint8Array(data)
+                if (binary.length > 0) {
+                    var msg = Message.unpack(binary)
+                    session.messageDeal(msg)
+                }
+            } else {
+                console.log('hehehe')
+                //             print("wrong!!!!!!! {}".format(r.status_code))
 //             import random
 //             time.sleep(random.Random().random())
-//
+            }
+        }
+        xhr.send(bytes)
+    }
+
 //     def __fetchLoop(self):
 //         while self.__running:
 //             self.__makeHttpRequest(b'')
 //
-//     def __messageDeal(self, message):
-//         type = message.messageType()
-//         if type is Message.Type.Request:
+    messageDeal(message) {
+        var type = message.messageType()
+        if (type === MessageType.REQUEST) {
 //             (name, args, kwargs) = message.requestContent()
 //             try:
 //                 method = getattr(self.invoker, name)
@@ -349,26 +351,25 @@ class HttpSession {
 //             except BaseException as e:
 //                 response = message.error('InvokeError: Command {} not found.'.format(name))
 //                 self.__sendMessage__(response)
-//
-//         elif (type is Message.Type.Response) or (type is Message.Type.Error):
-//             if type is Message.Type.Response:
-//                 (result, id) = message.responseContent()
-//             else:
-//                 (error, id) = message.errorContent()
-//             self.__waitingMapLock.acquire()
-//             if self.__waitingMap.__contains__(id):
-//                 (futureEntry, runnable) = self.__waitingMap[id]
-//                 if type is Message.Type.Response:
-//                     futureEntry['result'] = result
-//                 else:
-//                     futureEntry['error'] = error
-//                 runnable()
-//             else:
-//                 print('ResponseID not recognized: {}'.format(message))
-//             self.__waitingMapLock.release()
-//         else:
-//             print('A Wrong Message: {}'.format(message))
-//
+        } else if (type === MessageType.RESPONSE) {
+            var responseContent = message.responseContent()
+            var content = responseContent[0]
+            var responseID = responseContent[1]
+            var invokeFuture = this.waitingMap[responseID]
+            delete this.waitingMap[responseID]
+            invokeFuture.response(content)
+        } else if (type === MessageType.ERROR) {
+            var errorContent = message.errorContent()
+            var error = errorContent[0]
+            var responseID = errorContent[1]
+            var invokeFuture = this.waitingMap[responseID]
+            delete this.waitingMap[responseID]
+            invokeFuture.error(errorContent)
+        } else {
+            //             print('A Wrong Message: {}'.format(message))
+        }
+    }
+
 //     def __getattr__(self, item):
     // var handler = {
     //     get: function (obj, prop) {
@@ -377,9 +378,8 @@ class HttpSession {
     // };
 //         return InvokeTarget(self, item)
 
-
     createDynamicRemoteObject(target, toMessage = false) {
-        var handler = {
+        return new Proxy({session: this, target: target, toMessage: toMessage}, {
             get: function (obj, prop) {
                 if (prop in obj) return obj[prop]
                 return function (...args) {
@@ -387,11 +387,12 @@ class HttpSession {
                     if (this.target != null && this.target != undefined && this.target != '') builder.to(this.target)
                     var message = builder.create()
                     if (this.toMessage) return message
-                    else return this.session.sendMessage(message)
+                    else return this.session.sendMessage(message, function () {
+                        console.log('calling back')
+                    })
                 }
             }
-        }
-        return new Proxy({session: this, target: target, toMessage: toMessage}, handler)
+        })
     }
 
 //     def __getattr__(self, item):
@@ -413,85 +414,6 @@ class HttpSession {
 //         return invoke
 }
 
-//
-// class InvokeFuture:
-//     @classmethod
-//     def newFuture(cls):
-//         future = InvokeFuture()
-//         return (future, future.__onFinish, future.__resultMap)
-//
-//     def __init__(self):
-//         self.__done = False
-//         self.__result = None
-//         self.__exception = None
-//         self.__onComplete = None
-//         self.__metux = threading.Lock()
-//         self.__resultMap = {}
-//         self.__awaitSemaphore = threading.Semaphore(0)
-//
-//     def isDone(self):
-//         return self.__done
-//
-//     def isSuccess(self):
-//         return self.__exception is None
-//
-//     def result(self):
-//         return self.__result
-//
-//     def exception(self):
-//         return self.__exception
-//
-//     def onComplete(self, func):
-//         self.__metux.acquire()
-//         self.__onComplete = func
-//         if self.__done:
-//             self.__onComplete()
-//         self.__metux.release()
-//
-//     def waitFor(self, timeout=None):
-//         # For Python 3 only.
-//         # if self.__awaitSemaphore.acquire(True, timeout):
-//         #     self.__awaitSemaphore.release()
-//         #     return True
-//         # else:
-//         #     return False
-//
-//         # For Python 2 & 3
-//         timeStep = 0.1 if timeout is None else timeout / 10
-//         startTime = time.time()
-//         while True:
-//             acq = self.__awaitSemaphore.acquire(False)
-//             if acq:
-//                 return acq
-//             else:
-//                 passedTime = time.time() - startTime
-//                 if (timeout is not None) and (passedTime >= timeout):
-//                     return False
-//                 time.sleep(timeStep)
-//
-//     def sync(self, timeout=None):
-//         if self.waitFor(timeout):
-//             if self.isSuccess():
-//                 return self.__result
-//             elif isinstance(self.__exception, BaseException):
-//                 raise self.__exception
-//             else:
-//                 raise ProtocolException('Error state in InvokeFuture.')
-//         else:
-//             raise ProtocolException('Time out!')
-//
-//     def __onFinish(self):
-//         self.__done = True
-//         if self.__resultMap.__contains__('result'):
-//             self.__result = self.__resultMap['result']
-//         if self.__resultMap.__contains__('error'):
-//             self.__exception = ProtocolException(self.__resultMap['error'])
-//         if self.__onComplete is not None:
-//             self.__onComplete()
-//         self.__awaitSemaphore.release()
-//
-// }
-
 class RuntimeInovker {
     constructor(invoker) {
         this.invoker = invoker
@@ -505,6 +427,29 @@ class RuntimeInovker {
         } else {
             throw new ProtocolException(`Method not found: ${name}`)
         }
+    }
+}
+
+class InvokeFuture {
+    constructor(session) {
+        this.session = session
+        this.response = function (response) {
+            if (this.success) this.success(response)
+        }
+        this.error = function (error) {
+            if (this.failure) this.failure(error)
+            else if (this.session.onUncaughtError) this.session.onUncaughtError(error)
+        }
+    }
+
+    onSuccess(func) {
+        this.success = func
+        return this
+    }
+
+    onFailure(func) {
+        this.failure = func
+        return this
     }
 }
 
