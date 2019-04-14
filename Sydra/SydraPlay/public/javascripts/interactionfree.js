@@ -1,267 +1,228 @@
-function add(x, y) {
-    return x + y;
+// var msgpack = require('./msgpack.min.js');
+
+class ProtocolException {
+    constructor(message) {
+        this.message = message;
+    }
 }
 
-module.exports = add;
+class Message {
 
-
-// class ProtocolException(Exception):
-//     def __init__(self, description, message=None):
-//         Exception.__init__(self)
-//         self.description = description
-//         self.message = message
-//
-//     def __str__(self):
-//         if self.message:
-//             return '{} - {}'.format(self.description, self.message)
-//         else:
-//             return self.description
-//
-
-var Message = {
-    createNew: function () {
-        var msg = {};
-        msg.name = "大毛";
-        msg.makeSound = function () {
-            alert("喵喵喵");
-        };
-        return msg;
+    static newBuilder() {
+        return new MessageBuilder()
     }
-};
 
-// class Message:
-//     KeyMessageID = u"MessageID"
-//     KeyResponseID = u"ResponseID"
-//     KeyObjectID = u"ObjectID"
-//     KeyRequest = u"Request"
-//     KeyResponse = u"Response"
-//     KeyError = u"Error"
-//     KeyFrom = u"From"
-//     KeyTo = u"To"
-//     KeyNoResponse = u"NoResponse"
-//     Preserved = [KeyMessageID, KeyResponseID, KeyObjectID, KeyRequest, KeyResponse, KeyError, KeyFrom, KeyTo,
-//                  KeyNoResponse]
-//
-//     @classmethod
-//     def newBuilder(cls):
-//         return MessageBuilder()
-//
-//     def __init__(self, content={}):
-//         self.__content = content
-//
-//     class Type(enum.Enum):
-//         Request = 1
-//         Response = 2
-//         Error = 3
-//         Unknown = 0
-//
-//     def messageID(self):
-//         if self.__content.__contains__(Message.KeyMessageID):
-//             idO = self.__content[Message.KeyMessageID]
-//             if isinstance(idO, int):
-//                 return idO
-//             else:
-//                 raise ProtocolException("MessageID {} not recognized.".format(idO), self)
-//         else:
-//             raise ProtocolException("MessageID not exists in Message.")
-//
-//     def messageType(self):
-//         if self.__content.__contains__(Message.KeyRequest): return Message.Type.Request
-//         if self.__content.__contains__(Message.KeyResponse): return Message.Type.Response
-//         if self.__content.__contains__(Message.KeyError): return Message.Type.Error
-//         return Message.Type.Unknown
-//
-//     def requestContent(self):
-//         if self.messageType() is not Message.Type.Request:
-//             raise ProtocolException("Can not fetch request content in a {} message.".format(self.messageType()))
-//         content = self.get(Message.KeyRequest, False, False)
-//         if isinstance(content, str):
-//             name = content
-//             args = []
-//         elif isinstance(content, list):
-//             name = content[0].__str__()
-//             args = content[1:]
-//         else:
-//             raise ProtocolException("Illegal message.")
-//         map = {}
-//         for key in self.__content.keys():
-//             if not Message.Preserved.__contains__(key):
-//                 map[key] = self.__content[key]
-//         return (name, args, map)
-//
-//     def responseContent(self):
-//         if self.messageType() is not Message.Type.Response:
-//             raise ProtocolException("Can not fetch response content in a {} message.".format(self.messageType()))
-//         content = self.get(Message.KeyResponse, True, False)
-//         responseID = self.get(Message.KeyResponseID, False, False)
-//         return (content, responseID)
-//
-//     def errorContent(self):
-//         if self.messageType() is not Message.Type.Error:
-//             raise ProtocolException("Can not fetch error content in a {} message.".format(self.messageType()))
-//         content = self.get(Message.KeyError, False, False)
-//         responseID = self.get(Message.KeyResponseID, False, False)
-//         return (content, responseID)
-//
-//     def get(self, key, nilValid=True, nonKeyValid=True):
-//         if self.__content.__contains__(key):
-//             value = self.__content[key]
-//             if value == None:
-//                 if nilValid:
-//                     return None
-//                 else:
-//                     raise ProtocolException("Nil value invalid with key {}.".format(key))
-//             else:
-//                 return value
-//         elif (nonKeyValid):
-//             return None
-//         else:
-//             raise ProtocolException("Message does not contains key {}.".format(key))
-//
-//     def getTo(self):
-//         return self.get(Message.KeyTo)
-//
-//     def getFrom(self):
-//         return self.get(Message.KeyFrom)
-//
-//     def getObjectID(self):
-//         return self.get(Message.KeyObjectID)
-//
-//     def builder(self):
-//         return Message.newBuilder().update(self.__content)
-//
-//     def responseBuilder(self, content):
-//         return Message.newBuilder().asResponse(content, self.messageID(), self.getFrom())
-//
-//     def response(self, content):
-//         return self.responseBuilder(content).create()
-//
-//     def errorBuilder(self, content):
-//         return Message.newBuilder().asError(content, self.messageID(), self.getFrom())
-//
-//     def error(self, content):
-//         return self.errorBuilder(content).create()
-//
-//     def pack(self, remoteObjectWrapper=None):
-//         def encode(obj):
-//             ro = remoteObjectWrapper(obj)
-//             ext = msgpack.ExtType(11, bytes(ro.name, 'utf-8') + struct.pack('!q', ro.id))
-//             return ext
-//
-//         packed = msgpack.packb(self.__content, use_bin_type=True, default=encode)
-//         return packed
-//
-//     def __str__(self):
-//         content = ', '.join(['{}: {}'.format(k, self.__content[k]) for k in self.__content.keys()])
-//         return "Message [{}]".format(content)
-//
-//     def __add__(self, other):
-//         if isinstance(other, dict):
-//             content = self.__content.copy()
-//             content.update(other)
-//             return Message(content)
-//         raise TypeError
-//
-//     @classmethod
-//     def unpack(cls, bytes):
-//         unpacker = msgpack.Unpacker(raw=False)
-//         unpacker.feed(bytes)
-//         m1 = unpacker.__next__()
-//         return Message(m1)
-//
-//
-// class MessageBuilder:
-//     MessageIDs = 0
-//
-//     @classmethod
-//     def getAndIncrementID(cls):
-//         __mutex__ = threading.Lock()
-//         __mutex__.acquire()
-//         id = MessageBuilder.MessageIDs
-//         MessageBuilder.MessageIDs += 1
-//         __mutex__.release()
-//         return id
-//
-//     def __init__(self, updateID=True):
-//         self.__content = {}
-//         if updateID:
-//             self.__content.update({Message.KeyMessageID: MessageBuilder.getAndIncrementID()})
-//
-//     def create(self):
-//         return Message(self.__content)
-//
-//     def to(self, target):
-//         if isinstance(target, str) or isinstance(target, unicode):
-//             self.__content.update({Message.KeyTo: target})
-//         else:
-//             raise TypeError("Target should be a String.")
-//
-//     def objectID(self, id):
-//         if isinstance(id, int):
-//             self.__content.update({Message.KeyObjectID: id})
-//         else:
-//             raise TypeError("Target should be a String.")
-//
-//     def asType(self, messageType, content):
-//         def raiseOnUnknown():
-//             raise ProtocolException("Unknown type can not be set.")
-//
-//         if self.__content.__contains__(Message.KeyRequest):
-//             self.__content.__delitem__(Message.KeyRequest)
-//         if self.__content.__contains__(Message.KeyResponse):
-//             self.__content.__delitem__(Message.KeyResponse)
-//         if self.__content.__contains__(Message.KeyError):
-//             self.__content.__delitem__(Message.KeyError)
-//         {Message.Type.Request: lambda: self.__content.update({Message.KeyRequest: content}),
-//          Message.Type.Response: lambda: self.__content.update({Message.KeyResponse: content}),
-//          Message.Type.Error: lambda: self.__content.update({Message.KeyError: content})
-//          }.get(messageType, raiseOnUnknown)()
-//         return self
-//
-//     def asRequest(self, name, args=[], kwargs={}):
-//         content = [name] + [arg for arg in args]
-//         self.asType(Message.Type.Request, content)
-//         for key in kwargs:
-//             if Message.Preserved.__contains__(key):
-//                 raise ProtocolException("{} can not be a name of parameter.".format(key))
-//         self.__content.update(kwargs)
-//         return self
-//
-//     def asResponse(self, content, responseID, to=None):
-//         self.asType(Message.Type.Response, content)
-//         self.__content[Message.KeyResponseID] = responseID
-//         if to is not None:
-//             self.__content[Message.KeyTo] = to
-//         return self
-//
-//     def asError(self, content, responseID, to=None):
-//         self.asType(Message.Type.Error, content)
-//         self.__content[Message.KeyResponseID] = responseID
-//         if to is not None:
-//             self.__content[Message.KeyTo] = to
-//         return self
-//
-//     def update(self, other):
-//         if isinstance(other, dict):
-//             self.__content.update(other)
-//             return self
-//         else:
-//             raise TypeError
-//
-//     def __str__(self):
-//         return "MessageBuilder {}".format(self.__content)
-//
-// class HttpSession:
-//     @classmethod
-//     def create(cls, url, invoker=None, serviceName=None):
-//         session = HttpSession(url, invoker, serviceName)
-//         session.start()
-//         return session
-//
-//     def __init__(self, url, invoker=None, serviceName=None):
-//         self.url = url
-//         self.serviceName = serviceName
-//         self.invoker = invoker
+    constructor(content = {}) {
+        this.content = content
+    }
+
+    messageID() {
+        var idO = this.content[Message.KeyMessageID]
+        if (Number.isInteger(idO)) {
+            return idO
+        } else {
+            throw new ProtocolException(`MessageID not recognized.`)
+        }
+    }
+
+    messageType() {
+        if (this.content.hasOwnProperty(Message.KeyRequest)) return MessageType.REQUEST
+        if (this.content.hasOwnProperty(Message.KeyResponse)) return MessageType.RESPONSE
+        if (this.content.hasOwnProperty(Message.KeyError)) return MessageType.ERROR
+        return MessageType.UNKNOWN
+    }
+
+    requestContent() {
+        if (this.messageType() !== MessageType.REQUEST) throw new ProtocolException(`Can not fetch request content in a ${this.messageType()} message.`)
+        var content = this.get(Message.KeyRequest, false, false)
+        if (Array.isArray(content)) {
+            var name = content[0].toString()
+            var args = content.slice(1, content.length)
+        } else throw new ProtocolException("Illegal message.")
+        var map = {}
+        for (var key in this.content) {
+            if (!Message.Preserved.includes(key)) map[key] = this.content[key]
+        }
+        return [name, args, map]
+    }
+
+    responseContent() {
+        if (this.messageType() !== MessageType.RESPONSE) throw new ProtocolException(`Can not fetch response content in a ${self.messageType()} message.`)
+        var content = this.get(Message.KeyResponse, true, false)
+        var responseID = this.get(Message.KeyResponseID, false, false)
+        return [content, responseID]
+    }
+
+    errorContent() {
+        if (this.messageType() !== MessageType.ERROR) throw new ProtocolException(`Can not fetch error content in a ${this.messageType()} message.`)
+        var content = this.get(Message.KeyError, false, false)
+        var responseID = this.get(Message.KeyResponseID, false, false)
+        return [content, responseID]
+    }
+
+    get(key, nilValid = true, nonKeyValid = true) {
+        if (this.content.hasOwnProperty(key)) {
+            var value = this.content[key]
+            if (value === undefined || value == null) {
+                if (nilValid) {
+                    return null
+                } else {
+                    throw new ProtocolException(`Nil value invalid with key ${key}.`)
+                }
+            } else {
+                return value
+            }
+        } else if (nonKeyValid) {
+            return null
+        } else {
+            throw new ProtocolException(`Message does not contains key ${key}.`)
+        }
+    }
+
+    getTo() {
+        return this.get(Message.KeyTo)
+    }
+
+    getFrom() {
+        return this.get(Message.KeyFrom)
+    }
+
+    builder() {
+        return Message.newBuilder().update(this.content)
+    }
+
+    responseBuilder(content) {
+        return Message.newBuilder().asResponse(content, this.messageID(), this.getFrom())
+    }
+
+    response(content) {
+        return this.responseBuilder(content).create()
+    }
+
+    errorBuilder(content) {
+        return Message.newBuilder().asError(content, this.messageID(), this.getFrom())
+    }
+
+    error(content) {
+        return this.errorBuilder(content).create()
+    }
+
+    pack() {
+        return msgpack.encode(this.content)
+    }
+
+    addAndCreate(others) {
+        var newContent = {}
+        Object.assign(newContent, this.content)
+        Object.assign(newContent, others)
+        return new Message(newContent)
+    }
+
+    static unpack(bytes) {
+        var map = msgpack.decode(bytes)
+        return new Message(map)
+    }
+}
+
+Message.KeyMessageID = "MessageID"
+Message.KeyResponseID = "ResponseID"
+Message.KeyObjectID = "ObjectID"
+Message.KeyRequest = "Request"
+Message.KeyResponse = "Response"
+Message.KeyError = "Error"
+Message.KeyFrom = "From"
+Message.KeyTo = "To"
+Message.KeyNoResponse = "NoResponse"
+Message.Preserved = [Message.KeyMessageID, Message.KeyResponseID, Message.KeyObjectID, Message.KeyRequest, Message.KeyResponse, Message.KeyError, Message.KeyFrom, Message.KeyTo, Message.KeyNoResponse]
+
+const MessageType = {
+    REQUEST: 'REQUEST',
+    RESPONSE: 'RESPONSE',
+    ERROR: 'ERROR',
+    UNKNOWN: 'UNKNOWN'
+}
+
+class MessageBuilder {
+    static getAndIncrementID(cls) {
+        var id = MessageBuilder.MessageIDs
+        MessageBuilder.MessageIDs += 1
+        return id
+    }
+
+    constructor(updateID = true) {
+        this.content = {}
+        if (updateID) this.content[Message.KeyMessageID] = MessageBuilder.getAndIncrementID()
+    }
+
+    create() {
+        return new Message(this.content)
+    }
+
+    to(target) {
+        if (typeof target === 'string') {
+            this.content[Message.KeyTo] = target
+        } else {
+            throw new ProtocolException("Target should be a String.")
+        }
+    }
+
+    asType(messageType, content) {
+        if (this.content.hasOwnProperty(Message.KeyRequest)) delete this.content[Message.KeyRequest]
+        if (this.content.hasOwnProperty(Message.KeyResponse)) delete this.content[Message.KeyResponse]
+        if (this.content.hasOwnProperty(Message.KeyError)) delete this.content[Message.KeyError]
+        var key = new Map([
+            [MessageType.REQUEST, Message.KeyRequest],
+            [MessageType.RESPONSE, Message.KeyResponse],
+            [MessageType.ERROR, Message.KeyError]]).get(messageType)
+        if (key === undefined || key == null) throw new ProtocolException('Unknown type can not be set.')
+        this.content[key] = content
+        return this
+    }
+
+    asRequest(name, args = [], kwargs = {}) {
+        this.asType(MessageType.REQUEST, [name].concat(args))
+        for (var key in kwargs) {
+            if (kwargs.hasOwnProperty(key)) {
+                if (Message.Preserved.includes(key)) throw new ProtocolException(`${key} can not be a name of parameter.`)
+                this.content[key] = kwargs[key]
+            }
+        }
+        return this
+    }
+
+    asResponse(content, responseID, to = undefined) {
+        this.asType(MessageType.RESPONSE, content)
+        this.content[Message.KeyResponseID] = responseID
+        if (to !== undefined) this.content[Message.KeyTo] = to
+        return this
+    }
+
+    asError(content, responseID, to = undefined) {
+        this.asType(MessageType.ERROR, content)
+        this.content[Message.KeyResponseID] = responseID
+        if (to !== undefined) this.content[Message.KeyTo] = to
+        return this
+    }
+
+    update(others) {
+        Object.assign(this.content, others)
+        return this
+    }
+}
+
+MessageBuilder.MessageIDs = 0
+
+class HttpSession {
+    static create(url, invoker, serviceName) {
+        var session = new HttpSession(url, invoker, serviceName)
+        session.start()
+        return session
+    }
+
+    constructor(url, handler, serviceName) {
+        this.url = url
+        this.handler = handler
+        this.serviceName = serviceName
 //         self.__running = True
 //         self.__waitingMap = {}
 //         self.__waitingMapLock = threading.Lock()
@@ -270,32 +231,61 @@ var Message = {
 //         self.hydraToken = None
 //         self.fetchThread = threading.Thread(target=self.__fetchLoop)
 //         self.defaultblockingInvokerTimeout = None
-//
-//     def start(self):
-//         if (self.serviceName == "" or self.serviceName == None):
-//             response = self.blockingInvoker().ping()
-//         else:
-//             response = self.blockingInvoker().registerAsService(self.serviceName)
+    }
+
+    start() {
+        if (self.serviceName === "" || self.serviceName == null || self.serviceName == undefined) {
+            this.createDynamicRemoteObject().ping()
+            // response = self.blockingInvoker().ping()
+        } else {
+            // response = self.blockingInvoker().registerAsService(self.serviceName)
+        }
 //         self.fetchThread.start()
+    }
+
 //
 //     def stop(self):
 //         if self.serviceName is not None:
 //             self.blockingInvoker().unregisterAsService()
 //         self.__running = False
 //
-//     def messageInvoker(self, target=None):
-//         return DynamicRemoteObject(self, toMessage=True, blocking=False, target=target, objectID=0, timeout=None)
-//
-//     def asynchronousInvoker(self, target=None):
-//         return DynamicRemoteObject(self, toMessage=False, blocking=False, target=target, objectID=0, timeout=None)
-//
-//     def blockingInvoker(self, target=None, timeout=None):
-//         return DynamicRemoteObject(self, toMessage=False, blocking=True, target=target, objectID=0, timeout=timeout)
-//
-//     def __sendMessage__(self, message):
-//         if (message is not None):
-//             if (message.messageType() == Message.Type.Request):
-//                 id = message.messageID()
+    messageInvoker(target) {
+        return this.createDynamicRemoteObject(target, true)
+    }
+
+    asynchronousInvoker(target) {
+        // return new DynamicRemoteObject(this,target,toMessage=False, blocking=False, target=target, objectID=0, timeout=None)
+    }
+
+    sendMessage(message) {
+        if (message != undefined) {
+            if (message.messageType() == MessageType.REQUEST) {
+                var id = message.messageID()
+                console.log(message.content)
+                var buffer = message.pack()
+
+                // var blob = new Blob(message.pack(), {type: 'application/msgpack'});
+                // $.post(this.url, blob, function (data, status) {
+                //     alert("Data: " + data + "\nStatus: " + status);
+                // });
+
+                var xhr = new XMLHttpRequest()
+                xhr.open("POST", this.url, true)
+                xhr.setRequestHeader('Content-Type', 'application/msgpack')
+                xhr.onload = function () {
+                    if (this.status == 200) {
+                        console.log('200!!!')
+                        console.log(this.getAllResponseHeaders())
+                        var data = this.response
+                        var msg = msgpack.decode(new Uint8Array(data))
+                        onResponse(msg)
+                    } else {
+                        console.log('hehehe')
+                    }
+                }
+                xhr.send(buffer)
+
+
 //                 (future, onFinish, resultMap) = InvokeFuture.newFuture()
 //                 self.__waitingMapLock.acquire()
 //                 if self.__waitingMap.__contains__(id):
@@ -305,11 +295,16 @@ var Message = {
 //
 //                 threading.Thread(target=self.__makeHttpRequest, args=[message.pack()]).start()
 //                 return future
-//             else:
+            } else {
+                throw '122'
 //                 threading.Thread(target=self.__makeHttpRequest, args=[message.pack()]).start()
-//         else:
-//             threading.Thread(target=self.__makeHttpRequest, args=[b'']).start()
-//
+            }
+        } else {
+            throw '111'
+            this.makeHttpRequest()
+        }
+    }
+
 //     def __makeHttpRequest(self, bytes):
 //         headers = {'Content-Type': 'application/msgpack'}
 //         if self.hydraToken is not None:
@@ -375,8 +370,49 @@ var Message = {
 //             print('A Wrong Message: {}'.format(message))
 //
 //     def __getattr__(self, item):
+    // var handler = {
+    //     get: function (obj, prop) {
+    //         return prop in obj ? obj[prop] : 37
+    //     }
+    // };
 //         return InvokeTarget(self, item)
+
+
+    createDynamicRemoteObject(target, toMessage = false) {
+        var handler = {
+            get: function (obj, prop) {
+                if (prop in obj) return obj[prop]
+                return function (...args) {
+                    var builder = Message.newBuilder().asRequest(prop, args)
+                    if (this.target != null && this.target != undefined && this.target != '') builder.to(this.target)
+                    var message = builder.create()
+                    if (this.toMessage) return message
+                    else return this.session.sendMessage(message)
+                }
+            }
+        }
+        return new Proxy({session: this, target: target, toMessage: toMessage}, handler)
+    }
+
+//     def __getattr__(self, item):
+//         item = u'{}'.format(item)
+//         def invoke(*args, **kwargs):
+//             builder = Message.newBuilder().asRequest(item, args, kwargs)
+//             if self.__target is not None:
+//                 builder.to(self.__target)
+//             if self.__objectID is not 0:
+//                 builder.objectID(self.__objectID)
+//             message = builder.create()
+//             if self.__toMessage:
+//                 return message
+//             elif self.__blocking:
+//                 return self.__session.__sendMessage__(message).sync(self.__timeout)
+//             else:
+//                 return self.__session.__sendMessage__(message)
 //
+//         return invoke
+}
+
 //
 // class InvokeFuture:
 //     @classmethod
@@ -454,8 +490,25 @@ var Message = {
 //             self.__onComplete()
 //         self.__awaitSemaphore.release()
 //
-//
-// class InvokeTarget:
+// }
+
+class RuntimeInovker {
+    constructor(invoker) {
+        this.invoker = invoker
+    }
+
+    invoke(name, args) {
+        var method = this.invoker[name]
+        if (method) {
+            if (typeof method === 'function') return method.call(this.invoker, ...args)
+            else return method
+        } else {
+            throw new ProtocolException(`Method not found: ${name}`)
+        }
+    }
+}
+
+// class InvokeTarget {
 //     def __init__(self, session, item):
 //         self.session = session
 //         self.name = item
@@ -468,47 +521,14 @@ var Message = {
 //         invoker = self.session.blockingInvoker(None, self.session.defaultblockingInvokerTimeout)
 //         func = invoker.__getattr__(self.name)
 //         return func(*args, **kwargs)
-//
-//
-// class RemoteObject(object):
-//     def __init__(self, name, id):
-//         self.name = name
-//         self.id = id
-//
-//     def __str__(self):
-//         return "RemoteObject[{},{}]".format(self.name, self.id)
-//
-//
-// class DynamicRemoteObject(RemoteObject):
-//     def __init__(self, session, toMessage, blocking, target, objectID, timeout):
-//         super(DynamicRemoteObject, self).__init__(target, objectID)
-//         self.__session = session
-//         self.__target = target
-//         self.__objectID = objectID
-//         self.__toMessage = toMessage
-//         self.__blocking = blocking
-//         self.__timeout = timeout
-//         self.name = target
-//         self.id = objectID
-//
-//     def __getattr__(self, item):
-//         item = u'{}'.format(item)
-//
-//         def invoke(*args, **kwargs):
-//             builder = Message.newBuilder().asRequest(item, args, kwargs)
-//             if self.__target is not None:
-//                 builder.to(self.__target)
-//             if self.__objectID is not 0:
-//                 builder.objectID(self.__objectID)
-//             message = builder.create()
-//             if self.__toMessage:
-//                 return message
-//             elif self.__blocking:
-//                 return self.__session.__sendMessage__(message).sync(self.__timeout)
-//             else:
-//                 return self.__session.__sendMessage__(message)
-//
-//         return invoke
-//
-//     def __str__(self):
-//         return "DynamicRemoteObject[{},{}]".format(self.name, self.id)
+// }
+
+
+// module.exports = {
+//     Message,
+//     MessageBuilder,
+//     MessageType,
+//     ProtocolException,
+//     RuntimeInovker,
+//     HttpSession
+// };

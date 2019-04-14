@@ -1,4 +1,4 @@
-enablePlugins(ScalaJSPlugin)
+//enablePlugins(ScalaJSPlugin)
 
 name := "sydra-core"
 version := "0.1.0"

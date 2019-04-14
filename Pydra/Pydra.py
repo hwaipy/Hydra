@@ -617,9 +617,6 @@ class HttpSession:
             headers['Cookie'] = 'HydraToken={}'.format(self.hydraToken)
         r = requests.post(self.url, data=bytes, headers=headers)
         if (r.status_code == 200):
-            # for head in r.headers:
-            #     print('{}: {}'.format(head, r.headers[head]))
-            # print()
             token = r.cookies.get('HydraToken')
             if token is not None:
                 self.hydraToken = token

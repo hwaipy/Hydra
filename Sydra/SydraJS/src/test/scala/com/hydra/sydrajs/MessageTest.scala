@@ -2,6 +2,7 @@ package com.hydra.sydrajs
 
 import java.math.BigInteger
 import com.hydra.core.Message
+import com.hydra.core.MessageType._
 import utest._
 
 object MessageTest extends TestSuite {
@@ -37,64 +38,58 @@ object MessageTest extends TestSuite {
       }
       assert(m.get[String]("keyNull", true) == None)
     }
+    'TestBasicInformation - {
+      val b = Message.newBuilder
+      assert(b.create.to == None)
+      b.to(null)
+      assert(b.create.to == None)
+      b.to("the target")
+      assert(b.create.to.get == "the target")
+    }
+    'TestTypeAndContent - {
+      val builder = Message.newBuilder
+      assert(builder.create.messageType == Unknown)
+      val m1 = builder.asRequest("TestRequest1").create
+      assert(m1.messageType == Request)
+      assert(m1.requestContent == ("TestRequest1", Nil, Map()))
+      intercept[IllegalArgumentException] {
+        builder.asRequest("TestRequest2", List(100, "arg"), Map("a" -> 1, Message.KeyTo -> "11")).create
+      }
+      val m2 = builder.asRequest("TestRequest2", List(100, "arg"), Map("a" -> 1, "b" -> "bb")).create
+      assert(m2.messageType == Request)
+      assert(m2.requestContent == ("TestRequest2", 100 :: "arg" :: Nil, Map("b" -> "bb", "a" -> 1)))
+      val m3 = builder.asResponse("ContentOfResponse", 100).create
+      assert(m3.messageType == Response)
+      intercept[IllegalStateException] {
+        m3.requestContent
+      }
+      assert(m3.responseContent == ("ContentOfResponse", 100))
+      val m4 = builder.asError("ContentOfError", 1001).create
+      assert(m4.messageType == Error)
+      intercept[IllegalStateException] {
+        m4.requestContent
+      }
+      intercept[IllegalStateException] {
+        m4.responseContent
+      }
+      assert(m4.errorContent == ("ContentOfError", 1001))
+    }
+    'TestUpdateMessage - {
+      val m1 = Message.newBuilder.asRequest("TestRequest1").create
+      assert(m1.get[Int]("testitem") == None)
+      val m2 = m1 + ("testitem" -> 100)
+      assert(m2.get[Int]("testitem").get == 100)
+      val m3 = m2.builder.create
+      assert(m3.get[Int]("testitem").get == 100)
+      val m4 = (m3.builder += ("t2" -> "11")).create
+      assert(m4.get[Int]("testitem").get == 100)
+      assert(m4.get[String]("t2").get == "11")
+      val r1 = m4.response(99)
+      assert(r1.messageType == Response)
+      assert(r1.responseContent == (99, m4.messageID))
+      val e1 = m4.error(999)
+      assert(e1.messageType == Error)
+      assert(e1.errorContent == (999, m4.messageID))
+    }
   }
 }
-
-//
-//  test("Test basic information") {
-//    val b = Message.newBuilder
-//    assert(b.create.to == None)
-//    b.to(null)
-//    assert(b.create.to == None)
-//    b.to("the target")
-//    assert(b.create.to.get == "the target")
-//  }
-//
-//  test("Test type and content") {
-//    val builder = Message.newBuilder
-//    assert(builder.create.messageType == Unknown)
-//    val m1 = builder.asRequest("TestRequest1").create
-//    assert(m1.messageType == Request)
-//    assert(m1.requestContent == ("TestRequest1", Nil, Map()))
-//    intercept[IllegalArgumentException] {
-//      builder.asRequest("TestRequest2", List(100, "arg"), Map("a" -> 1, Message.KeyTo -> "11")).create
-//    }
-//    val m2 = builder.asRequest("TestRequest2", List(100, "arg"), Map("a" -> 1, "b" -> "bb")).create
-//    assert(m2.messageType == Request)
-//    assert(m2.requestContent == ("TestRequest2", 100 :: "arg" :: Nil, Map("b" -> "bb", "a" -> 1)))
-//    val m3 = builder.asResponse("ContentOfResponse", 100).create
-//    assert(m3.messageType == Response)
-//    intercept[IllegalStateException] {
-//      m3.requestContent
-//    }
-//    assert(m3.responseContent == ("ContentOfResponse", 100))
-//    val m4 = builder.asError("ContentOfError", 1001).create
-//    assert(m4.messageType == Error)
-//    intercept[IllegalStateException] {
-//      m4.requestContent
-//    }
-//    intercept[IllegalStateException] {
-//      m4.responseContent
-//    }
-//    assert(m4.errorContent == ("ContentOfError", 1001))
-//  }
-//
-//  test("Test update message.") {
-//    val m1 = Message.newBuilder.asRequest("TestRequest1").create
-//    assert(m1.get[Int]("testitem") == None)
-//    val m2 = m1 + ("testitem" -> 100)
-//    assert(m2.get[Int]("testitem").get == 100)
-//    val m3 = m2.builder.create
-//    assert(m3.get[Int]("testitem").get == 100)
-//    val m4 = (m3.builder += ("t2" -> "11")).create
-//    assert(m4.get[Int]("testitem").get == 100)
-//    assert(m4.get[String]("t2").get == "11")
-//    val r1 = m4.response(99)
-//    assert(r1.messageType == Response)
-//    assert(r1.responseContent == (99, m4.messageID))
-//    val e1 = m4.error(999)
-//    assert(e1.messageType == Error)
-//    assert(e1.errorContent == (999, m4.messageID))
-//  }
-//}
-//
