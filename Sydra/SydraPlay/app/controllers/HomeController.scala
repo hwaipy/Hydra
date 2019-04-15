@@ -123,8 +123,11 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
       futureResult
     } catch {
       case e: Throwable => {
-        println(request.headers)
-        e.printStackTrace()
+        if (e.getMessage == "Invalid Stateless session: invalid token.") println("Invalid Token.")
+        else {
+          println(request.headers)
+          e.printStackTrace()
+        }
         val futureResult: Future[Result] = Future[Result] {
           val content = new Array[Byte](0)
           val result = Result(

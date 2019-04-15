@@ -1,7 +1,8 @@
 $(document).ready(function () {
     session = HttpSession.create('/hydra/message', function () {
         window.setInterval(function () {
-            session.getServiceList().onSuccess(function (response) {
+            session.getServiceListWithMeta().onSuccess(function (response) {
+                console.log(response)
                 text = ""
                 for (serviceName of response) {
                     text += `<p>${serviceName}</p>`
@@ -10,6 +11,7 @@ $(document).ready(function () {
             })
         }, 5000)
     })
+    testService()
 });
 
 function testService() {

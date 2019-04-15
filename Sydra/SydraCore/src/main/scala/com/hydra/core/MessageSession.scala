@@ -22,9 +22,7 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
   MessageSession.sessionCount.incrementAndGet()
   private val creationTime = System.currentTimeMillis
   private val messageReceived = new AtomicInteger(0)
-  private val messageSend = new AtomicInteger(0)
-  private val bytesReceived = new AtomicLong(0)
-  private val bytesSend = new AtomicLong(0)
+  private val messageSent = new AtomicInteger(0)
   private val serviceName = new AtomicReference[Option[String]](None)
   private val messageSendingQueue = new LinkedBlockingQueue[Message]()
   private val messageFetchers = new LinkedBlockingQueue[Tuple2[(Option[Message]) => Unit, Long]]()
@@ -61,17 +59,16 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
     }
   }]"
 
-  //  def updateMessageReceivedStatistics(messageReceived: Int, bytesReceived: Long) {
-  //    this.messageReceived.set(messageReceived)
-  //    this.bytesReceived.set(bytesReceived)
-  //  }
-  //
-  //  def increseMessageSendStatistics(bytesSend: Long) {
-  //    this.messageSend.incrementAndGet
-  //    this.bytesSend.addAndGet(bytesSend)
-  //  }
-  //
-  //  def summary = (id, name, connectedTime, messageSend.get, messageReceived.get, bytesSend.get, bytesReceived.get)
+  def updateMessageReceivedStatistics() {
+    this.messageReceived.incrementAndGet
+  }
+
+  def increseMessageSentStatistics() {
+    this.messageSent.incrementAndGet
+  }
+
+  def summary = (id, serviceName.get, creationTime, messageSent.get, messageReceived.get)
+
   def sendMessage(message: Message) = {
     messageSendingQueue.put(message)
     manager.notifyMessageFetchMatch(this)
@@ -82,14 +79,6 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
     lastFetched set System.currentTimeMillis()
     manager.notifyMessageFetchMatch(this)
   }
-
-  //  def getMessageSendingQueueSize = messageSendingQueue.size
-  //
-  //  def takeMessageSendingQueueHead = messageSendingQueue.take()
-  //
-  //  def pollMessageSendingQueueHead(timeout: Long, unit: TimeUnit) = messageSendingQueue.poll(timeout, unit)
-  //
-  //  def pollMessageSendingQueueHead = messageSendingQueue.poll()
 
   private[core] def completeMessageFetch = while ((messageFetchers.size > 1) || (messageSendingQueue.size > 0 && messageFetchers.size > 0)) {
     val fetcher = messageFetchers.poll()._1
@@ -130,6 +119,8 @@ class MessageSession(val id: Int, val manager: MessageSessionManager) {
     def ping() = {}
 
     def getServiceList() = manager.getServices
+
+    def getServiceListWithMeta() = manager.getServicesWithMeta
   }
 
   private val invoker = new Invoker
@@ -269,6 +260,8 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
               case None => throw new MessageException(s"TO not exits: $to")
               case Some(s) => s
             }
+            from.increseMessageSentStatistics()
+            session.updateMessageReceivedStatistics()
             session.sendMessage(message)
           }
         }
@@ -321,7 +314,13 @@ class MessageSessionManager(val sessionOverdue: Long = 30000) {
 
   def getServices = serviceMap.keys().asScala.toList
 
+
   def getServiceSessions = serviceMap.values().asScala.toList
+
+  def getServicesWithMeta = {
+    val currentTime = System.currentTimeMillis()
+    getServiceSessions.map(_.summary).filter(_._2.isDefined).map(s => List(s._2.get, currentTime - s._3, s._4, s._5))
+  }
 
   def sessionsCount = sessionMap.size
 
