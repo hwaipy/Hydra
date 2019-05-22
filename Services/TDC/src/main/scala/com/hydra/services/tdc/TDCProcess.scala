@@ -72,6 +72,7 @@ class TDCProcessService(port: Int) {
     val result = new mutable.HashMap[String, Any]()
     analysers.map(e => (e._1, e._2.dataIncome(dataBlock))).filter(e => e._2.isDefined).foreach(e => result(e._1) = e._2.get)
     result("Time") = System.currentTimeMillis()
+    println(System.currentTimeMillis() - dataBlock.creationTime)
     val bytes = MessagePack.pack(result)
     if (storageRef.get != null) storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
   }

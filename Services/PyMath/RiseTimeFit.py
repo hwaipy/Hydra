@@ -4,6 +4,7 @@ from scipy import asarray as ar, exp
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 # global riseRef
 # global ysBuffer
 # global ysBufferCount
@@ -20,6 +21,12 @@ def riseTimeFit(xs, ys):
     # for i in range(0, len(ys)):
     #     ys[i] += ysBuffer[i]
     #
+
+    # in case there is a large background
+    bgs = ys[int(len(ys) * 0.8):-1]
+    bg = sum(bgs) / len(bgs)
+    ys = [y - bg for y in ys]
+
     SPD = [ys[0]]
     for y in ys[1:]:
         SPD.append(SPD[-1] + y)
@@ -46,7 +53,7 @@ def riseTimeFit(xs, ys):
     def linear(x, a, b):
         return a * x + b
 
-    expectA = (fitYs[0] - fitYs[-1])/(fitXs[0] - fitXs[-1])
+    expectA = (fitYs[0] - fitYs[-1]) / (fitXs[0] - fitXs[-1])
     expectB = fitYs[0] - expectA * fitXs[0]
     popt, pcov = curve_fit(linear, fitXs, fitYs, p0=[expectA, expectB])
 
@@ -54,7 +61,7 @@ def riseTimeFit(xs, ys):
     # plt.plot(fitXs, [linear(x, popt[0], popt[1]) for x in fitXs])
     # plt.show()
     # global riseRef
-    rise = -popt[1]/popt[0]
+    rise = -popt[1] / popt[0]
     # if riseRef is -1:
     #     riseRef = rise
     # print((rise-riseRef)*1000)

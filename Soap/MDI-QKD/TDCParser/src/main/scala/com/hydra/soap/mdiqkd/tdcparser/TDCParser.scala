@@ -73,7 +73,7 @@ object TDCParser extends JFXApp {
   storageInvoker.FSFileInitialize("", reportPath)
   val mongoClient: MongoClient = MongoClient("mongodb://MDIQKD:freespace@192.168.25.27:27019")
   val database = mongoClient.getDatabase("Freespace_MDI_QKD")
-  val collection = database.getCollection("TDCReport")
+  val collection = database.getCollection("TDCReport-20190521")
 
   val visualBounds = Screen.primary.visualBounds
   val frameSize = new Dimension2D(visualBounds.width * 0.9, visualBounds.height * 0.6)
@@ -171,7 +171,7 @@ object TDCParser extends JFXApp {
       "SystemTime" -> System.currentTimeMillis())
     val bytes = MessagePack.pack(reportMap ++ qberReport)
 
-    if (!DEBUG) storageInvoker.FSFileAppendFrame("", reportPath, bytes)
+    storageInvoker.FSFileAppendFrame("", reportPath, bytes)
 
     val seq1 = (reportMap ++ qberReport).map(z => (z._1, BsonDouble(z._2))).toSeq
     val seq2 = Seq(("QBERSections", BsonArray(qberSection.map(li => BsonArray(li.map(i => BsonInt32(i)))))))

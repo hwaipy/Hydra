@@ -16,7 +16,7 @@ import com.xeiam.xchart.{ChartBuilder, SeriesMarker, StyleManager, XChartPanel}
 import javax.imageio.ImageIO
 import javax.swing.border.TitledBorder
 
-import collection.mutable.ArrayBuffer
+import collection.mutable.{ArrayBuffer, ListBuffer}
 import concurrent.{Await, ExecutionContext, Future}
 import util.Random
 //import language.postfixOps
@@ -29,7 +29,8 @@ object PhaseScan extends App {
   properties.load(propertiesIn)
   propertiesIn.close()
 
-  val adcServices = "ArduinoClient" :: Nil
+
+  val adcServices = "BSPS1" ::"BSPS2" ::"BSPS3" ::"BSPS4" ::"BSPS5" ::"BSPS6" ::"BSPS7" ::"BSPS8" :: Nil
 
   val client = MessageClient.newClient("192.168.25.27", 20102)
   val pix = client.blockingInvoker("PIX")
@@ -70,17 +71,59 @@ object PhaseScan extends App {
     val adcChannelCounts = adcs.map(_ => 8)
     val channelCount = adcChannelCounts.sum
 
-    def scan(dataIn: (Tuple2[Double, List[Double]]) => Unit) {
+
+    def gainAutoSense(dataIn: (Tuple2[Double, List[Double]]) => Unit, range: Range = Range(0, 500, 20)) {
+      val gains = adcs.map(_ => Range(0, 8).map(_ => Unit)).flatten.map(_ => 6).toArray
+
+      def setGains() = {
+        adcs.zipWithIndex.map(z => {
+          val adc = z._1
+          val index = z._2
+          adc.setGains(gains(index * 8), gains(index * 8 + 1), gains(index * 8 + 2), gains(index * 8 + 3), gains(index * 8 + 4), gains(index * 8 + 5), gains(index * 8 + 6), gains(index * 8 + 7))
+        })
+      }
+
+      setGains()
       pix.setPosition(0)
       Thread.sleep(1000)
-      Range(0, 4000, 20).foreach(x => {
+      val Rs = List(10e3, 20e3, 49.9e3, 100e3, 200e3, 510e3, 1e6);
+      val gainLimits = Rs.map(R => 0.6 * 5 / R)
+//       List(3.0E-4, 1.5E-4, 6.0120240480961926E-5, 3.0E-5, 1.5E-5, 5.882352941176471E-6, 3.0E-6)
+      println(gainLimits)
+      range.foreach(x => {
         pix.setPosition(x * 1.0)
-        //        adcs.foreach(adc => adc.updateCurrentPosition(x / 1000.0))
         Thread.sleep(500)
         val measureFutures = adcs.map(adc => {
-          adc.measure("500")
+          adc.measure("30")
         })
-        //        val ys = adcs.map(adc => adc.measure()).map(f => Await.result(f, Duration.Inf)).flatten
+        val rs = measureFutures.map(f => Await.result(f, Duration.Inf).toString)
+        val ys = rs.map(r => r.split(" *, *").map(item => item.toDouble)).flatten
+        dataIn((x / 1000.0, ys))
+        ys.zipWithIndex.map(z => {
+          val value = z._1
+          val index = z._2
+          val currentGain = gains(index)
+          val currentGainLimit = gainLimits(currentGain)
+          if (value > 0.7 * currentGainLimit) {
+            gains(index) = List(gains(index) - 1, 0).max
+            println(s"set gain ${index} to ${gains(index)}")
+          }
+        })
+        setGains()
+      })
+
+      println(gains.zipWithIndex.foreach(println))
+    }
+
+    def scan(dataIn: (Tuple2[Double, List[Double]]) => Unit, range: Range = Range(0, 4000, 20)) {
+      pix.setPosition(0)
+      Thread.sleep(1000)
+      range.foreach(x => {
+        pix.setPosition(x * 1.0)
+        Thread.sleep(500)
+        val measureFutures = adcs.map(adc => {
+          adc.measure("30")
+        })
         val rs = measureFutures.map(f => Await.result(f, Duration.Inf).toString)
         val ys = rs.map(r => r.split(" *, *").map(item => item.toDouble)).flatten
         dataIn((x / 1000.0, ys))
@@ -97,6 +140,8 @@ object PhaseScan extends App {
 
     val toolbar = new JToolBar("")
     toolbar.setFloatable(false)
+    //    private val gainAutoSenseButton = new JButton("GainSense")
+    //    toolbar.add(gainAutoSenseButton)
     private val scanButton = new JButton("Scan")
     toolbar.add(scanButton)
     contentPane.add(toolbar, BorderLayout.NORTH)
@@ -129,14 +174,22 @@ object PhaseScan extends App {
       scanButton.setEnabled(false)
       psps.foreach(p => p.clear)
       new Thread(() => {
-        scanner.scan((data) => {
+        //        println("Start")
+        //        println("Started")
+        scanner.gainAutoSense((data) => {
           psps.zip(data._2).foreach(z => z._1.newData(data._1, z._2))
         })
-        SwingUtilities.invokeLater(new Runnable {
-          override def run {
-            //          psps.foreach(p => p.doFit)
-            scanButton.setEnabled(true)
-          }
+        //        scanner.stopGainAutoSense()
+        SwingUtilities.invokeLater(() => {
+          psps.foreach(p => p.clear)
+          new Thread(() => {
+            scanner.scan((data) => {
+              psps.zip(data._2).foreach(z => z._1.newData(data._1, z._2))
+            }, Range(0, 4000, 20))
+            SwingUtilities.invokeLater(() => {
+              scanButton.setEnabled(true)
+            })
+          }).start
         })
       }).start
     })
@@ -149,7 +202,10 @@ object PhaseScan extends App {
       override def actionPerformed(e: ActionEvent) = {
         val s = psps.map(p => p.fitter.get() match {
           case null => 0
-          case f => f.P
+          case f => {(f.P + (if (f.A > 0) 0 else math.Pi))match{
+            case p if p>math.Pi => p-2*math.Pi
+            case p => p
+          }}
         }).mkString("\t")
         Toolkit.getDefaultToolkit.getSystemClipboard.setContents(new StringSelection(s), null)
       }
@@ -251,7 +307,10 @@ object PhaseScan extends App {
       val s = success match {
         case true =>
           f"""
-             |Pha: ${P}%2.3f
+             |Pha: ${(P + (if (A > 0) 0 else math.Pi))match{
+            case p if p>math.Pi => p-2*math.Pi
+            case p => p
+          }}%2.3f
              |  λ: ${2 * math.Pi / W}%2.1f
              |Amp: ${A}%2.3f
              |  B: ${B}%2.3f
@@ -319,7 +378,7 @@ object PhaseScan extends App {
         } catch {
           case e: Throwable => {
             e.printStackTrace()
-            1.0 :: 2 * math.Pi / (0.895 / 2) :: 0.0 :: 0.5 :: Nil
+            ((yData.max - yData.min) / 1.414) :: 2 * math.Pi / (0.895 / 2) :: 0.0 :: 0.5 :: Nil
           }
         }
       }

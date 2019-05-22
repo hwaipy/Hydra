@@ -31,7 +31,7 @@ class Syncer:
         while self.running:
             time.sleep(self.period)
             rises = self.__fetchRecentReports(1)[0]
-            self.__updateDelays(rises[0], rises[1], rises[2])
+            self.__updateDelays(rises[0]-2, rises[1]-2, rises[2])
 
     def __fetchRecentReports(self, count):
         docSet = [[doc['aliceRise'], doc['bobRise'], doc['Time']]
@@ -39,6 +39,7 @@ class Syncer:
         return docSet
 
     def __updateDelays(self, aliceDelay, bobDelay, tdcTime):
+        print('update delays {}, {}'.format(aliceDelay, bobDelay))
         charlieDelay = 0
         if (not self.aliceOn) or math.isnan(aliceDelay): aliceDelay = 0
         if (not self.bobOn) or math.isnan(bobDelay): bobDelay = 0
@@ -53,15 +54,17 @@ class Syncer:
         if self.aliceOn or self.bobOn:
             # self.log('adjust delays: alice {}, bob {}, charlie {}.'.format(aliceDelay, bobDelay, charlieDelay))
             print('adjust delays: alice {}, bob {}, charlie {}.'.format(aliceDelay, bobDelay, charlieDelay))
-            try:
-                self.HMC7044EvalAlice.setDelay(self.channelAlice, aliceDelay)
-                self.HMC7044EvalBob.setDelay(self.channelBob, bobDelay)
-                self.HMC7044EvalCharlie.setDelay(self.channelCharlie, charlieDelay)
-                x = self.syncDB.insert_one({"TDCTime": tdcTime, "AliceDelay": (aliceDelay - charlieDelay),
-                                        "BobDelay": (bobDelay - charlieDelay)})
-                print(x.inserted_id)
-            except BaseException as e:
-                print('Error in set delays: {}.'.format(e))
+            #try:
+            self.HMC7044EvalAlice.setDelay(0, -aliceDelay)
+            self.HMC7044EvalBob.setDelay(0, -bobDelay)
+            print(self.channelCharlie)
+            print(charlieDelay)
+            self.HMC7044EvalCharlie.setDelay(0, -charlieDelay)
+            x = self.syncDB.insert_one({"TDCTime": tdcTime, "AliceDelay": (aliceDelay - charlieDelay),
+                                    "BobDelay": (bobDelay - charlieDelay)})
+            print(x.inserted_id)
+            #except BaseException as e:
+            #   print('Error in set delays: {}.'.format(e))
 
     def stop(self):
         self.running = False
@@ -111,8 +114,8 @@ if __name__ == '__main__':
     syncer.HMC7044EvalAlice = session.blockingInvoker('HMC7044EvalAlice')
     syncer.HMC7044EvalBob = session.blockingInvoker('HMC7044EvalBob')
     syncer.HMC7044EvalCharlie = session.blockingInvoker('HMC7044EvalCharlie')
-    # syncer.turnOnAlice(0)
-    # syncer.turnOnBob(0)
+    syncer.turnOnAlice(0)
+    syncer.turnOnBob(0)
     syncer.start()
     # time.sleep(5)
     # syncer.stop()

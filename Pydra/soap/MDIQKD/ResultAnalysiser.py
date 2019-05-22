@@ -3,11 +3,13 @@ import math
 import sys
 import matplotlib.pyplot as plt
 
+
 class ResultAnalysiser:
-    def __init__(self, db):
+    def __init__(self, db, dir):
         self.db = db
-        self.reports = self.db['TDCReport']
-        self.monitor = self.db['ChannelMonitor']
+        self.dir = dir
+        self.reports = self.db['TDCReport-20190518']
+        # self.monitor = self.db['ChannelMonitor-20190418']
 
     def getDocumentCount(self):
         return self.reports.count()
@@ -16,41 +18,48 @@ class ResultAnalysiser:
         docSet = self.reports.find().sort("SystemTime", -1).limit(1)
         return docSet[0]["SystemTime"]
 
-    def loadRangedData(self, startTime, stopTime):
+    def loadRangedData(self, startTime, stopTime, dump):
         qbers = self.getQbers(startTime, stopTime)
         print('QBERs loaded: {}'.format(len(qbers.dbDocs)))
-        channelMonitors = self.getChannelMonitor(startTime, stopTime)
-        print('ChannelMonitors loaded: {}'.format(len(channelMonitors.dbDocs)))
-        syncDifference = (qbers.systemAndTDCTimeMatchs[0][0] - channelMonitors.triggers[0]) / 1000.
-        print('SystemTime difference between QBERS and ChannelMonitors is {} s'.format(syncDifference))
-        if math.fabs(syncDifference) > 1:
-            print('exiting')
-            sys.exit(0)
-        dT_QBERs_ChannelMonitors = channelMonitors.triggers[0] - qbers.systemAndTDCTimeMatchs[0][1] / 1e9
+        if dump: qbers.dump('QBERs.dump')
+        #if (len(qbers.systemAndTDCTimeMatchs) == 0): print("QBERS match 0!")
+        #print(qbers.systemAndTDCTimeMatchs[0][0] / 1000)
+        #channelMonitors = self.getChannelMonitor(startTime, stopTime)
+        #print('ChannelMonitors loaded: {}'.format(len(channelMonitors.dbDocs)))
+        #if dump: channelMonitors.dump('Channel.dump')
 
-        cursorChannelMonitor = 0
-        dataSets = []
-        for qberDoc in qbers.dbDocs[:]:
-            sectionStart = qberDoc.tdcTime[0] / 1e9 + dT_QBERs_ChannelMonitors
-            sectionStop = qberDoc.tdcTime[1] / 1e9 + dT_QBERs_ChannelMonitors
-            sectionCount = len(qberDoc.qberSections)
-            setDuration = (sectionStop - sectionStart) / sectionCount
-            for setIndex in range(0, sectionCount):
-                dataSet = DataSet(qberDoc, setIndex)
-                setStart = sectionStart + setIndex * setDuration
-                setStop = setStart + setDuration
-                while cursorChannelMonitor < len(channelMonitors.entries):
-                    channelMonitorEntry = channelMonitors.entries[cursorChannelMonitor]
-                    if channelMonitorEntry.time < setStart:
-                        cursorChannelMonitor += 1
-                    elif channelMonitorEntry.time < setStop:
-                        dataSet.appendChannelMonitorEntry(channelMonitorEntry)
-                        cursorChannelMonitor += 1
-                    else:
-                        break
-                dataSets.append(dataSet)
-        print('DataSet loaded: {}'.format(len(dataSets)))
-        return DataSets(dataSets)
+
+        # print(channelMonitors.triggers[0] / 1000)
+        # syncDifference = (qbers.systemAndTDCTimeMatchs[0][0] - channelMonitors.triggers[0]) / 1000.
+        # print('SystemTime difference between QBERS and ChannelMonitors is {} s'.format(syncDifference))
+        # if math.fabs(syncDifference) > 1:
+        #     print('exiting')
+        #     # sys.exit(0)
+        # dT_QBERs_ChannelMonitors = channelMonitors.triggers[0] - qbers.systemAndTDCTimeMatchs[0][1] / 1e9
+        #
+        # cursorChannelMonitor = 0
+        # dataSets = []
+        # for qberDoc in qbers.dbDocs[:]:
+        #     sectionStart = qberDoc.tdcTime[0] / 1e9 + dT_QBERs_ChannelMonitors
+        #     sectionStop = qberDoc.tdcTime[1] / 1e9 + dT_QBERs_ChannelMonitors
+        #     sectionCount = len(qberDoc.qberSections)
+        #     setDuration = (sectionStop - sectionStart) / sectionCount
+        #     for setIndex in range(0, sectionCount):
+        #         dataSet = DataSet(qberDoc, setIndex)
+        #         setStart = sectionStart + setIndex * setDuration
+        #         setStop = setStart + setDuration
+        #         while cursorChannelMonitor < len(channelMonitors.entries):
+        #             channelMonitorEntry = channelMonitors.entries[cursorChannelMonitor]
+        #             if channelMonitorEntry.time < setStart:
+        #                 cursorChannelMonitor += 1
+        #             elif channelMonitorEntry.time < setStop:
+        #                 dataSet.appendChannelMonitorEntry(channelMonitorEntry)
+        #                 cursorChannelMonitor += 1
+        #             else:
+        #                 break
+        #         dataSets.append(dataSet)
+        # print('DataSet loaded: {}'.format(len(dataSets)))
+        # return DataSets(dataSets, self.dir)
 
     def getQbers(self, start, stop):
         docSet = self.__getDocumentsInRange(self.reports, "Time", start, stop)
@@ -67,8 +76,9 @@ class ResultAnalysiser:
 
 
 class DataSets:
-    def __init__(self, dataSets):
+    def __init__(self, dataSets, dir):
         self.dataSets = dataSets
+        self.dir = dir
         self.counts1 = [dataSet.counts[0] for dataSet in self.dataSets]
         self.counts2 = [dataSet.counts[1] for dataSet in self.dataSets]
         self.powers1 = [dataSet.powers()[0] for dataSet in self.dataSets]
@@ -78,10 +88,22 @@ class DataSets:
         return len(self.dataSets)
 
     def countingRateStatistic(self):
-        self.__countingRateStatistic(self.counts1, self.powers1)
-        self.__countingRateStatistic(self.counts2, self.powers2)
+        # for p in self.power1:
+        #     print(p)
+        self.__countingRateStatistic(self.counts1, self.powers1, 'Alice')
+        self.__countingRateStatistic(self.counts2, self.powers2, 'Bob')
+        file1 = open('powers1.csv', 'w')
+        file2 = open('powers2.csv', 'w')
+        for dataSet in self.dataSets:
+            op = dataSet.originalPowers()
+            for p in op[0]:
+                file1.write('{}\n'.format(p))
+            for p in op[1]:
+                file2.write('{}\n'.format(p))
+        file1.close()
+        file2.close()
 
-    def __countingRateStatistic(self, counts, powers):
+    def __countingRateStatistic(self, counts, powers, filename):
         binCount = 30
         maxPower = max(powers)
         minPower = min(powers)
@@ -104,7 +126,8 @@ class DataSets:
         ax2 = ax1.twinx()
         ax2.plot(powerSteps, dataSetCountHistogram, 'green')
         ax2.set_ylabel('Frequency')
-        plt.show()
+        plt.savefig('{}/{}.png'.format(self.dir, filename))
+        plt.close()
 
     def filter(self, threshold, ratioBetweenAB):
         filtered = []
@@ -113,7 +136,7 @@ class DataSets:
             ratio = 0 if powers[1] == 0 else powers[0] / powers[1] * ratioBetweenAB
             if ratio > threshold and ratio < 1 / threshold:
                 filtered.append(dataSet)
-        return DataSets(filtered)
+        return DataSets(filtered, self.dir)
 
     def HOM(self):
         xxDip = sum([dataSet.HOM[0] for dataSet in self.dataSets])
@@ -123,9 +146,9 @@ class DataSets:
 
         HOMDipXX = math.nan if xxAccident == 0 else xxDip / xxAccident
         HOMDipAll = math.nan if allAccident == 0 else allDip / allAccident
-        print('HOM XX:  {} for {}'.format(HOMDipXX, xxAccident))
-        print('HOM All: {} for {}'.format(HOMDipAll, allAccident))
-        return [HOMDipXX, HOMDipAll]
+        # print('HOM XX:  {} for {}'.format(HOMDipXX, xxAccident))
+        # print('HOM All: {} for {}'.format(HOMDipAll, allAccident))
+        return [HOMDipAll, allAccident]
 
 
 class DataSet:
@@ -151,6 +174,14 @@ class DataSet:
         else:
             return [0, 0]
 
+    def originalPowers(self):
+        if len(self.channelMonitorEntries) > 0:
+            power1 = [entry.power1 for entry in self.channelMonitorEntries]
+            power2 = [entry.power2 for entry in self.channelMonitorEntries]
+            return [power1, power2]
+        else:
+            return [[], []]
+
 
 class QberSections:
     def __init__(self, dbDocs):
@@ -167,8 +198,35 @@ class QberSections:
     def __checkChannelMonitorSyncs(self):
         for i in range(0, len(self.channelMonitorSyncs) - 1):
             delta = (self.channelMonitorSyncs[i + 1] - self.channelMonitorSyncs[i]) / 1e12
+            print(delta)
             if math.fabs(delta - 10) > 0.0001:
-                raise RuntimeError("Error in ChannelMonitorSyncs of QBER")
+                print('wrong!!!!!!!!!!!!!!!!!!!')
+                #    raise RuntimeError("Error in ChannelMonitorSyncs of QBER")
+
+    def dump(self, path):
+        import msgpack
+        file = open(path, 'wb')
+        for doc in self.dbDocs:
+            data = {
+                "SystemTime": doc.time,
+                "TDCTime": doc.tdcTime,
+                "HOMSections": doc.homSections,
+                "CountSections": doc.countSections,
+                "ChannelMonitorSyncs": doc.channelMonitorSyncs
+            }
+            packed = msgpack.packb(data, encoding='utf-8')
+            file.write(packed)
+
+        file.close()
+
+        # unpacker = msgpack.Unpacker(encoding='utf-8')
+        # fileLength  =os.path.getsize(path)
+        # file = open(path, 'rb')
+        # readed = file.read(fileLength)
+        # unpacker.feed(readed)
+        # for packed in unpacker:
+        #     print(packed)
+        # file.close()
 
     class DBDoc:
         def __init__(self, dbDoc):
@@ -199,8 +257,30 @@ class ChannelMonitorSections:
     def __checkChannelMonitorSyncs(self):
         for i in range(0, len(self.triggers) - 1):
             delta = (self.triggers[i + 1] - self.triggers[i]) / 1e3
+            print(delta)
             if math.fabs(delta - 10) > 0.1:
                 raise RuntimeError("Error in ChannelMonitorSyncs of ChannelMonitor")
+
+    def dump(self, path):
+        import msgpack
+        file = open(path, 'wb')
+        for doc in self.dbDocs:
+            data = {
+                "SystemTime": doc.time,
+                "ChannelData": doc.data
+            }
+            packed = msgpack.packb(data, encoding='utf-8')
+            file.write(packed)
+        file.close()
+
+        # unpacker = msgpack.Unpacker(encoding='utf-8')
+        # fileLength  =os.path.getsize(path)
+        # file = open(path, 'rb')
+        # readed = file.read(fileLength)
+        # unpacker.feed(readed)
+        # for packed in unpacker:
+        #     print(packed)
+        # file.close()
 
     class DBDoc:
         def __init__(self, dbDoc):
@@ -215,20 +295,34 @@ class ChannelMonitorSections:
             self.time = time
 
 
-if __name__ == '__main__':
+if __name__ == '__main__' or True:
+    import time
+
     client = MongoClient('mongodb://MDIQKD:freespace@192.168.25.27:27019')
     db = client['Freespace_MDI_QKD']
-    ana = ResultAnalysiser(db)
-    # print(ana.getDocumentCount())
+    ana = ResultAnalysiser(db, dir)
+    print('{} documents found in DB.'.format(ana.getDocumentCount()))
     lastTime = ana.getNewestDocumentTime()
-    # lastTime = 1554302870484
     print('Last Time is {}'.format(lastTime))
 
-    startTime = lastTime - 30000
-    stopTime = lastTime - 5000
-    dataSets = ana.loadRangedData(startTime, stopTime)
-
-    dataSets.countingRateStatistic()
-    # filteredDataSets = dataSets.filter(0.8, 1)
-    # print(len(filteredDataSets.dataSets))
-    # print(filteredDataSets.HOM())
+    startTime = lastTime - 100000
+    stopTime = lastTime - 2000
+    dataSets = ana.loadRangedData(startTime, stopTime, True)
+    #
+    # dataSets.countingRateStatistic()
+    # ratios = []
+    # homs = []
+    # homCounts = []
+    # ratio = 0.1
+    # while ratio < 10:
+    #     hom = dataSets.filter(0.8, ratio).HOM()
+    #     print('Ratio = {}, HOM = {} for {}'.format(int(ratio*1000)/1000, hom[0], hom[1]))
+    #     ratios.append(ratio)
+    #     homs.append(hom[0])
+    #     homCounts.append(hom[1])
+    #     ratio *= 1.2
+    # plt.semilogx(ratios, homs)
+    # plt.savefig('{}/HOMs.png'.format(dir))
+    # plt.close()
+    # plt.semilogx(ratios, homCounts)
+    # plt.savefig('{}/HOMCounts.png'.format(dir))

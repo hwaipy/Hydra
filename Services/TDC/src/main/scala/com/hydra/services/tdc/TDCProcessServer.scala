@@ -65,11 +65,13 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
   def flush(data: Any): AnyRef = offer(data)
 
   def setDelays(delays: List[Long]) = {
+    println("set delays")
     if (delays.size != this.delays.size) throw new IllegalArgumentException(s"Delays should has length of ${this.delays.size}.")
     delays.zipWithIndex.foreach(z => this.delays(z._2) = z._1)
   }
 
   def setDelay(channel: Int, delay: Long) = {
+    println("set delay")
     if (channel >= this.delays.size || channel < 0) throw new IllegalArgumentException(s"Channel $channel out of range.")
     delays(channel) = delay
   }

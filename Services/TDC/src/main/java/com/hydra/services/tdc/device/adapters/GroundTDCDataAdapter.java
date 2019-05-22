@@ -3,10 +3,12 @@ package com.hydra.services.tdc.device.adapters;
 import com.hydra.services.tdc.device.TDCDataAdapter;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Hwaipy
@@ -150,6 +152,9 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
                 && dataBuffer.get(tailPosition + 6) == 71 && dataBuffer.get(tailPosition + 7) == 71;
     }
 
+    private int[] fineTimeStatistics = new int[1000];
+    private int fineTimeCount = 0;
+
     private boolean crc() {
         int p = dataBuffer.position() + 4;
         int crc = CRC16.calculateCRC(dataBuffer.array(), p, FRAME_SIZE - 12, true);
@@ -161,9 +166,11 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
         return crc == datacrc;
     }
 
+        AtomicInteger channel0Count = new AtomicInteger(0);
     private void parseToTimeEvent(int position) {
         byte[] array = dataBuffer.array();
         int channel = array[position + 6] - 0x40;
+        if(channel == 0) channel0Count.incrementAndGet();
         if (channel > 16 || channel < 0) return;
         for (int i = 0; i < 8; i++) {
             unitLong[i] = array[position + i];
@@ -172,9 +179,33 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
             }
         }
         long fineTime = ((unitLong[3] & 0x10) << 4) | unitLong[7];
+
+        /*
+        if(fineTime<500 && channel==5){
+            fineTimeStatistics[(int)fineTime]++;
+            fineTimeCount++;
+            if(fineTimeCount>1000000){
+                try {
+                    PrintWriter  pw = new PrintWriter(System.currentTimeMillis()+".csv");
+                    for(int i=0;i<500;i++)
+                    {
+                        pw.println(i+", "+fineTimeStatistics[i]);
+                        fineTimeStatistics[i]=0;
+                    }
+                    fineTimeCount=0;
+                    pw.close();
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+        }*/
+
         long coarseTime = (unitLong[4]) | (unitLong[5] << 8)
                 | (unitLong[2] << 16) | ((unitLong[3] & 0x0F) << 24);
+        if(Math.abs(coarseTime-lastCoarseTime)<COARSE_TIME_LIMIT/100 || Math.abs(coarseTime-lastCoarseTime+COARSE_TIME_LIMIT)<COARSE_TIME_LIMIT/100 ){}else{return;}
         if (coarseTime < lastCoarseTime && (lastCoarseTime > COARSE_TIME_LIMIT * 0.9) && (coarseTime < COARSE_TIME_LIMIT * 0.1)) {
+       // if (coarseTime < lastCoarseTime) {
+
             carry++;
 //            System.out.println("We are now carrying to" + carry + ": lastCT=" + lastCoarseTime + ", currentCT=" + coarseTime);
         }

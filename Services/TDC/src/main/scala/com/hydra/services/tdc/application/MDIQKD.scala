@@ -110,9 +110,11 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("TriggerChannel") = 0
   configuration("Channel 1") = 1
   configuration("Channel 2") = 3
+  configuration("Channel Monitor Alice") = 4
+  configuration("Channel Monitor Bob") = 5
   configuration("Gate") = 2000.0
   configuration("PulseDiff") = 3000.0
-  configuration("QBERSectionCount") = 100
+  configuration("QBERSectionCount") = 1000
   configuration("ChannelMonitorSyncChannel") = 2
 
   override def configure(key: String, value: Any) = key match {
@@ -142,6 +144,14 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       val sc: Int = value
       sc >= 0 && sc < channelCount
     }
+    case "Channel Monitor Alice" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
+    case "Channel Monitor Bob" => {
+      val sc: Int = value
+      sc >= 0 && sc < channelCount
+    }
     case "TriggerChannel" => {
       val sc: Int = value
       sc >= 0 && sc < channelCount
@@ -164,6 +174,8 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val triggerChannel: Int = configuration("TriggerChannel")
     val channel1: Int = configuration("Channel 1")
     val channel2: Int = configuration("Channel 2")
+    val channelMonitorAlice: Int = configuration("Channel Monitor Alice")
+    val channelMonitorBob: Int = configuration("Channel Monitor Bob")
     val gate: Double = configuration("Gate")
     val pulseDiff: Double = configuration("PulseDiff")
     val qberSectionCount: Int = configuration("QBERSectionCount")
@@ -172,6 +184,8 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val triggerList = dataBlock.content(triggerChannel)
     val signalList1 = dataBlock.content(channel1)
     val signalList2 = dataBlock.content(channel2)
+    val signalListAlice = dataBlock.content(channelMonitorAlice)
+    val signalListBob = dataBlock.content(channelMonitorBob)
 
     val item1s = analysisSingleChannel(triggerList, signalList1, period, delay, gate, pulseDiff, randomNumbersAlice.size)
     val item2s = analysisSingleChannel(triggerList, signalList2, period, delay, gate, pulseDiff, randomNumbersBob.size)
@@ -218,6 +232,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put("Basis Matched Coincidence Count", basisMatchedCoincidences.size)
     map.put("Valid Coincidence Count", validCoincidences.size)
 
+    println(qberSectionCount)
     val basisStrings = List("O", "X", "Y", "Z")
     val qberSections = Range(0, qberSectionCount).toArray.map(i => new Array[Int](4 * 4 * 2))
     Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => {
@@ -268,7 +283,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     }))
 
     val countSections = Range(0, qberSectionCount).toArray.map(i => new Array[Int](2))
-    List(signalList1, signalList2).zipWithIndex.foreach(z => z._1.foreach(event => {
+    List(signalListAlice, signalListBob).zipWithIndex.foreach(z => z._1.foreach(event => {
       val sectionIndex = ((event - dataBlock.dataTimeBegin).toDouble / (dataBlock.dataTimeEnd - dataBlock.dataTimeBegin) * qberSectionCount).toInt
       if (sectionIndex >= 0 && sectionIndex < qberSections.size) countSections(sectionIndex)(z._2) += 1
     }))

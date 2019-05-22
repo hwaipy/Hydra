@@ -7,6 +7,7 @@ import time
 import Pydra
 import GaussianFit
 import RiseTimeFit
+import SinFit
 
 sysArgs = Utils.SystemArguments(sys.argv)
 server = sysArgs.get('server', '192.168.25.27')
