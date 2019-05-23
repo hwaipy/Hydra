@@ -97,6 +97,12 @@ if __name__ == '__main__':
     hydraPort = args.hydra_port
     name = args.service_name
 
+    model = '34470A'
+    visaResource = 'TCPIP0::192.168.25.105::inst0::INSTR'
+    hydraAddress = '192.168.25.27'
+    hydraPort = 20102
+    name = 'DMM2'
+
     if model == '34470A':
         dev = KeySight_MultiMeter_34470A(visaResource)
     elif model == '34465A':

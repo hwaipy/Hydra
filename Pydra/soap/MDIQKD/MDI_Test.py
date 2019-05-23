@@ -25,11 +25,9 @@ class ExperimentControl:
                         return None
             else: break
 
-        frameBytes = storage.FSFileReadTailFrames("", path, 0, 1)
-
-
-        # val mg = new MessageGenerator()
-        # mg.feed(frameBytes)
+        frameBytes = storage.FSFileReadTailFrames("", path, 0, 1)[0]
+        report = Pydra.Message.unpack(frameBytes)
+        return report
 
     def stop(self):
         self.session.stop()
