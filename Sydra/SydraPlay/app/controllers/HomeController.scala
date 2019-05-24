@@ -50,8 +50,9 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
   val service = new StatelessMessageService(manager)
   val executionContext = ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor())
 
-  def hydramessage() = Action.async { implicit request: Request[AnyContent] => {
+  def message() = Action.async { implicit request: Request[AnyContent] => {
     try {
+//      println(request.headers)
       val contentLength: Int = request.headers("Content-Length").toInt
       if (contentLength > 10000000) throw new IllegalArgumentException("To much data!")
       val contentType = request.headers("Content-Type")
@@ -89,6 +90,7 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
             case None => throw new IllegalArgumentException
             case Some(msg) => msg
           }
+//          println(s"---> $message")
           service.messageDispatch(message, new StatelessSessionProperties(machineID, token))
         }
         case _ => token.get
@@ -101,10 +103,12 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
             case Some(responseMessage) => contentType.toLowerCase match {
               case "application/msgpack" => {
                 val encoder = new MessagePacker()
+//                println(s"<--- $responseMessage")
                 encoder.feed(responseMessage).pack()
               }
               case "application/json" => {
                 val encoder = new MessageJsonPacker()
+//                println(s"<--- $responseMessage")
                 encoder.feed(responseMessage).pack()
               }
               case _ => throw new UnsupportedOperationException

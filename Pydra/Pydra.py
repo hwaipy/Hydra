@@ -813,15 +813,11 @@ class DynamicRemoteObject(RemoteObject):
 
 
 if __name__ == '__main__':
-    class TT:
-        def testFun(self, a, b):
-            return a + b + 1
-
-
-    session = HttpSession.create('http://localhost:9000/hydra/message', TT(), 'S1')
+    session = HttpSession.create('http://localhost:9000/message')
     while True:
-        print(session.getServiceList())
-        time.sleep(1)
+        # print(session.getServiceList())
+        print(session.TestArduinoClient.TestFunction('Is This Good?'))
+        time.sleep(0.3)
     # try:
     #     print(session.getServiceList())
     #     print(session.S1.testFun(100, 2000))

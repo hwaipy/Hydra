@@ -12,3 +12,4 @@ if __name__ == '__main__':
         fetcher = HttpSession.create("http://localhost:9000/hydra/message")
         print(fetcher.target1.fetch("->", "<-"))
         time.sleep(3)
+        fetcher.blockingInvoker("")
