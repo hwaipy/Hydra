@@ -2,14 +2,14 @@ import Pydra
 import queue
 import math
 import msgpack
-import time
 from datetime import datetime
 
 
 class MDIQKD_Analysiser:
-    def __init__(self):
+    def __init__(self, storeDir):
         self.QBERQueue = queue.Queue()
         self.channelQueue = queue.Queue()
+        self.storeDir = storeDir
 
     def dumpQBER(self, QBER):
         self.QBERQueue.put(QBER)
@@ -43,8 +43,8 @@ class MDIQKD_Analysiser:
                             '{}_Channel.dump'.format(self.__formatTime(channel.getSystemTimes()[0] / 1000.0)))
                 channelList = [channelList[-1]]
 
-    def __dump(self, content, path):
-        file = open(path, 'wb')
+    def __dump(self, content, filename):
+        file = open('{}/{}'.format(self.storeDir, filename), 'wb')
         for doc in content:
             packed = msgpack.packb(doc, encoding='utf-8')
             file.write(packed)
@@ -109,7 +109,7 @@ class QBEREntry:
 
 
 class Channel:
-    def __init__(self, sections, threshold=2.5):
+    def __init__(self, sections, threshold=1):
         self.sections = sections
         self.systemTimes = []
         self.entries = []
@@ -153,6 +153,6 @@ class ChannelEntry:
 
 
 if __name__ == '__main__':
-    analysiser = MDIQKD_Analysiser()
+    analysiser = MDIQKD_Analysiser('/Users/Hwaipy/Downloads/MDI-Store')
     session = Pydra.Session.newSession(('localhost', 20102), analysiser, 'MDIQKD-Analysiser')
     analysiser.loop()

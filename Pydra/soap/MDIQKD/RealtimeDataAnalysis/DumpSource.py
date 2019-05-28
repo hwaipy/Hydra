@@ -3,7 +3,6 @@ import time
 import os
 import msgpack
 
-
 class DumpSource:
     def __init__(self, session, dir):
         self.session = session
@@ -16,7 +15,7 @@ class DumpSource:
         while True:
             try:
                 self.__checkAnalysiserStatus()
-                time.sleep(0.5)
+                time.sleep(0.1)
             except BaseException as e:
                 print("Exception caught: {}".format(e))
 
@@ -56,6 +55,6 @@ class DumpSource:
 
 if __name__ == '__main__':
     session = Pydra.Session.newSession(('localhost', 20102))
-    dumpSource = DumpSource(session, '/Users/Hwaipy/Downloads/MDIQKD-scan/sampleReport-4mK-wrong')
+    dumpSource = DumpSource(session, '/Users/Hwaipy/Downloads/MDIQKD-shaixuan/')
     dumpSource.start()
     session.stop()
