@@ -55,6 +55,6 @@ class DumpSource:
 
 if __name__ == '__main__':
     session = Pydra.Session.newSession(('localhost', 20102))
-    dumpSource = DumpSource(session, '/Users/Hwaipy/Downloads/MDIQKD-shaixuan/')
+    dumpSource = DumpSource(session, '/Users/Hwaipy/Downloads/MDIQKD-cha/')
     dumpSource.start()
     session.stop()

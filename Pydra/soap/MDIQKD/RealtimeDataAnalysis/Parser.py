@@ -64,6 +64,7 @@ class QBERs:
         for section in self.sections:
             self.systemTimes.append(section['SystemTime'])
             HOMSections = section['HOMSections']
+            QBERSections = section['QBERSections']
             countSections = section['CountSections']
             tdcStartStop = [(time - self.TDCTimeOfSectionStart) / 1e12 for time in section['TDCTime']]
             for sync in section['ChannelMonitorSyncs']:
@@ -73,8 +74,9 @@ class QBERs:
                 entryTDCStartStop = [(tdcStartStop[1] - tdcStartStop[0]) / entryCount * j + tdcStartStop[0]
                                      for j in [i, i + 1]]
                 entryHOMs = [HOMSections[j][i] for j in range(0, len(HOMSections))]
+                entryQBERs = [QBERSections[i][j] for j in range(0, len(QBERSections[0]))]
                 entryCounts = [countSections[i][j] for j in range(0, len(countSections[0]))]
-                self.entries.append(QBEREntry(entryTDCStartStop, entryHOMs, entryCounts))
+                self.entries.append(QBEREntry(entryTDCStartStop, entryHOMs, entryCounts, entryQBERs))
 
     def validate(self):
         for i in range(0, len(self.channelMonitorSyncs) - 1):
@@ -85,12 +87,13 @@ class QBERs:
 
 
 class QBEREntry:
-    def __init__(self, tdcStartStop, HOMs, counts):
+    def __init__(self, tdcStartStop, HOMs, counts, QBERs):
         self.tdcStart = tdcStartStop[0]
         self.tdcStop = tdcStartStop[1]
         self.HOMs = HOMs
         self.counts = counts
         self.relatedChannelEntries = []
+        self.QBERs = QBERs
 
     def powerMatched(self, threshold, ratio, singleMatch=None):
         if len(self.relatedChannelEntries) == 0: return False
@@ -267,12 +270,16 @@ class Parser:
         xxAccidents = []
         HOMDipAlls = []
         allAccidents = []
+        QBERXXCorrect = []
+        QBERXXWrong = []
         for r in ratios:
             HOM = self.HOM(shreshold, r, singleMatch)
             HOMDipXXs.append(HOM[0])
             xxAccidents.append(HOM[1])
             HOMDipAlls.append(HOM[2])
             allAccidents.append(HOM[3])
+            QBERXXCorrect.append(HOM[4])
+            QBERXXWrong.append(HOM[5])
 
         self.parameters['Total Accident-All'] = sum([e.HOMs[3] for e in self.QBERs.entries])
         self.parameters['Total Accident-XX'] = sum([e.HOMs[1] for e in self.QBERs.entries])
@@ -322,7 +329,9 @@ class Parser:
         allAccident = sum([e.HOMs[3] for e in filteredQBEREntries])
         HOMDipXX = math.nan if xxAccident == 0 else xxDip / xxAccident
         HOMDipAll = math.nan if allAccident == 0 else allDip / allAccident
-        return [HOMDipXX, xxAccident, HOMDipAll, allAccident]
+        QBERXXCorrect = sum([e.QBERs[(1 * 4 + 1) * 2 + (0)] for e in filteredQBEREntries])
+        QBERXXWrong = sum([e.QBERs[(1 * 4 + 1) * 2 + (1)] for e in filteredQBEREntries])
+        return [HOMDipXX, xxAccident, HOMDipAll, allAccident, QBERXXCorrect, QBERXXWrong]
 
     def showRefTimeDiffs(self, path):
         systemTimeReference = min(self.QBERs.systemTimes)
