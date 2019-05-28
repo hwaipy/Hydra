@@ -64,7 +64,6 @@ class QBERs:
         for section in self.sections:
             self.systemTimes.append(section['SystemTime'])
             HOMSections = section['HOMSections']
-            # print(len(HOMSections[0]))
             countSections = section['CountSections']
             tdcStartStop = [(time - self.TDCTimeOfSectionStart) / 1e12 for time in section['TDCTime']]
             for sync in section['ChannelMonitorSyncs']:
@@ -169,11 +168,12 @@ class Parser:
         resultDir = '{}/{}'.format(resultDir, os.path.basename(self.QBERFile)[:15])
         if not os.path.exists(resultDir):
             os.mkdir(resultDir)
-        self.showCountChannelRelations('{}/CountChannelRelations.png'.format(resultDir))
-        # ana.showChannelAndFFTs('sampleReport/Channel-1.png', 'sampleReport/Channel-2.png', 'sampleReport/ChannelFFT-1.png',
-        #                        'sampleReport/ChannelFFT-2.png')
-        # ana.showHOMs(0.8, np.logspace(-0.7, 0.7, num=100, endpoint=True, base=10.0), 'sampleReport/HOMDipAll.png', 0.8)
-        print(self.parameters)
+        self.showCountChannelRelations('{}/CountChannelRelations'.format(resultDir))
+        shutil.copyfile('{}/CountChannelRelations.png'.format(resultDir),
+                        '{}/{}.png'.format(os.path.dirname(resultDir), os.path.basename(self.QBERFile)[:15]))
+        self.showHOMs(0.8, np.logspace(-1.7, 1.7, num=100, endpoint=True, base=10.0),
+                      '{}/HOMDip'.format(resultDir))
+        self.saveParameters('{}/meta.txt'.format(resultDir))
 
     def showCountChannelRelations(self, path):
         filteredQBEREntries = [e for e in self.QBERs.entries if len(e.relatedChannelEntries) > 0]
@@ -204,18 +204,125 @@ class Parser:
                     validSidePowers.append(sidePowers[i])
                     validSideCounts.append(sideCounts[i])
             z = np.polyfit(validSidePowers, validSideCounts, 1)
-            self.parameters['CountChannelRelations Fitting {} Slope'.format(kk)] = z[1]
-            self.parameters['CountChannelRelations Fitting {} Intercept'.format(kk)] = z[0]
+            self.parameters['CountChannelRelations Fitting {} Slope'.format(kk)] = z[0]
+            self.parameters['CountChannelRelations Fitting {} Intercept'.format(kk)] = z[1]
 
-            ax1.scatter(sidePowers, sideCounts, s=2, color=colors[kk], label='Counts', alpha=0.5)
+            ax1.scatter(sidePowers, sideCounts, s=2, color=colors[kk], label='Counts', alpha=0.2)
+            ax1.plot(powerSteps, [z[1] + p * z[0] for p in powerSteps], 'black')
+            ax1.text(powerSteps[-1], z[1] + powerSteps[-1] * z[0], '{}: {:.2f}'.format(labels[kk], z[0]), size='large',
+                     **{'horizontalalignment': 'right', 'verticalalignment': 'baseline'})
             ax2.plot(powerSteps, entryCountHistogram, colors[kk], label=labels[kk])
-            ax1.plot(powerSteps, [z[0] + p * z[1] for p in powerSteps])
         ax1.set_ylabel('APD Counts')
         ax1.set_xlabel('PD Power')
         ax2.set_ylabel('Frequencies')
         plt.legend()
-        plt.savefig(path, dpi=300)
+        plt.savefig('{}.png'.format(path), dpi=300)
         plt.close()
+
+    # def showPowerStatistic(self, path):
+    #     filteredQBEREntries = [e for e in self.QBERs.entries if len(e.relatedChannelEntries) > 0]
+    #     powers = [e.relatedPowers() for e in filteredQBEREntries]
+    #     fig = plt.figure()
+    #     ax1 = fig.add_subplot(111)
+    #     ax2 = ax1.twinx()
+    #     labels = ['Alice', 'Bob']
+    #     colors = ['C0', 'C1']
+    #     for kk in [0, 1]:
+    #         sidePowers = [p[kk] for p in powers]
+    #         binCount = 30
+    #         maxPower = max(sidePowers)
+    #         minPower = min(sidePowers)
+    #     powerSteps = [(maxPower - minPower) / binCount * (i + 0.5) + minPower for i in range(0, binCount)]
+    #     entryCountHistogram = [0] * binCount
+    #     for i in range(0, len(sidePowers)):
+    #         index = int((sidePowers[i] - minPower) / (maxPower - minPower) * binCount)
+    #         if index == binCount: index -= 1
+    #         entryCountHistogram[index] += 1
+    #
+    #     validSidePowers = []
+    #     validSideCounts = []
+    #     for i in range(len(sidePowers)):
+    #         if sidePowers[i] < 4.8:
+    #             validSidePowers.append(sidePowers[i])
+    #             validSideCounts.append(sideCounts[i])
+    #     z = np.polyfit(validSidePowers, validSideCounts, 1)
+    #     self.parameters['CountChannelRelations Fitting {} Slope'.format(kk)] = z[0]
+    #     self.parameters['CountChannelRelations Fitting {} Intercept'.format(kk)] = z[1]
+    #
+    #     ax1.scatter(sidePowers, sideCounts, s=2, color=colors[kk], label='Counts', alpha=0.2)
+    #     ax1.plot(powerSteps, [z[1] + p * z[0] for p in powerSteps], 'black')
+    #     ax1.text(powerSteps[-1], z[1] + powerSteps[-1] * z[0], '{}: {:.2f}'.format(labels[kk], z[0]), size='large',
+    #              **{'horizontalalignment': 'right', 'verticalalignment': 'baseline'})
+    #     ax2.plot(powerSteps, entryCountHistogram, colors[kk], label=labels[kk])
+    # ax1.set_ylabel('APD Counts')
+    # ax1.set_xlabel('PD Power')
+    # ax2.set_ylabel('Frequencies')
+    # plt.legend()
+    # plt.savefig('{}.png'.format(path), dpi=300)
+    # plt.close()
+
+    def showHOMs(self, shreshold, ratios, path, singleMatch=None):
+        ratios = [r for r in ratios]
+        HOMDipXXs = []
+        xxAccidents = []
+        HOMDipAlls = []
+        allAccidents = []
+        for r in ratios:
+            HOM = self.HOM(shreshold, r, singleMatch)
+            HOMDipXXs.append(HOM[0])
+            xxAccidents.append(HOM[1])
+            HOMDipAlls.append(HOM[2])
+            allAccidents.append(HOM[3])
+
+        self.parameters['Total Accident-All'] = sum([e.HOMs[3] for e in self.QBERs.entries])
+        self.parameters['Total Accident-XX'] = sum([e.HOMs[1] for e in self.QBERs.entries])
+
+        file = open('{}.csv'.format(path), 'w')
+        file.write('ratio,HOM-All,Accidence-All,HOM-XX,Accidence-XX\n')
+        for i in range(0, len(ratios)):
+            file.write(
+                '{},{},{},{},{}\n'.format(ratios[i], HOMDipAlls[i], allAccidents[i], HOMDipXXs[i], xxAccidents[i]))
+        file.close()
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.semilogx(ratios, HOMDipAlls, label='HOM-All')
+        ax1.set_ylabel('HOM Dip')
+        ax1.set_xlabel('ratios')
+        ax2 = ax1.twinx()
+        ax2.semilogx(ratios, allAccidents, 'green', label='Side Coincidences')
+        ax2.set_ylabel('Side Coincidences')
+        plt.legend()
+        plt.savefig('{}-all.png'.format(path), dpi=300)
+        plt.close()
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.semilogx(ratios, HOMDipXXs, label='HOM-XX')
+        ax1.set_ylabel('HOM Dip')
+        ax1.set_xlabel('ratios')
+        ax2 = ax1.twinx()
+        ax2.semilogx(ratios, xxAccidents, 'green', label='Side Coincidences')
+        ax2.set_ylabel('Side Coincidences')
+        plt.legend()
+        plt.savefig('{}-xx.png'.format(path), dpi=300)
+        plt.close()
+
+    def saveParameters(self, path):
+        file = open(path, 'w')
+        for key in self.parameters.keys():
+            file.write('{}: {}\n'.format(key, self.parameters[key]))
+        file.close()
+
+    def HOM(self, shreshold, ratio, singleMatch=None):
+        filteredQBEREntries = [e for e in self.QBERs.entries if e.powerMatched(shreshold, ratio, singleMatch)]
+        xxDip = sum([e.HOMs[0] for e in filteredQBEREntries])
+        xxAccident = sum([e.HOMs[1] for e in filteredQBEREntries])
+        allDip = sum([e.HOMs[2] for e in filteredQBEREntries])
+        allAccident = sum([e.HOMs[3] for e in filteredQBEREntries])
+        HOMDipXX = math.nan if xxAccident == 0 else xxDip / xxAccident
+        HOMDipAll = math.nan if allAccident == 0 else allDip / allAccident
+        return [HOMDipXX, xxAccident, HOMDipAll, allAccident]
 
     def showRefTimeDiffs(self, path):
         systemTimeReference = min(self.QBERs.systemTimes)
