@@ -910,7 +910,7 @@ if __name__ == "__main__":
     # waveform = waveforms['AMDecoy']
     # waveform = waveforms['AMSync']
     # waveform = waveforms['AMLaser']
-    waveform = waveforms['PM']
+    waveform = waveforms['AMDecoy']
     plt.plot([i for i in range(0, len(waveform))], waveform)
     plt.show()
 

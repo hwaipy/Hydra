@@ -3,7 +3,7 @@ import queue
 import math
 import msgpack
 from datetime import datetime
-import shutil
+
 
 class MDIQKD_Analysiser:
     def __init__(self, storeDir):
@@ -12,26 +12,21 @@ class MDIQKD_Analysiser:
         self.storeDir = storeDir
 
     def dumpQBER(self, QBER):
-        print('dumping QBER: {}'.format(QBER['Time']))
         self.QBERQueue.put(QBER)
 
     def dumpChannel(self, channel):
-        print('dumping Channel: {}'.format(channel['SystemTime']))
         self.channelQueue.put(channel)
 
     def __formatTime(self, timestamp):
         date_time = datetime.fromtimestamp(timestamp)
         return date_time.strftime("%Y%m%d-%H%M%S.%f")[:-3]
 
-    def start(self):
-        import threading
-        threading._start_new_thread(self.loopQBER, ())
-        threading._start_new_thread(self.loopChannel, ())
-
-    def loopQBER(self):
+    def loop(self):
         QBERList = []
+        channelList = []
         while True:
             QBERList.append(self.QBERQueue.get())
+            channelList.append(self.channelQueue.get())
             qbers = QBERs(QBERList)
             qbersSyncs = qbers.getChannelMonitorSyncs()
             if (len(qbersSyncs) == 0):
@@ -39,11 +34,6 @@ class MDIQKD_Analysiser:
             elif (len(qbersSyncs) >= 2):
                 self.__dump(QBERList, '{}_QBER.dump'.format(self.__formatTime(qbers.getSystemTimes()[0] / 1000.0)))
                 QBERList = [QBERList[-1]]
-
-    def loopChannel(self):
-        channelList = []
-        while True:
-            channelList.append(self.channelQueue.get())
             channel = Channel(channelList)
             channelsRiseIndices = channel.getRiseIndices()
             if (len(channelsRiseIndices) == 0):
@@ -54,29 +44,26 @@ class MDIQKD_Analysiser:
                 channelList = [channelList[-1]]
 
     def __dump(self, content, filename):
-        fullPath = '{}/{}'.format(self.storeDir, filename)
-        fullPathTemp = fullPath + '.temp'
-        file = open(fullPathTemp, 'wb')
+        file = open('{}/{}'.format(self.storeDir, filename), 'wb')
         for doc in content:
             packed = msgpack.packb(doc, encoding='utf-8')
             file.write(packed)
         file.close()
-        shutil.move(fullPathTemp, fullPath)
 
 
 class QBERs:
     def __init__(self, sections):
         self.sections = sections
         self.systemTimes = []
-        self.TDCTimeOfSectionStart = self.sections[0]['ChannelMonitorSync'][0]
+        self.TDCTimeOfSectionStart = self.sections[0]['TDCTime'][0]
         self.channelMonitorSyncs = []
         self.entries = []
         for section in self.sections:
-            self.systemTimes.append(section['Time'])
+            self.systemTimes.append(section['SystemTime'])
             HOMSections = section['HOMSections']
             countSections = section['CountSections']
-            tdcStartStop = [(time - self.TDCTimeOfSectionStart) / 1e12 for time in section['ChannelMonitorSync'][:2]]
-            for sync in section['ChannelMonitorSync'][2:]:
+            tdcStartStop = [(time - self.TDCTimeOfSectionStart) / 1e12 for time in section['TDCTime']]
+            for sync in section['ChannelMonitorSyncs']:
                 self.channelMonitorSyncs.append((sync - self.TDCTimeOfSectionStart) / 1e12)
             entryCount = len(countSections)
             for i in range(0, entryCount):
@@ -129,7 +116,7 @@ class Channel:
         self.riseIndices = []
         for section in self.sections:
             self.systemTimes.append(section['SystemTime'])
-            channelDatas = section['Monitor']
+            channelDatas = section['ChannelData']
             for channelData in channelDatas:
                 self.entries.append(ChannelEntry(channelData[:3], channelData[3]))
         self.__searchForRises(threshold)
@@ -166,6 +153,6 @@ class ChannelEntry:
 
 
 if __name__ == '__main__':
-    analysiser = MDIQKD_Analysiser('D:\Experiments\MDIQKD\RealTimeData\Dumped')
-    session = Pydra.Session.newSession(('192.168.25.27', 20102), analysiser, 'MDIQKD-Dumper')
-    analysiser.start()
+    analysiser = MDIQKD_Analysiser('/Users/Hwaipy/Downloads/MDI-Store')
+    session = Pydra.Session.newSession(('localhost', 20102), analysiser, 'MDIQKD-Analysiser')
+    analysiser.loop()
