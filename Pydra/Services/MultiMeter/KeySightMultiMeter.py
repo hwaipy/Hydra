@@ -97,8 +97,11 @@ if __name__ == '__main__':
     hydraPort = args.hydra_port
     name = args.service_name
 
+    import pyvisa
+    print(    pyvisa.ResourceManager().list_resources())
+
     model = '34470A'
-    visaResource = 'TCPIP0::192.168.25.105::inst0::INSTR'
+    visaResource = 'TCPIP0::192.168.25.54::inst0::INSTR'
     hydraAddress = '192.168.25.27'
     hydraPort = 20102
     name = 'DMM2'
@@ -108,10 +111,10 @@ if __name__ == '__main__':
     elif model == '34465A':
         dev = KeySight_MultiMeter_34465A(visaResource)
     else:
-        raise RuntimeError(f'Model {model} not valid.')
+        raise RuntimeError('Model {} not valid.'.format(model))
 
     session = Pydra.Session.newSession((hydraAddress, hydraPort), MultiMeterServiceWrap(dev), name)
-    print(f'KeySight MultiMeter started as MultiMeter Service [{name}]')
+    # print(f'KeySight MultiMeter started as MultiMeter Service [{name}]')
     for line in sys.stdin:
         if line == 'q\n':
             break
