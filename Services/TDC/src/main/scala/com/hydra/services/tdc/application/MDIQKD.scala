@@ -4,6 +4,8 @@ import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import com.hydra.services.tdc.{DataAnalyser, DataBlock, Histogram}
 import com.hydra.`type`.NumberTypeConversions._
+
+import scala.util.Random
 //import org.mongodb.scala.{Completed, MongoClient, Observer}
 
 import scala.collection.mutable
@@ -103,13 +105,14 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
 
 
 class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
-  configuration("AliceRandomNumbers") = Range(0, 1000).map(_ => 0).toList
-  configuration("BobRandomNumbers") = Range(0, 1000).map(_ => 0).toList
+  private val random = new Random()
+  configuration("AliceRandomNumbers") = Range(0, 1000).map(_ => random.nextInt(8)).toList
+  configuration("BobRandomNumbers") = Range(0, 1000).map(_ => random.nextInt(8)).toList
   configuration("Period") = 10000.0
   configuration("Delay") = 3000.0
   configuration("TriggerChannel") = 0
-  configuration("Channel 1") = 1
-  configuration("Channel 2") = 3
+  configuration("Channel 1") = 8
+  configuration("Channel 2") = 9
   configuration("Channel Monitor Alice") = 4
   configuration("Channel Monitor Bob") = 5
   configuration("Gate") = 2000.0
@@ -221,7 +224,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
 
     val coincidences = generateCoincidences(validItem1s.iterator, validItem2s.iterator)
     val basisMatchedCoincidences = coincidences.filter(_.basisMatched)
-    val validCoincidences = basisMatchedCoincidences.filter(_.valid)
+    val validCoincidences = coincidences.filter(_.valid)
 
     val map = mutable.HashMap[String, Any]("Delay" -> delay, "Period" -> period, "Gate" -> gate, "PulseDiff" -> pulseDiff)
     map.put("Count 1", item1s.size)
@@ -232,7 +235,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put("Basis Matched Coincidence Count", basisMatchedCoincidences.size)
     map.put("Valid Coincidence Count", validCoincidences.size)
 
-    println(qberSectionCount)
+    println(s"qberSectionCount: $qberSectionCount")
     val basisStrings = List("O", "X", "Y", "Z")
     val qberSections = Range(0, qberSectionCount).toArray.map(i => new Array[Int](4 * 4 * 2))
     Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => {

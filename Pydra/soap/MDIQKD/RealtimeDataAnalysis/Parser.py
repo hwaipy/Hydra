@@ -35,7 +35,7 @@ class ParserMonitor:
                 def parse():
                     print('parsing')
                     scriptDir = '/Users/Hwaipy/GitHub/Hydra/Pydra/soap/MDIQKD/RealtimeDataAnalysis/Parser.py' if debug else 'D:/GitHub/Hydra/Pydra/soap/MDIQKD/RealtimeDataAnalysis/Parser.py'
-                    os.system('python3 {} {} {}'.format(scriptDir, newData[0], newData[1]))
+                    os.system('python {} {} {}'.format(scriptDir, newData[0], newData[1]))
 
                 # if self.fromNow:
                 parse()

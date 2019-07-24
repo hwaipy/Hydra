@@ -207,7 +207,7 @@ class Shower:
 
         file = open('{}/QBER.csv'.format(self.showDir), 'w')
         file.write(
-                        'ratio,QBERCorrectOO,QBERWrongOO,QBERCorrectOX,QBERWrongOX,QBERCorrectOY,QBERWrongOY,QBERCorrectOZ,QBERWrongOZ,QBERCorrectXO,QBERWrongXO,QBERCorrectXX,QBERWrongXX,QBERCorrectXY,QBERWrongXY,QBERCorrectXZ,QBERWrongXZ,QBERCorrectYO,QBERWrongYO,QBERCorrectYX,QBERWrongYX,QBERCorrectYY,QBERWrongYY,QBERCorrectYZ,QBERWrongYZ,QBERCorrectZO,QBERWrongZO,QBERCorrectZX,QBERWrongZX,QBERCorrectZY,QBERWrongZY,QBERCorrectZZ,QBERWrongZZ\n')
+                        'ratio,filteredsection,totlasection,QBERCorrectOO,QBERWrongOO,QBERCorrectOX,QBERWrongOX,QBERCorrectOY,QBERWrongOY,QBERCorrectOZ,QBERWrongOZ,QBERCorrectXO,QBERWrongXO,QBERCorrectXX,QBERWrongXX,QBERCorrectXY,QBERWrongXY,QBERCorrectXZ,QBERWrongXZ,QBERCorrectYO,QBERWrongYO,QBERCorrectYX,QBERWrongYX,QBERCorrectYY,QBERWrongYY,QBERCorrectYZ,QBERWrongYZ,QBERCorrectZO,QBERWrongZO,QBERCorrectZX,QBERWrongZX,QBERCorrectZY,QBERWrongZY,QBERCorrectZZ,QBERWrongZZ\n')
         for row in merged:
             line = ('{}'.format(row))[1:-1]
             file.write('{}\n'.format(line))
