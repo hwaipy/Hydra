@@ -105,22 +105,52 @@ class HOMResultLocalAnalysiser:
             xxAccidents.append(HOM[1])
             HOMDipAlls.append(HOM[2])
             allAccidents.append(HOM[3])
+
+        csv = open('{}.all.csv'.format(path), 'w')
+        csv.write('ratio,HOMDipAll,allAccidents\n')
+        for i in range(0, len(ratios)):
+            csv.write('{},{},{}\n'.format(ratios[i], HOMDipAlls[i], allAccidents[i]))
+        csv.close()
+
+        csv = open('{}.xx.csv'.format(path), 'w')
+        csv.write('ratio,HOMDipXX,xxAccidents\n')
+        for i in range(0, len(ratios)):
+            csv.write('{},{},{}\n'.format(ratios[i], HOMDipXXs[i], xxAccidents[i]))
+        csv.close()
+
         fig = plt.figure()
         ax1 = fig.add_subplot(111)
         ax1.semilogx(ratios, HOMDipAlls, label='HOM-All')
         ax1.set_ylabel('ratios')
         ax1.set_xlabel('HOM Dip')
+        ax1.set_xticks(np.linspace(min(HOMDipAlls),max(HOMDipAlls),5))
+        ax1.set_title("Hom Dip minum:{:.4f}".format(min(HOMDipAlls)))
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, allAccidents, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
         plt.legend()
-        plt.savefig(path, dpi=300)
+        plt.savefig('{}.all.png'.format(path), dpi=300)
+        plt.close()
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.semilogx(ratios, HOMDipXXs, label='HOM-XX')
+        ax1.set_ylabel('ratios')
+        ax1.set_xlabel('HOM Dip')
+        # ax1.set_xticks(np.linspace(min(HOMDipXXs),max(HOMDipXXs),5))
+        ax1.set_title("Hom Dip minum:{:.4f}".format(min(HOMDipXXs)))
+        ax2 = ax1.twinx()
+        ax2.semilogx(ratios, xxAccidents, 'green', label='Side Coincidences')
+        ax2.set_ylabel('Side Coincidences')
+        plt.legend()
+        plt.savefig('{}.xx.png'.format(path), dpi=300)
         plt.close()
 
     def __loadQBERs(self, path):
         entries = self.__loadMsgpackEntries(path)
         self.QBERs = QBERs(entries)
         self.QBERs.validate()
+        # print(entries[0]['QBERSections'][0])
 
     def __loadChannel(self, path):
         entries = self.__loadMsgpackEntries(path)
@@ -128,7 +158,9 @@ class HOMResultLocalAnalysiser:
         self.channel.validate()
 
     def __performTimeMatch(self):
+        print(self.channel.riseIndices)
         for i in range(0, len(self.QBERs.channelMonitorSyncs) - 1):
+            print("---", i)
             segmentStart = self.QBERs.channelMonitorSyncs[i]
             segmentStop = self.QBERs.channelMonitorSyncs[i + 1]
             channelEntryStartIndex = self.channel.riseIndices[i]
@@ -168,7 +200,7 @@ class HOMResultLocalAnalysiser:
 
 
 class Channel:
-    def __init__(self, sections, threshold=2.5):
+    def __init__(self, sections, threshold=1):
         self.sections = sections
         self.systemTimes = []
         self.entries = []
@@ -250,6 +282,7 @@ class QBEREntry:
         if singleMatch is not None:
             powers[1] = singleMatch
         actualRatio = 0 if powers[1] == 0 else powers[0] / powers[1] * ratio
+        if (powers[0]>4.8) or (powers[1]>4.8): return False
         return (actualRatio > threshold) and (actualRatio < (1 / threshold))
 
     def countMatched(self, threshold, ratio):
@@ -268,8 +301,8 @@ class ResultAnalysiser:
     def __init__(self, db, dir):
         self.db = db
         self.dir = dir
-        self.reports = self.db['TDCReport-20190521']
-        self.monitor = self.db['ChannelMonitor-20190521']
+        self.reports = self.db['TDCReport-20190528']
+        self.monitor = self.db['ChannelMonitor-20190528']
 
     def loadRangedData(self, startTime, stopTime, dump):
         qbers = self.getQbers(startTime, stopTime)
@@ -314,6 +347,7 @@ class QberSections:
     def __checkChannelMonitorSyncs(self):
         for i in range(0, len(self.channelMonitorSyncs) - 1):
             delta = (self.channelMonitorSyncs[i + 1] - self.channelMonitorSyncs[i]) / 1e12
+            print("QBER sync delta: ", delta)
             if math.fabs(delta - 10) > 0.001:
                 print('wrong!!!!!!!!!!!!!!!!!!!')
                 print(delta)
@@ -327,6 +361,7 @@ class QberSections:
                 "SystemTime": doc.time,
                 "TDCTime": doc.tdcTime,
                 "HOMSections": doc.homSections,
+                "QBERSections": doc.qberSections,
                 "CountSections": doc.countSections,
                 "ChannelMonitorSyncs": doc.channelMonitorSyncs
             }
@@ -373,7 +408,7 @@ class ChannelMonitorSections:
     def __checkChannelMonitorSyncs(self):
         for i in range(0, len(self.triggers) - 1):
             delta = (self.triggers[i + 1] - self.triggers[i]) / 1e3
-            # print(delta)
+            print("Channel sync delta: ", delta)
             if math.fabs(delta - 10) > 0.1:
                 raise RuntimeError("Error in ChannelMonitorSyncs of ChannelMonitor")
 
@@ -420,7 +455,6 @@ def ana():
         db = client['Freespace_MDI_QKD']
         ana = ResultAnalysiser(db, dir)
         lastTime = ana.getNewestDocumentTime()
-        # lastTime = 1558450056009.0
         print('Last Time is {}'.format(lastTime))
         startTime = lastTime - 100 * 1000
         stopTime = lastTime - 2 * 1000
@@ -437,7 +471,7 @@ def ana():
                                   'sampleReport/CountChannelRelations-2.png')
     ana.showChannelAndFFTs('sampleReport/Channel-1.png', 'sampleReport/Channel-2.png', 'sampleReport/ChannelFFT-1.png',
                            'sampleReport/ChannelFFT-2.png')
-    ana.showHOMs(0.8, np.logspace(-0.7, 0.7, num=100, endpoint=True, base=10.0), 'sampleReport/HOMDipAll.png', 0.8)
+    ana.showHOMs(0.8, np.logspace(-1.7, 1.7, num=100, endpoint=True, base=10.0), 'sampleReport/HOMDipAll')
 
 if __name__ == '__main__':
     ana()
