@@ -4,8 +4,6 @@ import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import com.hydra.services.tdc.{DataAnalyser, DataBlock, Histogram}
 import com.hydra.`type`.NumberTypeConversions._
-
-import scala.util.Random
 //import org.mongodb.scala.{Completed, MongoClient, Observer}
 
 import scala.collection.mutable
@@ -20,6 +18,7 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("TimeAliceChannel") = 4
   configuration("TimeBobChannel") = 5
   configuration("BinCount") = 100
+  configuration("TriggerFrac") = 1
 
   override def configure(key: String, value: Any) = key match {
     case "RandomNumbers" => value.asInstanceOf[List[Int]] != null
@@ -38,6 +37,10 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     case "TriggerChannel" => {
       val sc: Int = value
       sc >= 0 && sc < channelCount
+    }
+    case "TriggerFrac" => {
+      val sc: Int = value
+      sc > 0
     }
     case "TimeAliceChannel" => {
       val sc: Int = value
@@ -58,6 +61,7 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     val period: Double = configuration("Period")
     val delay: Double = configuration("Delay")
     val triggerChannel: Int = configuration("TriggerChannel")
+    val triggerFrac: Int = configuration("TriggerFrac")
     val timeAliceChannel: Int = configuration("TimeAliceChannel")
     val timeBobChannel: Int = configuration("TimeBobChannel")
     val signalChannel: Int = configuration("SignalChannel")
@@ -65,7 +69,7 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     val map = mutable.HashMap[String, Any]("TriggerChannel" -> triggerChannel, "SignalChannel" -> signalChannel, "Delay" -> delay, "Period" -> period)
 
     val signalList = dataBlock.content(signalChannel)
-    val triggerList = dataBlock.content(triggerChannel)
+    val triggerList = dataBlock.content(triggerChannel).zipWithIndex.filter(_._2 % triggerFrac == 0).map(_._1)
     val timeAliceList = dataBlock.content(timeAliceChannel)
     val timeBobList = dataBlock.content(timeBobChannel)
     val meta = this.meta(signalList, triggerList, delay, period, randomNumbers)
@@ -81,6 +85,18 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
     val metaTimeBob = this.meta(timeBobList, triggerList, delay, period, randomNumbers)
     val histoTimeBob = new Histogram(metaTimeBob.map(_._2), binCount, 0, period.toLong, 1)
     map.put(s"Histogram Bob Time", histoTimeBob.yData.toList)
+
+    val phaseEncodingCheckMap = new mutable.HashMap[String, Double]()
+    List(metaTimeAlice, metaTimeBob).zipWithIndex.foreach(z=>{
+      val metaTime = z._1
+      val channel = z._2 + 1
+      RandomNumber.ALL_RANDOM_NUMBERS.foreach(rn => {
+        val validCount = metaTime.filter(z => z._1 == rn).filter(z => z._2 > 4000 && z._2 < 6000).size
+        phaseEncodingCheckMap.put(s"C${channel}-RN${rn.RN}", validCount)
+        phaseEncodingCheckMap.put(s"R${channel}-RN${rn.RN}", validCount.toDouble / randomNumbers.map(_.RN).count(_ == rn.RN))
+      })
+    })
+    map.put(s"PhaseEncodingMap", phaseEncodingCheckMap)
 
     map.toMap
   }
@@ -105,14 +121,14 @@ class MDIQKDEncodingAnalyser(channelCount: Int) extends DataAnalyser {
 
 
 class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
-  private val random = new Random()
-  configuration("AliceRandomNumbers") = Range(0, 1000).map(_ => random.nextInt(8)).toList
-  configuration("BobRandomNumbers") = Range(0, 1000).map(_ => random.nextInt(8)).toList
+  configuration("AliceRandomNumbers") = Range(0, 1000).map(_ => 0).toList
+  configuration("BobRandomNumbers") = Range(0, 1000).map(_ => 0).toList
   configuration("Period") = 10000.0
   configuration("Delay") = 3000.0
   configuration("TriggerChannel") = 0
-  configuration("Channel 1") = 8
-  configuration("Channel 2") = 9
+  configuration("TriggerFrac") = 1
+  configuration("Channel 1") = 1
+  configuration("Channel 2") = 3
   configuration("Channel Monitor Alice") = 4
   configuration("Channel Monitor Bob") = 5
   configuration("Gate") = 2000.0
@@ -159,6 +175,10 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       val sc: Int = value
       sc >= 0 && sc < channelCount
     }
+    case "TriggerFrac" => {
+      val sc: Int = value
+      sc > 0
+    }
     case "QBERSectionCount" => {
       val sc: Int = value
       sc >= 0 && sc < channelCount
@@ -175,6 +195,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val period: Double = configuration("Period")
     val delay: Double = configuration("Delay")
     val triggerChannel: Int = configuration("TriggerChannel")
+    val triggerFrac: Int = configuration("TriggerFrac")
     val channel1: Int = configuration("Channel 1")
     val channel2: Int = configuration("Channel 2")
     val channelMonitorAlice: Int = configuration("Channel Monitor Alice")
@@ -184,7 +205,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     val qberSectionCount: Int = configuration("QBERSectionCount")
     val channelMonitorSyncChannel: Int = configuration("ChannelMonitorSyncChannel")
 
-    val triggerList = dataBlock.content(triggerChannel)
+    val triggerList = dataBlock.content(triggerChannel).zipWithIndex.filter(_._2 % triggerFrac == 0).map(_._1)
     val signalList1 = dataBlock.content(channel1)
     val signalList2 = dataBlock.content(channel2)
     val signalListAlice = dataBlock.content(channelMonitorAlice)
@@ -222,6 +243,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       resultBuffer.toList
     }
 
+    println(s"LL: ${validItem1s.size} ${validItem2s.size}")
     val coincidences = generateCoincidences(validItem1s.iterator, validItem2s.iterator)
     val basisMatchedCoincidences = coincidences.filter(_.basisMatched)
     val validCoincidences = coincidences.filter(_.valid)
@@ -235,7 +257,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put("Basis Matched Coincidence Count", basisMatchedCoincidences.size)
     map.put("Valid Coincidence Count", validCoincidences.size)
 
-    println(s"qberSectionCount: $qberSectionCount")
+    println(qberSectionCount)
     val basisStrings = List("O", "X", "Y", "Z")
     val qberSections = Range(0, qberSectionCount).toArray.map(i => new Array[Int](4 * 4 * 2))
     Range(0, 4).foreach(basisAlice => Range(0, 4).foreach(basisBob => {
@@ -249,19 +271,28 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       if (sectionIndex >= 0 && sectionIndex < qberSections.size) qberSections(sectionIndex)(category) += 1
     })
     map.put(s"QBER Sections", qberSections)
-    map.put(s"QBER Sections Detail", s"100*32 Array. 100 for 100 sections. 32 for (Alice[O,X,Y,Z] * 4 + Bob[O,X,Y,Z]) * 2 + (0 for Correct and 1 for Wrong)")
+    map.put(s"QBER Sections Detail", s"1000*32 Array. 1000 for 1000 sections. 32 for (Alice[O,X,Y,Z] * 4 + Bob[O,X,Y,Z]) * 2 + (0 for Correct and 1 for Wrong)")
 
-    val ccs0Coincidences = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0))
-    val ccsOtherCoincidences = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3, i._4)).iterator)
+    val ccs0XXCoincidences = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0))
+    val ccsOXXtherCoincidences = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3, i._4)).iterator)
       .filter(_.basisMatched).filter(c => c.randomNumberAlice.isX && c.randomNumberBob.isX).filter(c => (c.r1 == 0) && (c.r2 == 0)))
-    val ccs0 = ccs0Coincidences.size
-    val ccsOther = ccsOtherCoincidences.map(_.size)
-    map.put("X-X, 0&0 with delays", List(ccs0, ccsOther.sum.toDouble / ccsOther.size))
+    val ccs0XX = ccs0XXCoincidences.size
+    val ccsOXXther = ccsOXXtherCoincidences.map(_.size)
+    map.put("X-X, 0&0 with delays", List(ccs0XX, ccsOXXther.sum.toDouble / ccsOXXther.size))
+
+    val ccs0YYCoincidences = basisMatchedCoincidences.filter(c => c.randomNumberAlice.isY && c.randomNumberBob.isY).filter(c => (c.r1 == 0) && (c.r2 == 0))
+    val ccsOYYtherCoincidences = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3, i._4)).iterator)
+      .filter(_.basisMatched).filter(c => c.randomNumberAlice.isY && c.randomNumberBob.isY).filter(c => (c.r1 == 0) && (c.r2 == 0)))
+    val ccs0YY = ccs0YYCoincidences.size
+    val ccsOYYther = ccsOYYtherCoincidences.map(_.size)
+    map.put("Y-Y, 0&0 with delays", List(ccs0YY, ccsOYYther.sum.toDouble / ccsOYYther.size))
+
     val ccsAll0Coincidences = coincidences.filter(c => (c.r1 == 0) && (c.r2 == 0))
     val ccsAllOtherCoincidences = Range(10, 15).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3, i._4)).iterator).filter(c => (c.r1 == 0) && (c.r2 == 0)))
     val ccsAll0 = ccsAll0Coincidences.size
     val ccsAllOther = ccsAllOtherCoincidences.map(_.size)
     map.put("All, 0&0 with delays", List(ccsAll0, ccsAllOther.sum.toDouble / ccsAllOther.size))
+    println(s"ALL00: $ccsAll0, ${ccsAllOther.sum.toDouble / ccsAllOther.size}")
 
     def statisticCoincidenceSection(cll: List[List[Coincidence]]) = {
       val sections = new Array[Int](qberSectionCount)
@@ -272,7 +303,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
       sections.map(c => c.toDouble / cll.size)
     }
 
-    val homSections = Array(List(ccs0Coincidences), ccsOtherCoincidences, List(ccsAll0Coincidences), ccsAllOtherCoincidences).map(statisticCoincidenceSection)
+    val homSections = Array(List(ccs0XXCoincidences), ccsOXXtherCoincidences, List(ccs0YYCoincidences), ccsOYYtherCoincidences, List(ccsAll0Coincidences), ccsAllOtherCoincidences).map(statisticCoincidenceSection)
     map.put(s"HOM Sections", homSections)
     map.put(s"HOM Sections Detail", s"4*100 Array. 100 for 100 sections. 4 for: X-X, 0&0 without and with delays; All, 0&0 without and with delays")
 
@@ -314,6 +345,7 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     meta
   }
 }
+
 
 object RandomNumber {
   def apply(rn: Int) = new RandomNumber(rn)

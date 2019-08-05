@@ -148,6 +148,7 @@ class CounterAnalyser(channelCount: Int) extends DataAnalyser {
 
 class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
   configuration("Sync") = 1
+  configuration("SyncFrac") = 1
   configuration("Signal") = 1
   configuration("ViewStart") = -100000
   configuration("ViewStop") = 100000
@@ -159,6 +160,10 @@ class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
       case "Sync" => {
         val sc: Int = value
         sc >= 0 && sc < channelCount
+      }
+      case "SyncFrac" => {
+        val sc: Int = value
+        sc > 0
       }
       case "Signal" => {
         val sc: Int = value
@@ -181,12 +186,13 @@ class HistogramAnalyser(channelCount: Int) extends DataAnalyser {
   override protected def analysis(dataBlock: DataBlock) = {
     val deltas = new ArrayBuffer[Long]()
     val syncChannel: Int = configuration("Sync")
+    val syncFrac: Int = configuration("SyncFrac")
     val signalChannel: Int = configuration("Signal")
     val viewStart: Long = configuration("ViewStart")
     val viewStop: Long = configuration("ViewStop")
     val binCount: Int = configuration("BinCount")
     val divide: Int = configuration("Divide")
-    val tList = dataBlock.content(syncChannel)
+    val tList = dataBlock.content(syncChannel).zipWithIndex.filter(_._2 % syncFrac == 0).map(_._1)
     val sList = dataBlock.content(signalChannel)
     val viewFrom = viewStart
     val viewTo = viewStop

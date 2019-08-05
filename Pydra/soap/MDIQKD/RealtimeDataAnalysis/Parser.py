@@ -9,17 +9,14 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
-import sys
-import os
-
-debug = sys.platform == 'darwin'
-
+def tt():
+    print('tt')
 
 class ParserMonitor:
     def __init__(self, storeDir, resultDir, fromNow=True):
         self.storeDir = storeDir
         self.resultDir = resultDir
-        self.lastParsed = datetime.now() if fromNow else datetime.strptime("20190701-040800.000", "%Y%m%d-%H%M%S.%f")
+        self.lastParsed = datetime.now() if fromNow else datetime.strptime("20190805-012400.000", "%Y%m%d-%H%M%S.%f")
         self.fromNow = fromNow
         self.executor = ThreadPoolExecutor(max_workers=8)
 
@@ -31,14 +28,11 @@ class ParserMonitor:
                 if self.fromNow:
                     time.sleep(1)
                 print('new data: {}'.format(newData))
-
                 def parse():
                     print('parsing')
-                    scriptDir = '/Users/Hwaipy/GitHub/Hydra/Pydra/soap/MDIQKD/RealtimeDataAnalysis/Parser.py' if debug else 'D:/GitHub/Hydra/Pydra/soap/MDIQKD/RealtimeDataAnalysis/Parser.py'
-                    os.system('python {} {} {}'.format(scriptDir, newData[0], newData[1]))
-
+                    os.system('python3 D:/GitHub/Hydra/Pydra/soap/MDIQKD/RealtimeDataAnalysis/Parser.py {} {}'.format(newData[0],newData[1]))
                 # if self.fromNow:
-                parse()
+                # parse()
                 # else:
                 # self.executor.submit(tt, ())
                 # print('submitted')
@@ -47,6 +41,8 @@ class ParserMonitor:
                 #     self.__parse(newData)
                 # except BaseException as e:
                 #     print(e)
+                threading.Thread(target=parse).start()
+
             else:
                 time.sleep(1)
 
@@ -106,8 +102,6 @@ class QBERs:
                 entryCounts = [countSections[i][j] for j in range(0, len(countSections[0]))]
                 self.entries.append(QBEREntry(entryTDCStartStop, entryHOMs, entryCounts, entryQBERs))
 
-        self.entries = [e for e in self.entries if e.tdcStart >= self.channelMonitorSyncs[0] and e.tdcStart < self.channelMonitorSyncs[1]]
-
     def validate(self):
         for i in range(0, len(self.channelMonitorSyncs) - 1):
             delta = self.channelMonitorSyncs[i + 1] - self.channelMonitorSyncs[i]
@@ -130,7 +124,7 @@ class QBEREntry:
         if singleMatch is not None:
             powers[1] = singleMatch
         actualRatio = 0 if powers[1] == 0 else powers[0] / powers[1] * ratio
-        if (powers[0] > 4.5) or (powers[1] > 4.5): return False
+        if (powers[0]>4.5) or (powers[1]>4.5): return False
         return (actualRatio > threshold) and (actualRatio < (1 / threshold))
 
     def countMatched(self, threshold, ratio):
@@ -169,7 +163,7 @@ class Channel:
         for i in range(0, len(self.riseIndices) - 1):
             delta = (self.entries[self.riseIndices[i + 1]].refTime - self.entries[self.riseIndices[i]].refTime) / 1000
             if math.fabs(delta - 10) > 0.02:
-                # print([self.entries[j].refTime - self.entries[j - 1].refTime for j in range(1, len(self.riseIndices))])
+                #print([self.entries[j].refTime - self.entries[j - 1].refTime for j in range(1, len(self.riseIndices))])
                 raise RuntimeError("Error in ChannelMonitorSyncs: {}".format(delta))
 
 
@@ -208,120 +202,8 @@ class Parser:
         self.parameters['QBERZZCorrect'] = sum([e.QBERs[(3 * 4 + 3) * 2 + (0)] for e in self.QBERs.entries])
         self.parameters['QBERZZWrong'] = sum([e.QBERs[(3 * 4 + 3) * 2 + (1)] for e in self.QBERs.entries])
         self.saveParameters('{}/meta.txt'.format(resultDir))
-        self.saveQBERs(0.8, np.logspace(-1.7, 1.7, num=100, endpoint=True, base=10.0), '{}/QBER'.format(resultDir))
-
-    def showCountChannelRelations(self, path):
-        filteredQBEREntries = [e for e in self.QBERs.entries if len(e.relatedChannelEntries) > 0]
-        counts = [e.counts for e in filteredQBEREntries]
-        powers = [e.relatedPowers() for e in filteredQBEREntries]
-        fig = plt.figure()
-        ax1 = fig.add_subplot(111)
-        ax2 = ax1.twinx()
-        labels = ['Alice', 'Bob']
-        colors = ['C0', 'C1']
-        for kk in [0, 1]:
-            sidePowers = [p[kk] for p in powers]
-            sideCounts = [c[kk] for c in counts]
-            binCount = 30
-            maxPower = max(sidePowers)
-            minPower = min(sidePowers)
-            powerSteps = [(maxPower - minPower) / binCount * (i + 0.5) + minPower for i in range(0, binCount)]
-            entryCountHistogram = [0] * binCount
-            for i in range(0, len(sidePowers)):
-                index = int((sidePowers[i] - minPower) / (maxPower - minPower) * binCount)
-                if index == binCount: index -= 1
-                entryCountHistogram[index] += 1
-
-            validSidePowers = []
-            validSideCounts = []
-            for i in range(len(sidePowers)):
-                if sidePowers[i] < 4.5:
-                    validSidePowers.append(sidePowers[i])
-                    validSideCounts.append(sideCounts[i])
-            z = np.polyfit(validSidePowers, validSideCounts, 1)
-            self.parameters['CountChannelRelations Fitting {} Slope'.format(kk)] = z[0]
-            self.parameters['CountChannelRelations Fitting {} Intercept'.format(kk)] = z[1]
-
-            ax1.scatter(sidePowers, sideCounts, s=2, color=colors[kk], label='Counts', alpha=0.2)
-            ax1.plot(powerSteps, [z[1] + p * z[0] for p in powerSteps], 'black')
-            ax1.text(powerSteps[-1], z[1] + powerSteps[-1] * z[0], '{}: {:.2f}'.format(labels[kk], z[0]), size='large',
-                     **{'horizontalalignment': 'right', 'verticalalignment': 'baseline'})
-            ax2.plot(powerSteps, entryCountHistogram, colors[kk], label=labels[kk])
-        ax1.set_ylabel('APD Counts')
-        ax1.set_xlabel('PD Power')
-        ax2.set_ylabel('Frequencies')
-        plt.legend()
-        plt.savefig('{}.png'.format(path), dpi=300)
-        plt.close()
-
-    def showHOMs(self, shreshold, ratios, path, singleMatch=None):
-        ratios = [r for r in ratios]
-        HOMDipXXs = []
-        xxAccidents = []
-        HOMDipYYs = []
-        yyAccidents = []
-        HOMDipAlls = []
-        allAccidents = []
-        QBERXXCorrect = []
-        QBERXXWrong = []
-        QBERYYCorrect = []
-        QBERYYWrong = []
-        QBERZZCorrect = []
-        QBERZZWrong = []
-        for r in ratios:
-            # self.HOM returns [HOMDipXX, xxAccident, HOMDipYY, yyAccident, HOMDipAll, allAccident, QBERXXCorrect, QBERXXWrong, QBERYYCorrect, QBERYYWrong, QBERZZCorrect, QBERZZWrong]
-            HOM = self.HOM(shreshold, r, singleMatch)
-            HOMDipXXs.append(HOM[0])
-            xxAccidents.append(HOM[1])
-            HOMDipYYs.append(HOM[2])
-            yyAccidents.append(HOM[3])
-            HOMDipAlls.append(HOM[4])
-            allAccidents.append(HOM[5])
-            QBERXXCorrect.append(HOM[6])
-            QBERXXWrong.append(HOM[7])
-            QBERYYCorrect.append(HOM[8])
-            QBERYYWrong.append(HOM[9])
-            QBERZZCorrect.append(HOM[10])
-            QBERZZWrong.append(HOM[11])
-
-        self.parameters['Total Accident-All'] = sum([e.HOMs[3] for e in self.QBERs.entries])
-        self.parameters['Total Accident-XX'] = sum([e.HOMs[1] for e in self.QBERs.entries])
-
-        file = open('{}.csv'.format(path), 'w')
-        file.write(
-            'ratio,HOM-All,Accidence-All,HOM-XX,Accidence-XX,HOM-YY,Accidence-YY,QBERCorrectXX,QBERWrongXX,QBERCorrectYY,QBERWrongYY,QBERCorrectZZ,QBERWrongZZ\n')
-        for i in range(0, len(ratios)):
-            file.write(
-                '{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(ratios[i], HOMDipAlls[i], allAccidents[i],
-                                                                  HOMDipXXs[i], xxAccidents[i], HOMDipYYs[i],
-                                                                  yyAccidents[i], QBERXXCorrect[i], QBERXXWrong[i],
-                                                                  QBERYYCorrect[i], QBERYYWrong[i], QBERZZCorrect[i],
-                                                                  QBERZZWrong[i]))
-        file.close()
-
-        fig = plt.figure()
-        ax1 = fig.add_subplot(111)
-        ax1.semilogx(ratios, HOMDipAlls, label='HOM-All')
-        ax1.set_ylabel('HOM Dip')
-        ax1.set_xlabel('ratios')
-        ax2 = ax1.twinx()
-        ax2.semilogx(ratios, allAccidents, 'green', label='Side Coincidences')
-        ax2.set_ylabel('Side Coincidences')
-        plt.legend()
-        plt.savefig('{}-all.png'.format(path), dpi=300)
-        plt.close()
-
-        fig = plt.figure()
-        ax1 = fig.add_subplot(111)
-        ax1.semilogx(ratios, HOMDipXXs, label='HOM-XX')
-        ax1.set_ylabel('HOM Dip')
-        ax1.set_xlabel('ratios')
-        ax2 = ax1.twinx()
-        ax2.semilogx(ratios, xxAccidents, 'green', label='Side Coincidences')
-        ax2.set_ylabel('Side Coincidences')
-        plt.legend()
-        plt.savefig('{}-xx.png'.format(path), dpi=300)
-        plt.close()
+        self.saveQBERs(0.8, np.logspace(-1.7, 1.7, num=100, endpoint=True, base=10.0),
+                      '{}/QBERs'.format(resultDir))
 
     def saveQBERs(self, shreshold, ratios, path, singleMatch=None):
         ratios = [r for r in ratios]
@@ -343,34 +225,6 @@ class Parser:
             for i in range(0, 32):
                 allQBERs[i] += qberEntry.QBERs[i]
         print(allQBERs)
-
-    def saveParameters(self, path):
-        file = open(path, 'w')
-        for key in self.parameters.keys():
-            file.write('{}: {}\n'.format(key, self.parameters[key]))
-        file.close()
-
-    def HOM(self, shreshold, ratio, singleMatch=None):
-        # Careful!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # HOMSection length extended to 6
-        filteredQBEREntries = [e for e in self.QBERs.entries if e.powerMatched(shreshold, ratio, singleMatch)]
-        xxDip = sum([e.HOMs[0] for e in filteredQBEREntries])
-        xxAccident = sum([e.HOMs[1] for e in filteredQBEREntries])
-        yyDip = sum([e.HOMs[2] for e in filteredQBEREntries])
-        yyAccident = sum([e.HOMs[3] for e in filteredQBEREntries])
-        allDip = sum([e.HOMs[4] for e in filteredQBEREntries])
-        allAccident = sum([e.HOMs[5] for e in filteredQBEREntries])
-        HOMDipXX = math.nan if xxAccident == 0 else xxDip / xxAccident
-        HOMDipYY = math.nan if yyAccident == 0 else yyDip / yyAccident
-        HOMDipAll = math.nan if allAccident == 0 else allDip / allAccident
-        QBERXXCorrect = sum([e.QBERs[(1 * 4 + 1) * 2 + (0)] for e in filteredQBEREntries])
-        QBERXXWrong = sum([e.QBERs[(1 * 4 + 1) * 2 + (1)] for e in filteredQBEREntries])
-        QBERYYCorrect = sum([e.QBERs[(2 * 4 + 2) * 2 + (0)] for e in filteredQBEREntries])
-        QBERYYWrong = sum([e.QBERs[(2 * 4 + 2) * 2 + (1)] for e in filteredQBEREntries])
-        QBERZZCorrect = sum([e.QBERs[(3 * 4 + 3) * 2 + (0)] for e in filteredQBEREntries])
-        QBERZZWrong = sum([e.QBERs[(3 * 4 + 3) * 2 + (1)] for e in filteredQBEREntries])
-        return [HOMDipXX, xxAccident, HOMDipYY, yyAccident, HOMDipAll, allAccident, QBERXXCorrect, QBERXXWrong,
-                QBERYYCorrect, QBERYYWrong, QBERZZCorrect, QBERZZWrong]
 
     def getQBER(self, shreshold, ratio, singleMatch=None):
         # Careful!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -448,6 +302,183 @@ class Parser:
             QBERZZCorrect, QBERZZWrong,
         ]
 
+    def showCountChannelRelations(self, path):
+        filteredQBEREntries = [e for e in self.QBERs.entries if len(e.relatedChannelEntries) > 0]
+        counts = [e.counts for e in filteredQBEREntries]
+        powers = [e.relatedPowers() for e in filteredQBEREntries]
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax2 = ax1.twinx()
+        labels = ['Alice', 'Bob']
+        colors = ['C0', 'C1']
+        for kk in [0, 1]:
+            sidePowers = [p[kk] for p in powers]
+            sideCounts = [c[kk] for c in counts]
+            binCount = 30
+            maxPower = max(sidePowers)
+            minPower = min(sidePowers)
+            powerSteps = [(maxPower - minPower) / binCount * (i + 0.5) + minPower for i in range(0, binCount)]
+            entryCountHistogram = [0] * binCount
+            for i in range(0, len(sidePowers)):
+                index = int((sidePowers[i] - minPower) / (maxPower - minPower) * binCount)
+                if index == binCount: index -= 1
+                entryCountHistogram[index] += 1
+
+            validSidePowers = []
+            validSideCounts = []
+            for i in range(len(sidePowers)):
+                if sidePowers[i] < 4.5:
+                    validSidePowers.append(sidePowers[i])
+                    validSideCounts.append(sideCounts[i])
+            z = np.polyfit(validSidePowers, validSideCounts, 1)
+            self.parameters['CountChannelRelations Fitting {} Slope'.format(kk)] = z[0]
+            self.parameters['CountChannelRelations Fitting {} Intercept'.format(kk)] = z[1]
+
+            ax1.scatter(sidePowers, sideCounts, s=2, color=colors[kk], label='Counts', alpha=0.2)
+            ax1.plot(powerSteps, [z[1] + p * z[0] for p in powerSteps], 'black')
+            ax1.text(powerSteps[-1], z[1] + powerSteps[-1] * z[0], '{}: {:.2f}'.format(labels[kk], z[0]), size='large',
+                     **{'horizontalalignment': 'right', 'verticalalignment': 'baseline'})
+            ax2.plot(powerSteps, entryCountHistogram, colors[kk], label=labels[kk])
+        ax1.set_ylabel('APD Counts')
+        ax1.set_xlabel('PD Power')
+        ax2.set_ylabel('Frequencies')
+        plt.legend()
+        plt.savefig('{}.png'.format(path), dpi=300)
+        plt.close()
+
+    # def showPowerStatistic(self, path):
+    #     filteredQBEREntries = [e for e in self.QBERs.entries if len(e.relatedChannelEntries) > 0]
+    #     powers = [e.relatedPowers() for e in filteredQBEREntries]
+    #     fig = plt.figure()
+    #     ax1 = fig.add_subplot(111)
+    #     ax2 = ax1.twinx()
+    #     labels = ['Alice', 'Bob']
+    #     colors = ['C0', 'C1']
+    #     for kk in [0, 1]:
+    #         sidePowers = [p[kk] for p in powers]
+    #         binCount = 30
+    #         maxPower = max(sidePowers)
+    #         minPower = min(sidePowers)
+    #     powerSteps = [(maxPower - minPower) / binCount * (i + 0.5) + minPower for i in range(0, binCount)]
+    #     entryCountHistogram = [0] * binCount
+    #     for i in range(0, len(sidePowers)):
+    #         index = int((sidePowers[i] - minPower) / (maxPower - minPower) * binCount)
+    #         if index == binCount: index -= 1
+    #         entryCountHistogram[index] += 1
+    #
+    #     validSidePowers = []
+    #     validSideCounts = []
+    #     for i in range(len(sidePowers)):
+    #         if sidePowers[i] < 4.8:
+    #             validSidePowers.append(sidePowers[i])
+    #             validSideCounts.append(sideCounts[i])
+    #     z = np.polyfit(validSidePowers, validSideCounts, 1)
+    #     self.parameters['CountChannelRelations Fitting {} Slope'.format(kk)] = z[0]
+    #     self.parameters['CountChannelRelations Fitting {} Intercept'.format(kk)] = z[1]
+    #
+    #     ax1.scatter(sidePowers, sideCounts, s=2, color=colors[kk], label='Counts', alpha=0.2)
+    #     ax1.plot(powerSteps, [z[1] + p * z[0] for p in powerSteps], 'black')
+    #     ax1.text(powerSteps[-1], z[1] + powerSteps[-1] * z[0], '{}: {:.2f}'.format(labels[kk], z[0]), size='large',
+    #              **{'horizontalalignment': 'right', 'verticalalignment': 'baseline'})
+    #     ax2.plot(powerSteps, entryCountHistogram, colors[kk], label=labels[kk])
+    # ax1.set_ylabel('APD Counts')
+    # ax1.set_xlabel('PD Power')
+    # ax2.set_ylabel('Frequencies')
+    # plt.legend()
+    # plt.savefig('{}.png'.format(path), dpi=300)
+    # plt.close()
+
+    def showHOMs(self, shreshold, ratios, path, singleMatch=None):
+        ratios = [r for r in ratios]
+        HOMDipXXs = []
+        xxAccidents = []
+        HOMDipYYs = []
+        yyAccidents = []
+        HOMDipAlls = []
+        allAccidents = []
+        QBERXXCorrect = []
+        QBERXXWrong = []
+        QBERYYCorrect = []
+        QBERYYWrong = []
+        QBERZZCorrect = []
+        QBERZZWrong = []
+        for r in ratios:
+            # self.HOM returns [HOMDipXX, xxAccident, HOMDipYY, yyAccident, HOMDipAll, allAccident, QBERXXCorrect, QBERXXWrong, QBERYYCorrect, QBERYYWrong, QBERZZCorrect, QBERZZWrong]
+            HOM = self.HOM(shreshold, r, singleMatch)
+            HOMDipXXs.append(HOM[0])
+            xxAccidents.append(HOM[1])
+            HOMDipYYs.append(HOM[2])
+            yyAccidents.append(HOM[3])
+            HOMDipAlls.append(HOM[4])
+            allAccidents.append(HOM[5])
+            QBERXXCorrect.append(HOM[6])
+            QBERXXWrong.append(HOM[7])
+            QBERYYCorrect.append(HOM[8])
+            QBERYYWrong.append(HOM[9])
+            QBERZZCorrect.append(HOM[10])
+            QBERZZWrong.append(HOM[11])
+
+        self.parameters['Total Accident-All'] = sum([e.HOMs[3] for e in self.QBERs.entries])
+        self.parameters['Total Accident-XX'] = sum([e.HOMs[1] for e in self.QBERs.entries])
+
+        file = open('{}.csv'.format(path), 'w')
+        file.write('ratio,HOM-All,Accidence-All,HOM-XX,Accidence-XX,HOM-YY,Accidence-YY,QBERCorrectXX,QBERWrongXX,QBERCorrectYY,QBERWrongYY,QBERCorrectZZ,QBERWrongZZ\n')
+        for i in range(0, len(ratios)):
+            file.write(
+                '{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(ratios[i], HOMDipAlls[i], allAccidents[i], HOMDipXXs[i], xxAccidents[i], HOMDipYYs[i], yyAccidents[i], QBERXXCorrect[i], QBERXXWrong[i],QBERYYCorrect[i],QBERYYWrong[i], QBERZZCorrect[i], QBERZZWrong[i]))
+        file.close()
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.semilogx(ratios, HOMDipAlls, label='HOM-All')
+        ax1.set_ylabel('HOM Dip')
+        ax1.set_xlabel('ratios')
+        ax2 = ax1.twinx()
+        ax2.semilogx(ratios, allAccidents, 'green', label='Side Coincidences')
+        ax2.set_ylabel('Side Coincidences')
+        plt.legend()
+        plt.savefig('{}-all.png'.format(path), dpi=300)
+        plt.close()
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        ax1.semilogx(ratios, HOMDipXXs, label='HOM-XX')
+        ax1.set_ylabel('HOM Dip')
+        ax1.set_xlabel('ratios')
+        ax2 = ax1.twinx()
+        ax2.semilogx(ratios, xxAccidents, 'green', label='Side Coincidences')
+        ax2.set_ylabel('Side Coincidences')
+        plt.legend()
+        plt.savefig('{}-xx.png'.format(path), dpi=300)
+        plt.close()
+
+    def saveParameters(self, path):
+        file = open(path, 'w')
+        for key in self.parameters.keys():
+            file.write('{}: {}\n'.format(key, self.parameters[key]))
+        file.close()
+
+    def HOM(self, shreshold, ratio, singleMatch=None):
+        # Careful!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # HOMSection length extended to 6
+        filteredQBEREntries = [e for e in self.QBERs.entries if e.powerMatched(shreshold, ratio, singleMatch)]
+        xxDip = sum([e.HOMs[0] for e in filteredQBEREntries])
+        xxAccident = sum([e.HOMs[1] for e in filteredQBEREntries])
+        yyDip = sum([e.HOMs[2] for e in filteredQBEREntries])
+        yyAccident = sum([e.HOMs[3] for e in filteredQBEREntries])
+        allDip = sum([e.HOMs[4] for e in filteredQBEREntries])
+        allAccident = sum([e.HOMs[5] for e in filteredQBEREntries])
+        HOMDipXX = math.nan if xxAccident == 0 else xxDip / xxAccident
+        HOMDipYY = math.nan if yyAccident == 0 else yyDip / yyAccident
+        HOMDipAll = math.nan if allAccident == 0 else allDip / allAccident
+        QBERXXCorrect = sum([e.QBERs[(1 * 4 + 1) * 2 + (0)] for e in filteredQBEREntries])
+        QBERXXWrong = sum([e.QBERs[(1 * 4 + 1) * 2 + (1)] for e in filteredQBEREntries])
+        QBERYYCorrect = sum([e.QBERs[(2 * 4 + 2) * 2 + (0)] for e in filteredQBEREntries])
+        QBERYYWrong = sum([e.QBERs[(2 * 4 + 2) * 2 + (1)] for e in filteredQBEREntries])
+        QBERZZCorrect = sum([e.QBERs[(3 * 4 + 3) * 2 + (0)] for e in filteredQBEREntries])
+        QBERZZWrong = sum([e.QBERs[(3 * 4 + 3) * 2 + (1)] for e in filteredQBEREntries])
+        return [HOMDipXX, xxAccident, HOMDipYY, yyAccident, HOMDipAll, allAccident, QBERXXCorrect, QBERXXWrong, QBERYYCorrect, QBERYYWrong, QBERZZCorrect, QBERZZWrong]
+
     def showRefTimeDiffs(self, path):
         systemTimeReference = min(self.QBERs.systemTimes)
         QBERSystemTimes = [(t - systemTimeReference) / 1000.0 for t in self.QBERs.systemTimes]
@@ -514,9 +545,9 @@ class Parser:
 
 
 if __name__ == '__main__':
-    storeDir = '/Users/Hwaipy/Desktop/MDI/dumped' if debug else 'D:\\Experiments\\MDIQKD\\RealTimeData\\Dumped'
-    resultDir = '/Users/Hwaipy/Desktop/MDI/results' if debug else 'D:\\Experiments\\MDIQKD\\RealTimeData\\Result'
-    monitor = ParserMonitor(storeDir, resultDir, fromNow=False)
+    import sys
+    import os
+    monitor = ParserMonitor('D:\\Experiments\\MDIQKD\\RealTimeData\\Dumped', 'D:\\Experiments\\MDIQKD\\RealTimeData\\Result', fromNow=True)
     if len(sys.argv) == 1:
         monitor.begin()
     else:

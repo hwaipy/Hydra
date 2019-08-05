@@ -77,43 +77,58 @@ class MultiMeterServiceWrap:
 
 
 if __name__ == '__main__':
-    import argparse
-    import sys
-    import Pydra
+    # import argparse
+    # import sys
+    # import Pydra
+    import time
+    import pyvisa as visa
+    print(visa.ResourceManager().list_resources())
+    #
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--model', '-m', help="Model of MultiMeter, should be 34465A or 34470A", type=str)
+    # parser.add_argument('--resource', '-r',
+    #                     help="Visa Resource. For TCP/IP resource, this argument could be TCPIP0::[ip address]::inst0::INSTR",
+    #                     type=str)
+    # parser.add_argument('--hydra_address', '-a', help="Hydra Host address", type=str)
+    # parser.add_argument('--hydra_port', '-p', help="Hydra Host port, 20102 by default", type=int, default=20102)
+    # parser.add_argument('--service_name', '-s', help="Hydra Service name", type=str)
+    #
+    # args = parser.parse_args()
+    # model = args.model
+    # visaResource = args.resource
+    # hydraAddress = args.hydra_address
+    # hydraPort = args.hydra_port
+    # name = args.service_name
+    #
+    # model = '34470A'
+    visaResource = 'TCPIP0::192.168.25.56::inst0::INSTR'
+    # hydraAddress = '192.168.25.27'
+    # hydraPort = 20102
+    # name = 'DMM2'
+    #
+    # print("here")
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', '-m', help="Model of MultiMeter, should be 34465A or 34470A", type=str)
-    parser.add_argument('--resource', '-r',
-                        help="Visa Resource. For TCP/IP resource, this argument could be TCPIP0::[ip address]::inst0::INSTR",
-                        type=str)
-    parser.add_argument('--hydra_address', '-a', help="Hydra Host address", type=str)
-    parser.add_argument('--hydra_port', '-p', help="Hydra Host port, 20102 by default", type=int, default=20102)
-    parser.add_argument('--service_name', '-s', help="Hydra Service name", type=str)
+    # if model == '34470A':
+    dev = KeySight_MultiMeter_34470A(visaResource)
+    # elif model == '34465A':
+    #     dev = KeySight_MultiMeter_34465A(visaResource)
+    # else:
+    #     raise RuntimeError('Model {model} not valid.')
 
-    args = parser.parse_args()
-    model = args.model
-    visaResource = args.resource
-    hydraAddress = args.hydra_address
-    hydraPort = args.hydra_port
-    name = args.service_name
+    # session = Pydra.Session.newSession((hydraAddress, hydraPort), MultiMeterServiceWrap(dev), name)
+    # print(f'KeySight MultiMeter started as MultiMeter Service [{name}]')
+    # for line in sys.stdin:
+    #     if line == 'q\n':
+    #         break
+    # session.stop()
+    # dev.close()
 
-    model = '34470A'
-    visaResource = 'TCPIP0::192.168.25.105::inst0::INSTR'
-    hydraAddress = '192.168.25.27'
-    hydraPort = 20102
-    name = 'DMM2'
-
-    if model == '34470A':
-        dev = KeySight_MultiMeter_34470A(visaResource)
-    elif model == '34465A':
-        dev = KeySight_MultiMeter_34465A(visaResource)
-    else:
-        raise RuntimeError(f'Model {model} not valid.')
-
-    session = Pydra.Session.newSession((hydraAddress, hydraPort), MultiMeterServiceWrap(dev), name)
-    print(f'KeySight MultiMeter started as MultiMeter Service [{name}]')
-    for line in sys.stdin:
-        if line == 'q\n':
-            break
-    session.stop()
-    dev.close()
+    wrap = MultiMeterServiceWrap(dev)
+    wrap.setDCVoltageMeasurement(0.001, False, 0.0002)
+    while True:
+        r = wrap.directMeasure(5000)
+        print(max(r))
+        file = open('{}.csv'.format(time.time()), 'w')
+        for rr in r:
+            file.write('{}\n'.format(rr))
+        file.close()

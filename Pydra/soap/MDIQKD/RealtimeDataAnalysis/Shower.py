@@ -81,13 +81,13 @@ class Shower:
 
         file = open('{}/HOM.csv'.format(self.showDir), 'w')
         file.write(
-            'ratio,HOM-All,Accidence-All,HOM-XX,Accidence-XX,HOM-YY,Accidence-YY,QBERCorrectXX,QBERWrongXX,QBERCorrectYY,QBERWrongYY,QBERCorrectZZ,QBERWrongZZ\n')
+                'ratio,HOM-All,Accidence-All,HOM-XX,Accidence-XX,HOM-YY,Accidence-YY,QBERCorrectXX,QBERWrongXX,QBERCorrectYY,QBERWrongYY,QBERCorrectZZ,QBERWrongZZ\n')
         for i in range(0, len(ratios)):
             file.write(
-                '{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(ratios[i], HOMDipAlls[i], aAll[i], HOMDipXXs[i],
-                                                                  aXX[i], HOMDipYYs[i], aYY[i], xxCorrect[i],
-                                                                  xxWrong[i], yyCorrect[i], yyWrong[i], zzCorrect[i],
-                                                                  zzWrong[i]))
+                    '{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(ratios[i], HOMDipAlls[i], aAll[i], HOMDipXXs[i],
+                                                                      aXX[i], HOMDipYYs[i], aYY[i], xxCorrect[i],
+                                                                      xxWrong[i], yyCorrect[i], yyWrong[i], zzCorrect[i],
+                                                                      zzWrong[i]))
         file.close()
 
         fig = plt.figure()
@@ -95,6 +95,7 @@ class Shower:
         ax1.semilogx(ratios, HOMDipAlls, label='HOM-All')
         ax1.set_ylabel('HOM Dip')
         ax1.set_xlabel('ratios')
+        ax1.grid(True,which="both",color="k",ls="--",lw=0.3)
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, aAll, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
@@ -107,6 +108,7 @@ class Shower:
         ax1.semilogx(ratios, HOMDipXXs, label='HOM-XX')
         ax1.set_ylabel('HOM Dip')
         ax1.set_xlabel('ratios')
+        ax1.grid(True,which="both",color="k",ls="--",lw=0.3)
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, aXX, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
@@ -119,6 +121,7 @@ class Shower:
         ax1.semilogx(ratios, HOMDipYYs, label='HOM-YY')
         ax1.set_ylabel('HOM Dip')
         ax1.set_xlabel('ratios')
+        ax1.grid(True,which="both",color="k",ls="--",lw=0.3)
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, aYY, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
@@ -139,6 +142,7 @@ class Shower:
         ax1.semilogx(ratios, zzQBER, label='QBER-ZZ')
         ax1.set_ylabel('QBER')
         ax1.set_xlabel('ratios')
+        ax1.grid(True,which="both",color="k",ls="--",lw=0.3)
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, zzTotal, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
@@ -159,6 +163,7 @@ class Shower:
         ax1.semilogx(ratios, xxQBER, label='QBER-XX')
         ax1.set_ylabel('QBER')
         ax1.set_xlabel('ratios')
+        ax1.grid(True,which="both",color="k",ls="--",lw=0.3)
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, xxTotal, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
@@ -179,6 +184,7 @@ class Shower:
         ax1.semilogx(ratios, yyQBER, label='QBER-YY')
         ax1.set_ylabel('QBER')
         ax1.set_xlabel('ratios')
+        ax1.grid(True,which="both",color="k",ls="--",lw=0.3)
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, yyTotal, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
@@ -192,7 +198,7 @@ class Shower:
             return [float(item) for item in items]
 
         def loadQBERData(dir):
-            file = open('{}/QBER.csv'.format(dir), 'r')
+            file = open('{}/QBERs.csv'.format(dir), 'r')
             lines = file.readlines()[1:]
             return [parseLine(line) for line in lines]
 
@@ -207,7 +213,7 @@ class Shower:
 
         file = open('{}/QBER.csv'.format(self.showDir), 'w')
         file.write(
-                        'ratio,filteredsection,totlasection,QBERCorrectOO,QBERWrongOO,QBERCorrectOX,QBERWrongOX,QBERCorrectOY,QBERWrongOY,QBERCorrectOZ,QBERWrongOZ,QBERCorrectXO,QBERWrongXO,QBERCorrectXX,QBERWrongXX,QBERCorrectXY,QBERWrongXY,QBERCorrectXZ,QBERWrongXZ,QBERCorrectYO,QBERWrongYO,QBERCorrectYX,QBERWrongYX,QBERCorrectYY,QBERWrongYY,QBERCorrectYZ,QBERWrongYZ,QBERCorrectZO,QBERWrongZO,QBERCorrectZX,QBERWrongZX,QBERCorrectZY,QBERWrongZY,QBERCorrectZZ,QBERWrongZZ\n')
+                'ratio,filteredsection,totlasection,QBERCorrectOO,QBERWrongOO,QBERCorrectOX,QBERWrongOX,QBERCorrectOY,QBERWrongOY,QBERCorrectOZ,QBERWrongOZ,QBERCorrectXO,QBERWrongXO,QBERCorrectXX,QBERWrongXX,QBERCorrectXY,QBERWrongXY,QBERCorrectXZ,QBERWrongXZ,QBERCorrectYO,QBERWrongYO,QBERCorrectYX,QBERWrongYX,QBERCorrectYY,QBERWrongYY,QBERCorrectYZ,QBERWrongYZ,QBERCorrectZO,QBERWrongZO,QBERCorrectZX,QBERWrongZX,QBERCorrectZY,QBERWrongZY,QBERCorrectZZ,QBERWrongZZ\n')
         for row in merged:
             line = ('{}'.format(row))[1:-1]
             file.write('{}\n'.format(line))
@@ -263,8 +269,8 @@ class Shower:
 
 
 if __name__ == '__main__':
-    start = '20190718-024500'
-    stop = '20190718-090000'
+    start = '20190805-032900'
+    stop = '20190805-044000'
 
     resultDir = '/Users/Hwaipy/Desktop/MDI/results' if debug else 'D:\\Experiments\\MDIQKD\\RealTimeData\\Result'
 

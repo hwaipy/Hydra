@@ -17,6 +17,7 @@ import com.hydra.`type`.NumberTypeConversions._
 import com.hydra.core.MessageGenerator
 import com.hydra.services.tdcviewer.LogarithmicAxis
 import org.python.core.PyException
+import org.python.google.common.util.concurrent.AtomicDouble
 import org.python.util.PythonInterpreter
 
 import scala.collection.mutable
@@ -48,13 +49,21 @@ object TDCViweer extends JFXApp {
     }
   }))
 
+  class Handler{
+    def getPulsePosition() =
+//      if (gaussianFitTime.get < System.currentTimeMillis - 3000) Double.NaN
+//      else gaussianFitResult.get()("Peak")
+          if (gaussianFitTime.get < System.currentTimeMillis - 3000) Double.NaN
+          else maxPosition.get()
+  }
+
   val client = MessageClient.newClient(parameters.named.get("host") match {
     case Some(host) => host
     case None => "192.168.25.27"
   }, parameters.named.get("port") match {
     case Some(port) => port.toInt
     case None => 20102
-  })
+  }, "TDCViewer", new Handler)
   val storageInvoker = client.blockingInvoker("StorageService")
   val tdcInvoker = client.blockingInvoker("GroundTDCService")
   val pyMathInvoker = client.blockingInvoker("PyMathService")
@@ -310,7 +319,11 @@ object TDCViweer extends JFXApp {
       })
       evalJython(counts.toArray, recentXData.get, recentHistogram.get, divide)
       updateRegions()
-      updateGaussianFit()
+      try{
+        updateGaussianFit()
+      }catch{
+        case e:Throwable => //e.printStackTrace()
+      }
     }
   }
 
@@ -500,14 +513,25 @@ object TDCViweer extends JFXApp {
     }, None)
   }
 
+  private val gaussianFitResult = new AtomicReference[Map[String, Double]](null)
+  private val gaussianFitTime = new AtomicLong(0)
+  private val maxPosition = new AtomicDouble(Double.NaN)
+
   def updateGaussianFit() = {
     assertThread("TDCViewer")
+    val histogram = recentHistogram.get
+    val iMax = histogram.indexOf(histogram.max)
+    maxPosition set recentXData.get()(iMax)
+    gaussianFitTime set System.currentTimeMillis
+
     val fit = pyMathInvoker.singlePeakGaussianFit(recentXData.get, recentHistogram.get).asInstanceOf[List[Any]]
     val a: Double = fit(0)
     val x0: Double = fit(1)
     val sigma: Double = fit(2)
     val fittedYData = recentXData.get.map(x => a * math.exp(-math.pow((x - x0), 2) / (2 * math.pow(sigma, 2))))
+    gaussianFitResult set Map("Peak" -> x0, "FWHM" -> sigma * 2.35)
     Platform.runLater(() => {
+      println("update")
       fitSeries.data = (recentXData.get zip fittedYData).map(toChartData)
       fitSeriesLog.data = (recentXData.get zip fittedYData).map(toChartData)
       fitResult.text = s"Peak: ${timeDomainNotation(x0)}, FWHM: ${timeDomainNotation(sigma * 2.35)}"

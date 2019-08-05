@@ -66,14 +66,15 @@ object TDCParser extends JFXApp {
   val storageInvoker = client.blockingInvoker("StorageService")
   val tdcInvoker = client.blockingInvoker("GroundTDCService")
   val pyMathInvoker = client.blockingInvoker("PyMathService")
+  val dumperInvoker = client.asynchronousInvoker("MDIQKD-Dumper")
   val path = "/test/tdc/default.fs"
   val recentSize = new AtomicLong(0)
 
   val reportPath = "/test/tdc/mdireport.fs"
   storageInvoker.FSFileInitialize("", reportPath)
-  val mongoClient: MongoClient = MongoClient("mongodb://MDIQKD:freespace@192.168.25.27:27019")
-  val database = mongoClient.getDatabase("Freespace_MDI_QKD")
-  val collection = database.getCollection("TDCReport-20190521")
+  //val mongoClient: MongoClient = MongoClient("mongodb://MDIQKD:freespace@192.168.25.27:27019")
+  //val database = mongoClient.getDatabase("Freespace_MDI_QKD")
+  //val collection = database.getCollection("TDCReport-20190528")
 
   val visualBounds = Screen.primary.visualBounds
   val frameSize = new Dimension2D(visualBounds.width * 0.9, visualBounds.height * 0.6)
@@ -173,23 +174,31 @@ object TDCParser extends JFXApp {
 
     storageInvoker.FSFileAppendFrame("", reportPath, bytes)
 
-    val seq1 = (reportMap ++ qberReport).map(z => (z._1, BsonDouble(z._2))).toSeq
-    val seq2 = Seq(("QBERSections", BsonArray(qberSection.map(li => BsonArray(li.map(i => BsonInt32(i)))))))
-    val seq3 = Seq(("HOMSections", BsonArray(homSection.map(ld => BsonArray(ld.map(d => BsonDouble(d)))))))
-    val seq4 = Seq(("CountSections", BsonArray(countSection.map(ld => BsonArray(ld.map(d => BsonInt32(d)))))))
-    val seq5 = Seq(("ChannelMonitorSync", BsonArray(channelMonitorSyncEvents.map(event => BsonInt64(event)))))
-    val reportDoc = Document.fromSeq(seq1 ++ seq2 ++ seq3 ++ seq4 ++ seq5)
-    collection.insertOne(reportDoc).subscribe(new Observer[Completed] {
+    //    val seq1 = (reportMap ++ qberReport).map(z => (z._1, BsonDouble(z._2))).toSeq
+    //    val seq2 = Seq(("QBERSections", BsonArray(qberSection.map(li => BsonArray(li.map(i => BsonInt32(i)))))))
+    //    val seq3 = Seq(("HOMSections", BsonArray(homSection.map(ld => BsonArray(ld.map(d => BsonDouble(d)))))))
+    //    val seq4 = Seq(("CountSections", BsonArray(countSection.map(ld => BsonArray(ld.map(d => BsonInt32(d)))))))
+    //    val seq5 = Seq(("ChannelMonitorSync", BsonArray(channelMonitorSyncEvents.map(event => BsonInt64(event)))))
+    //    val reportDoc = Document.fromSeq(seq1 ++ seq2 ++ seq3 ++ seq4 ++ seq5)
+    //    collection.insertOne(reportDoc).subscribe(new Observer[Completed] {
+    //
+    //      override def onNext(result: Completed): Unit = println("Inserted")
+    //
+    //      override def onError(e: Throwable): Unit = e.printStackTrace()
+    //
+    //      override def onComplete(): Unit = println("Completed")
+    //    })
 
-      override def onNext(result: Completed): Unit = println("Inserted")
+    val realTimeReport = reportMap ++ qberReport ++ Map(
+      "QBERSections" -> qberSection,
+      "HOMSections" -> homSection,
+      "CountSections" -> countSection,
+      "ChannelMonitorSync" -> channelMonitorSyncEvents
+    )
+    dumperInvoker.dumpQBER(realTimeReport)
 
-      override def onError(e: Throwable): Unit = e.printStackTrace()
-
-      override def onComplete(): Unit = println("Completed")
-    })
     println("done update report")
   }
-
 
   val grid = new GridPane()
   val chartTextRegeons = histogramStrategies.map(stra => new ChartTextRegeon(stra))
@@ -563,4 +572,15 @@ object TDCParser extends JFXApp {
     def isAcceptedRND(rnd: Int) = acceptedRNDs.contains(rnd)
   }
 
+  val autoStopDelay = parameters.raw.headOption match {
+    case Some(head) => head.toLong * 1000
+    case None => 1000l * 3600 * 24 * 365
+  }
+
+   new Timer(true).schedule(new TimerTask {
+     override def run(): Unit = {
+       println("done!")
+       System.exit(0)
+     }
+   }, autoStopDelay)
 }
