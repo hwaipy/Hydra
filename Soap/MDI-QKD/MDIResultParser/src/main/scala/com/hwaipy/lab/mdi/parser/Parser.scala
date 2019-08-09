@@ -9,17 +9,23 @@ import com.hydra.core.MessageGenerator
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.collection.JavaConverters._
 
 class ParserMonitor(monitoringPath: Path, resultPath: Path, startTime: Date, stopTime: Date) {
-  if (!Files.exists(resultPath.resolve("dumped"))) Files.createDirectories(resultPath.resolve("dumped"))
-  if (!Files.exists(resultPath.resolve("results"))) Files.createDirectories(resultPath.resolve("results"))
+  //  if (!Files.exists(resultPath.resolve("dumped"))) Files.createDirectories(resultPath.resolve("dumped"))
+  //  if (!Files.exists(resultPath.resolve("results"))) Files.createDirectories(resultPath.resolve("results"))
   private val executor = Executors.newFixedThreadPool(8)
   private val executionContext = ExecutionContext.fromExecutor(executor)
 
   def perform = {
     val dataPairs = getDataPairs
     dataPairs.map(pair => Future[Unit] {
-      parse(pair)
+      try {
+        parse(pair)
+      }
+      catch {
+        case e: Throwable => println(s"Error in ${pair}: $e")
+      }
     }(executionContext))
   }
 
@@ -35,7 +41,7 @@ class ParserMonitor(monitoringPath: Path, resultPath: Path, startTime: Date, sto
     val t1 = System.nanoTime()
     val parser = new Parser(dataPair, resultPath)
     val t2 = System.nanoTime()
-    parser.storeDumpedFiles
+    //    parser.storeDumpedFiles
     val t3 = System.nanoTime()
     parser.parse
     val t4 = System.nanoTime()
@@ -79,13 +85,13 @@ class Parser(dataPair: Tuple2[Path, Path], resultPath: Path) {
   val timeMatchedQBEREntries = qbers.entries.filter(e => e.relatedChannelEntryCount > 0)
 
   def parse = {
-    val resultInnerPath = resultPath.resolve("results").resolve(qberFile.getFileName.toString.slice(0, 15))
+    val resultInnerPath = resultPath.resolve(qberFile.getFileName.toString.slice(0, 15))
     Files.createDirectories(resultInnerPath)
     showCountChannelRelations(resultInnerPath.resolve("CountChannelRelations"))
     Files.copy(resultInnerPath.resolve("CountChannelRelations.png"), Paths.get(resultInnerPath.toString + ".png"), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING)
     val halfRatios = Range(0, 40).map(i => math.pow(1.1, i))
     val ratios = halfRatios.reverse.dropRight(1).map(a => 1 / a) ++ halfRatios
-    showHOMandQBERs(List(0.8), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
+    showHOMandQBERs(Range(1, 81).toList.map(i => i / 100.0), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
   }
 
   def storeDumpedFiles = {
@@ -139,7 +145,7 @@ class Parser(dataPair: Tuple2[Path, Path], resultPath: Path) {
     counts.zip(powers).foreach(z => writer.println(s"${z._1(0)}, ${z._1(1)}, ${z._2._1}, ${z._2._2}"))
     writer.close
 
-    val process = Runtime.getRuntime.exec(s"python3 scripts/CountChannelRelationsShower.py ${path.toString}.csv ${path.toString}.png")
+    val process = Runtime.getRuntime.exec(s"python scripts/CountChannelRelationsShower.py ${path.toString}.csv ${path.toString}.png")
     process.waitFor
   }
 
@@ -209,7 +215,7 @@ class Channels(val sections: Array[Map[String, Any]], val triggerThreshold: Doub
   private def validate() = {
     val risesZip = riseIndices.dropRight(1).zip(riseIndices.drop(1))
     val valid = risesZip.map(z => math.abs((entries(z._2).refTime - entries(z._1).refTime) / 1000 - 10) < 0.02).forall(b => b)
-    if (!valid) throw new IllegalArgumentException(s"Error in ChannelMonitorSyncs of Channel: ${riseIndices}")
+    if (!valid) throw new IllegalArgumentException(s"Error in ChannelMonitorSyncs of Channel: ${riseIndices.toList}")
   }
 }
 
@@ -240,7 +246,7 @@ class HOMandQBEREntry(val threshold: Double, val ratio: Double, val powerInvalid
   def append(qberEntry: QBEREntry) = {
     val homs = qberEntry.HOMs
     Range(0, 3).foreach(kk => {
-      homCounts(kk * 2) += homs(kk * 2) * homs(kk * 2 + 1)
+      homCounts(kk * 2) += homs(kk * 2)
       homCounts(kk * 2 + 1) += homs(kk * 2 + 1)
     })
     val qbers = qberEntry.QBERs
@@ -251,13 +257,27 @@ class HOMandQBEREntry(val threshold: Double, val ratio: Double, val powerInvalid
 }
 
 object Parser extends App {
-  val baseDataPath = args.size match {
-    case size if size > 0 => args(0)
-    case 0 => "/Users/Hwaipy/Desktop/MDIProgramTest"
-  }
+  //For DEBUG
+  //  val baseDataPath = args.size match {
+  //    case size if size > 0 => args(0)
+  //    case 0 => "/Users/Hwaipy/Desktop/MDIProgramTest"
+  //  }
   val format = new SimpleDateFormat("yyyyMMdd-hhmmss.SSS")
-  val startTime = format.parse("20190804-000000.000")
-  val stopTime = format.parse("20190804-235900.000")
-  val monitor = new ParserMonitor(Paths.get(s"${baseDataPath}/Dumped"), Paths.get(s"${baseDataPath}/ResultsScala"), startTime, stopTime)
-  monitor.performAndStop
+  //  val startTime = format.parse("20190804-000000.000")
+  //  val stopTime = format.parse("20190804-235900.000")
+  //  val monitor = new ParserMonitor(Paths.get(s"${baseDataPath}/Dumped"), Paths.get(s"${baseDataPath}/ResultsScala"), startTime, stopTime)
+  //  monitor.performAndStop
+
+  //For Real Usage
+  val startTime = format.parse("20190101-000000.000")
+  val stopTime = format.parse("20191231-235959.999")
+  val rootPath = Paths.get("E:\\MDIQKD_Parse\\RawData")
+  val availableDates = Files.list(rootPath).iterator.asScala.toList.filter(p => p.getFileName.toString.size == 8).sorted
+  val availableRuns = availableDates.map(date => Files.list(date).iterator.asScala.toList.filter(p => p.getFileName.toString.toLowerCase.startsWith("run") && !p.getFileName.toString.toLowerCase.endsWith("parsed"))).flatten.sorted
+  println(s"Parsing ${availableRuns.size} runs in ${availableDates.size} days.")
+
+  availableRuns.slice(0, 1).foreach(runPath => {
+    val monitor = new ParserMonitor(runPath, Paths.get(runPath.toString + "-parsed"), startTime, stopTime)
+    monitor.performAndStop
+  })
 }
