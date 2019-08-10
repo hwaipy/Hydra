@@ -43,7 +43,7 @@ class Shower:
 
         thresholds = list(set(data[:, 0]))
         thresholds.sort()
-        for threshold in thresholds:
+        for threshold in [0.8]:
             self.__plot((data, head), threshold, 'HOM', 'XXDip', 'XXAct', 'XX', True)
             self.__plot((data, head), threshold, 'HOM', 'YYDip', 'YYAct', 'YY', True)
             self.__plot((data, head), threshold, 'HOM', 'AllDip', 'AllAct', 'All', True)
@@ -96,6 +96,19 @@ class Shower:
 
 
 if __name__ == '__main__':
-    resultDir = 'E:\\MDIQKD_Parse\\RawData\\20190731\\run-1-parsed' if len(sys.argv) == 1 else sys.argv[1]
-    shower = Shower(resultDir, '{}/Summary'.format(resultDir))
-    shower.show()
+    # resultDir = 'E:\\MDIQKD_Parse\\RawData\\20190731\\run-1-parsed' if len(sys.argv) == 1 else sys.argv[1]
+    # shower = Shower(resultDir, '{}/Summary'.format(resultDir))
+    # shower.show()
+
+    root = 'E:\\MDIQKD_Parse\\RawData\\'
+    dates = ['{}\\{}'.format(root, file) for file in os.listdir(root) if not file.startswith("_")]
+    runs = []
+    for date in dates:
+        runsInDay = ['{}\\{}'.format(date, file) for file in os.listdir(date) if file.endswith('parsed')]
+        runs += runsInDay
+    print('{} runs to parse.'.format(len(runs)))
+
+    for run in runs:
+        shower = Shower(run, '{}/Summary'.format(run))
+        shower.show()
+

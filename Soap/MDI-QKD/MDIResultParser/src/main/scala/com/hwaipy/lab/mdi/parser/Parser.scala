@@ -91,7 +91,7 @@ class Parser(dataPair: Tuple2[Path, Path], resultPath: Path) {
     Files.copy(resultInnerPath.resolve("CountChannelRelations.png"), Paths.get(resultInnerPath.toString + ".png"), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING)
     val halfRatios = Range(0, 40).map(i => math.pow(1.1, i))
     val ratios = halfRatios.reverse.dropRight(1).map(a => 1 / a) ++ halfRatios
-    showHOMandQBERs(Range(1, 81).toList.map(i => i / 100.0), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
+    showHOMandQBERs(List(1e-10) ++ Range(1, 81).toList.map(i => i / 100.0), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
   }
 
   def storeDumpedFiles = {
@@ -276,7 +276,7 @@ object Parser extends App {
   val availableRuns = availableDates.map(date => Files.list(date).iterator.asScala.toList.filter(p => p.getFileName.toString.toLowerCase.startsWith("run") && !p.getFileName.toString.toLowerCase.endsWith("parsed"))).flatten.sorted
   println(s"Parsing ${availableRuns.size} runs in ${availableDates.size} days.")
 
-  availableRuns.slice(0, 1).foreach(runPath => {
+  availableRuns.foreach(runPath => {
     val monitor = new ParserMonitor(runPath, Paths.get(runPath.toString + "-parsed"), startTime, stopTime)
     monitor.performAndStop
   })
