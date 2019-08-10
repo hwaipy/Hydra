@@ -37,9 +37,9 @@ class Shower:
 
         data = np.hstack((conditions, mergedData))
 
-        date = [i for i in self.dir.split('/') if len(i) > 0][-2]
+        date = [i for i in self.dir.replace('\\','/').split('/') if len(i) > 0][-2]
         if NOT_GOOD_CORRECTION.__contains__(date):
-            print('Correcting.')
+            print('Correcting {}'.format(self.dir))
             corrections = NOT_GOOD_CORRECTION[date]
             for c in corrections:
                 data[:, head.index(c)] *= corrections[c]
@@ -61,9 +61,8 @@ class Shower:
                 self.__plot(selectedData, head, threshold, 'Threshold', 'Ratio', 'QBER', '{} Correct'.format(bases),
                             '{} Wrong'.format(bases), bases, True)
 
-        selectedRatio = \
-            self.__min(np.array([d for d in data if d[0] == max(thresholds)]), head, max(thresholds), 'HOM', 'AllDip',
-                       'AllAct')[0]
+        selectedRatio = self.__min(np.array([d for d in data if d[0] == max(thresholds)]), head, 'HOM',
+                            'AllDip', 'AllAct')[0]
         selectedData = np.array([row for row in data if row[1] == selectedRatio])
         for bases in ['XX', 'YY', 'All']:
             self.__plot(selectedData, head, selectedRatio, 'Ratio', 'Threshold', 'HOM', '{}Dip'.format(bases),
@@ -113,7 +112,7 @@ class Shower:
             plt.show()
         plt.close()
 
-    def __min(self, data, head, threshold, mode, head1, head2):
+    def __min(self, data, head, mode, head1, head2):
         ratios = data[:, 1]
         c1 = data[:, head.index(head1)]
         c2 = data[:, head.index(head2)]
@@ -123,8 +122,10 @@ class Shower:
             y = c2 / (c1 + c2 + 1e-10)
         else:
             raise RuntimeError('Mode not valid.')
-        i = [a for a in y].index(y.min())
-        return (ratios[i], y[i])
+        z = [z for z in zip(y, ratios)]
+        z.sort()
+        validZ = [zz for zz in z if zz[1]>0.1 and zz[1]<10][0]
+        return (validZ[1], validZ[0])
 
     def __listValidResults(self):
         files = [f for f in os.listdir(self.dir) if f.lower().endswith('.png')]
@@ -134,7 +135,7 @@ class Shower:
 
 
 if __name__ == '__main__':
-    resultDir = '/Users/hwaipy/Desktop/MDI/20190731/run-1-parsed/' if len(sys.argv) == 1 else sys.argv[1]
+    resultDir = 'E:\\MDIQKD_Parse\\RawData/20190807/run-C-parsed/' if len(sys.argv) == 1 else sys.argv[1]
     shower = Shower(resultDir, '{}/Summary'.format(resultDir))
     shower.show()
 

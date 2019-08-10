@@ -31,7 +31,7 @@ class ParserMonitor(monitoringPath: Path, resultPath: Path, startTime: Date, sto
     val futures = perform
     futures.foreach(future => Await.result(future, 1 hour))
     stop
-    Runtime.getRuntime.exec(s"python3 scripts/SummaryShower.py ${resultPath}").waitFor
+    Runtime.getRuntime.exec(s"python scripts/SummaryShower.py ${resultPath}").waitFor
   }
 
   def stop = executor.shutdown()
@@ -134,7 +134,7 @@ class Parser(dataPair: Tuple2[Path, Path], resultPath: Path) {
     counts.zip(powers).foreach(z => writer.println(s"${z._1(0)}, ${z._1(1)}, ${z._2._1}, ${z._2._2}"))
     writer.close
 
-    val process = Runtime.getRuntime.exec(s"python3 scripts/CountChannelRelationsShower.py ${path.toString}.csv ${path.toString}.png")
+    val process = Runtime.getRuntime.exec(s"python scripts/CountChannelRelationsShower.py ${path.toString}.csv ${path.toString}.png")
     process.waitFor
   }
 
@@ -253,8 +253,8 @@ object Parser extends App {
   val format = new SimpleDateFormat("yyyyMMdd-hhmmss.SSS")
   val startTime = format.parse("20190101-000000.000")
   val stopTime = format.parse("20191231-235959.999")
-  //  val rootPath = Paths.get("E:\\MDIQKD_Parse\\RawData")
-  val rootPath = Paths.get("/Users/hwaipy/Desktop/MDI")
+    val rootPath = Paths.get("E:\\MDIQKD_Parse\\RawData")
+//  val rootPath = Paths.get("/Users/hwaipy/Desktop/MDI")
   val availableDates = Files.list(rootPath).iterator.asScala.toList.filter(p => p.getFileName.toString.size == 8).sorted
   val availableRuns = availableDates.map(date => Files.list(date).iterator.asScala.toList.filter(p => p.getFileName.toString.toLowerCase.startsWith("run") && !p.getFileName.toString.toLowerCase.endsWith("parsed"))).flatten.sorted
   println(s"Parsing ${availableRuns.size} runs in ${availableDates.size} days.")
