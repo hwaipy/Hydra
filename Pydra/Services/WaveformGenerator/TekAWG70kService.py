@@ -12,6 +12,7 @@ import time
 import csv
 import os
 
+
 class Instrument:
     visa_resources = {'AWG70002A': 'GPIB8::1::INSTR'}
 
@@ -32,9 +33,9 @@ class Instrument:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-        #if exc_tb is None:
+        # if exc_tb is None:
         #    print '[Exit %s]: Exited without exception.' % self.tag
-        #else:
+        # else:
         #    print '[Exit %s]: Exited with exception raised.' % self.tag
         #    return False   # 可以省略，缺省的None也是被看做是False
 
@@ -61,14 +62,14 @@ class Instrument:
         if self._is_valid():
             return self.instr_handle.query_ascii_values(msg)
             # if we want numpy return, and hex format, with separater '$'
-            #return self.instr_handle.query_ascii_values(msg, container=numpy.array, converter='x', separator='$')
+            # return self.instr_handle.query_ascii_values(msg, container=numpy.array, converter='x', separator='$')
 
     def _query_binary(self, msg, datatype='B'):
         ''' Return List values queried in binary'''
         if self._is_valid():
             return self.instr_handle.query_binary_values(msg, datatype)
             # if we have double 'd' in big endian:
-            #return self.instr_handle.query_binary_values(msg, datatype='d', is_big_endian=True)
+            # return self.instr_handle.query_binary_values(msg, datatype='d', is_big_endian=True)
 
     def _write_ascii(self, msg, values):
         ''' write values (a list)'''
@@ -76,7 +77,7 @@ class Instrument:
             self.instr_handle.write_ascii_values(msg, values)
             # if we want to convert to hex, and separate with '$'
             # default converter = 'f', separator = ','
-            #self.instr_handle.write_ascii_values(msg, values, converter='x', separator='$')
+            # self.instr_handle.write_ascii_values(msg, values, converter='x', separator='$')
 
     def _write_binary(self, msg, values, datatype='f', is_big_endian=False):
         ''' write values (a list)'''
@@ -84,7 +85,7 @@ class Instrument:
             self.instr_handle.write_binary_values(msg, values, datatype, is_big_endian)
             # if we have double 'd' in big endian:
             # default converter = 'f', separator = ','
-            #self.instr_handle.write_ascii_values(msg, values, datatype='d', is_big_endian=True)
+            # self.instr_handle.write_ascii_values(msg, values, datatype='d', is_big_endian=True)
 
     def _write_raw(self, msg):
         if self._is_valid():
@@ -105,10 +106,10 @@ class Instrument:
 class SCPI:
     def __init__(self, instrument):
         self.instrument = instrument
-        self.query = self.instrument._query             #instr_handle.query
-        self.write = self.instrument._write_raw         #instr_handle.write
-        self.writeValue = self.instrument._write_binary #instr_handle.write_binary_values
-        self.queryValue = self.instrument._query_binary #instr_handle.query_binary_values
+        self.query = self.instrument._query  # instr_handle.query
+        self.write = self.instrument._write_raw  # instr_handle.write
+        self.writeValue = self.instrument._write_binary  # instr_handle.write_binary_values
+        self.queryValue = self.instrument._query_binary  # instr_handle.query_binary_values
 
     def __getattr__(self, item):
         return SCPI.Command(self, item)
@@ -118,7 +119,7 @@ class SCPI:
             self.scpi = scpi
             self.parent = parent
             self.cmd = cmd
-            #print(cmd, parent)
+            # print(cmd, parent)
             if self.cmd[0] == '_':
                 self.cmd = '*' + self.cmd[1:]
             if parent:
@@ -171,7 +172,7 @@ class AWG70002(Instrument):
         self._writeWaveformData(name, data)
 
     def _markerForm(self, marker1, marker2):
-        return ((marker1&0x1) << 6) | ((marker2&0x1) << 7)
+        return ((marker1 & 0x1) << 6) | ((marker2 & 0x1) << 7)
 
     def writeMarker(self, name, marker):
         # Marker is a N*1 or N*2 np.array of 0/1, describing the marker data.
@@ -203,16 +204,15 @@ class AWG70002(Instrument):
 
         self._writeMarkerData(name, raw_marker)
 
-
     def writeSequence(self, name, sequenceItems):
         if self._isSequenceExists(name):
             self._deleteSequence(name)
         self._createSequence(name, len(sequenceItems), 1)
         for i in range(len(sequenceItems)):
-            self._setSequenceItem(name, i+1, sequenceItems[i])
-            if i%10==0:
+            self._setSequenceItem(name, i + 1, sequenceItems[i])
+            if i % 10 == 0:
                 print(i)
-            #print("Send %d SeqItem to AWG"%i)
+            # print("Send %d SeqItem to AWG"%i)
 
     def assignOutputSeq(self, channel, sequence):
         self._assignSequence(channel, sequence, 1)
@@ -312,7 +312,7 @@ class AWG70002(Instrument):
     def _deleteWaveform(self, name):
         assert isinstance(name, str)
         self.scpi.WLISt.WAVeform.DELete.write('"{}"'.format(name))
-        #self.instr_handle.write('WLISt:WAVeform:DELete "{}"'.format(name))
+        # self.instr_handle.write('WLISt:WAVeform:DELete "{}"'.format(name))
 
     def _deleteAllWaveforms(self):
         self.scpi.WLISt.WAVeform.DELete.write('ALL')
@@ -322,31 +322,31 @@ class AWG70002(Instrument):
 
     def _writeWaveformData(self, name, data, start=0):
         self._write_binary('WLISt:WAVeform:DATA "{}",{},{},'.format(name, start, len(data)), data,
-                                              datatype='f', is_big_endian=False)
+                           datatype='f', is_big_endian=False)
 
     def _writeMarkerData(self, name, data, start=0):
         print(data)
         self._write_binary('WLISt:WAVeform:MARKer:DATA "{}",{},{},'.format(name, start, len(data)), data,
-                                              datatype='B', is_big_endian=False)
+                           datatype='B', is_big_endian=False)
 
     def _setOutput(self, channel, status):
-        #self.scpi.OUTPUT.write('{} {}'.format(channel, 1 if status else 0))
+        # self.scpi.OUTPUT.write('{} {}'.format(channel, 1 if status else 0))
         self._write_raw('OUTPUT{}:{}'.format(channel, 1 if status else 0))
 
     def _start(self):
         self.scpi.AWGControl.RUN.IMMediate.write()
-        #self.instr_handle.write('AWGControl:RUN')
+        # self.instr_handle.write('AWGControl:RUN')
 
     def _stop(self):
         self.scpi.AWGControl.STOP.IMMediate.write()
-        #self.instr_handle.write('AWGControl:STOP')
+        # self.instr_handle.write('AWGControl:STOP')
 
     # Sequence Operations #
     def _getSequenceName(self, index):
         return self._query('SLISt:NAME? {}'.format(index))[1:-2]
 
     def _getSequenceLength(self, name):
-        return int(self._query('SLISt:SEQuence:LENGth? "'+name+'"')[0:-1])
+        return int(self._query('SLISt:SEQuence:LENGth? "' + name + '"')[0:-1])
 
     def _deleteSequence(self, name):
         self._write_raw('SLISt:SEQuence:DELete "{}"'.format(name))
@@ -362,7 +362,7 @@ class AWG70002(Instrument):
 
     def _listSequences(self):
         size = self._getSequenceListSize()
-        return [self._getSequenceName(i+1) for i in range(size)]
+        return [self._getSequenceName(i + 1) for i in range(size)]
 
     def _isSequenceExists(self, name):
         return self._listSequences().__contains__(name)
@@ -415,7 +415,7 @@ class AWG70002(Instrument):
 
     def _setClockSource(self, source):
         # SOURCE can be "INT|EFIX|EVAR|EXT"
-        self._write_raw("CLOCk:SOURce "+source)
+        self._write_raw("CLOCk:SOURce " + source)
 
     def _getIntClockRate(self):
         # Set internal clock rate to rate (int)
@@ -434,15 +434,17 @@ class AWG70002(Instrument):
         return stat == '1'
 
     def _isAWGend(self):
-       stat = self._query("AWGControl:RSTate?")[:-1]
-       return stat == '2'
+        stat = self._query("AWGControl:RSTate?")[:-1]
+        return stat == '2'
+
 
 class AWG70002PM(AWG70002):
     ''' AWG70002A in Pulsed Mode'''
+
     def __init__(self):
         super(AWG70002PM, self).__init__("AWG70002A")
         self.clockRate = self._getIntClockRate()
-        #self.maxSeqSteps = self._getMaxSequenceSteps()
+        # self.maxSeqSteps = self._getMaxSequenceSteps()
         self._wfList = self._listWaveforms()
         self._idxseq = 1
 
@@ -452,28 +454,28 @@ class AWG70002PM(AWG70002):
     def _mkMarkerName(self, mkTime, mkflag):
         return "mk%dPattern%03d" % (mkflag, mkTime)
 
-    def writeWaveformPattern(self, wfHighBeg, wfHighWidth=200, wfLength=2400):#name, data):
+    def writeWaveformPattern(self, wfHighBeg, wfHighWidth=200, wfLength=2400):  # name, data):
         ''' Generate the waveform with one pulse,
         starts at wfHighBeg, with wfHighWidth width,
         The total length is wfLength (points)
         '''
         name = self._mkWaveformName(wfHighBeg)
-        data = [0]*wfLength
+        data = [0] * wfLength
         wfHighBeg = wfHighBeg if wfHighBeg > 0 else 0
         wfHighEnd = wfHighBeg + wfHighWidth
         wfHighEnd = wfHighEnd if wfHighEnd < wfLength else wfLength
-        data[wfHighBeg:wfHighEnd] = [1]*(wfHighEnd-wfHighBeg)
+        data[wfHighBeg:wfHighEnd] = [1] * (wfHighEnd - wfHighBeg)
 
         self.writeWaveform(name, data)
         return name
 
     def writeMarkerPattern(self, mkHighBeg, mkFlag, mkHighWidth=200, mkLength=2400):
         name = self._mkMarkerName(mkHighBeg, mkFlag)
-        marker = np.zeros([mkLength,2], dtype='uint8')
-        mkHighBeg = mkHighBeg if mkHighBeg>0 else 0
+        marker = np.zeros([mkLength, 2], dtype='uint8')
+        mkHighBeg = mkHighBeg if mkHighBeg > 0 else 0
         mkHighEnd = mkHighBeg + mkHighWidth
-        mkHighEnd = mkHighEnd if mkHighEnd<mkLength else mkLength
-        marker[int(mkHighBeg): int(mkHighEnd+1), int(mkFlag-1)] = 1
+        mkHighEnd = mkHighEnd if mkHighEnd < mkLength else mkLength
+        marker[int(mkHighBeg): int(mkHighEnd + 1), int(mkFlag - 1)] = 1
         self.writeMarker(name, marker)
         return name
 
@@ -501,22 +503,22 @@ class AWG70002PM(AWG70002):
     def clearAll(self):
         self._deleteAllWaveforms()
         self._deleteAllSequence()
-        self._wfList=[]
+        self._wfList = []
 
     def AddWaveform(self, wfHighBeg, wfHighWidth=200, wfLength=2400):
         name = self._mkWaveformName(wfHighBeg)
         if name in self._wfList:
-            return name # do not need to add
+            return name  # do not need to add
         self.writeWaveformPattern(wfHighBeg, wfHighWidth, wfLength)
-        self._wfList = self._listWaveforms() # refresh list
+        self._wfList = self._listWaveforms()  # refresh list
         return name
 
     def AddMarker(self, mkHighBeg, mkFlag, mkHighWidth=200, mkLength=2400):
         name = self._mkMarkerName(mkHighBeg, mkFlag)
         if name in self._wfList:
-            return name # do not need to add
+            return name  # do not need to add
         self.writeMarkerPattern(mkHighBeg, mkFlag, mkHighWidth, mkLength)
-        self._wfList = self._listWaveforms() # refresh list
+        self._wfList = self._listWaveforms()  # refresh list
         return name
 
     def writePulseSequences(self, positions, waitMode=AWG70002.SequenceItem.TriggerMode.TriggerA):
@@ -530,15 +532,15 @@ class AWG70002PM(AWG70002):
         for wfBegPos in positions:
             wfname = self.AddWaveform(wfBegPos)
             seqlist.append(AWG70002.SequenceItem(wfname, waitMode))
-        print(time.asctime()+" Seq pack OK.")
-        seqname="AutoWavSeq%d" % self._idxseq
+        print(time.asctime() + " Seq pack OK.")
+        seqname = "AutoWavSeq%d" % self._idxseq
         self.writeSequence(seqname, seqlist)
-        print(time.asctime()+" Seq write OK.")
+        print(time.asctime() + " Seq write OK.")
         self._assignSequence(1, seqname)
         self._idxseq += 1
 
     def writeMarkerSequences(self, positions, mkflag, waitMode=AWG70002.SequenceItem.TriggerMode.TriggerA):
-        if len(positions)>self.maxSeqSteps:
+        if len(positions) > self.maxSeqSteps:
             raise Exception("Input Sequence too Large: ", positions,
                             ", Limit=", self.maxSeqSteps)
         seqlist = []
@@ -546,10 +548,10 @@ class AWG70002PM(AWG70002):
         for mkBegPos, mkchan in zip(positions, mkflag):
             mkname = self.AddMarker(mkBegPos, mkchan)
             seqlist.append(AWG70002.SequenceItem(mkname, waitMode))
-        print(time.asctime()+" Seq pack OK.")
-        seqname="AutoMkSeq%d"%self._idxseq
+        print(time.asctime() + " Seq pack OK.")
+        seqname = "AutoMkSeq%d" % self._idxseq
         self.writeSequence(seqname, seqlist)
-        print(time.asctime()+" Seq write OK.")
+        print(time.asctime() + " Seq write OK.")
         self._assignSequence(1, seqname)
         self._idxseq += 1
 
@@ -557,7 +559,7 @@ class AWG70002PM(AWG70002):
         # You do not want to use this for large file, the loading is toooo slow.
         with open(path, 'w', newline='') as csvfile:
             scw = csv.writer(csvfile)
-            seqname="AutoSeq%d" % self._idxseq
+            seqname = "AutoSeq%d" % self._idxseq
             scw.writerow(['AWG Sequence Definition'])
             scw.writerow(['Sequence Name', seqname])
             scw.writerow(['Sample Rate', 1E10])
@@ -641,8 +643,8 @@ class AWGEncoder:
         self.firstPulseMode = False
         self.specifiedRandomNumber = -1
         self.ampDecoyZ = 1
-        self.ampDecoyX = 0.8
-        self.ampDecoyY = 0.4
+        self.ampDecoyX = 0.4
+        self.ampDecoyY = 0.8
         self.ampDecoyZSlope = 0
         self.ampDecoyXSlope = 0
         self.ampDecoyYSlope = 0
@@ -666,11 +668,18 @@ class AWGEncoder:
         self.betterAMTimeAmpPulse0 = 1
         self.betterAMTimeAmpPulse1 = 1
         self.advancedPM = True
+        self.pulsePairMode = False
 
     def _ampModDecoy(self, pulseIndex, randomNumber):
-        if pulseIndex == 0:
-            return [self.ampDecoyO, self.ampDecoyX, self.ampDecoyY, self.ampDecoyZ][int(randomNumber / 2)]
+        if not self.pulsePairMode:
+            if pulseIndex == 0:
+                return [self.ampDecoyO, self.ampDecoyX, self.ampDecoyY, self.ampDecoyZ][int(randomNumber / 2)]
+            else:
+                return 0
         else:
+            if pulseIndex >= 0:
+                if randomNumber + pulseIndex != 7:
+                    return [self.ampDecoyO, self.ampDecoyX, self.ampDecoyY, self.ampDecoyZ][int(randomNumber / 2)]
             return 0
 
     def _ampModDecoySlope(self, pulseIndex, randomNumber):
@@ -750,20 +759,20 @@ class AWGEncoder:
             'PM': ModulatorConfig(self.pulseWidthPhase / waveformPeriod, self.delayPhase,
                                   self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength,
                                   self._ampModPhase),
-            'AMLaser': ModulatorConfig(self.pulseWidthLaser / waveformPeriod, self.delayLaser,
-                                       self.interferometerDiff / waveformPeriod, waveformPeriodLength,
-                                       self.waveformLength, self._ampModLaser),
-            'AMSync': ModulatorConfig(self.pulseWidthSync / waveformSyncPeriod, self.delaySync,
-                                      self.interferometerDiff / waveformSyncPeriod, waveformSyncPeriodLength,
-                                      self.waveformLength, self._ampModSinglePulse)
+            'Laser': ModulatorConfig(self.pulseWidthLaser / waveformPeriod, self.delayLaser,
+                                     self.interferometerDiff / waveformPeriod, waveformPeriodLength,
+                                     self.waveformLength, self._ampModLaser),
+            'Sync': ModulatorConfig(self.pulseWidthSync / waveformSyncPeriod, self.delaySync,
+                                    self.interferometerDiff / waveformSyncPeriod, waveformSyncPeriodLength,
+                                    self.waveformLength, self._ampModSinglePulse)
         }
 
         waveforms = {}
         for waveformName in modulatorConfigs.keys():
             config = modulatorConfigs.get(waveformName)
             waveform = config.generateWaveform(self.randomNumbers,
-                                               'AMLaser'.__eq__(waveformName) and self.firstPulseMode)
-            waveforms[waveformName] = waveform
+                                               'Laser'.__eq__(waveformName) and self.firstPulseMode)
+            waveforms[waveformName] = np.array(waveform)
 
         return waveforms
 
@@ -841,6 +850,9 @@ class AWGDev:
         elif 'advancedPM'.__eq__(key):
             self.encoder.advancedPM = value
 
+        elif 'pulsePairMode'.__eq__(key):
+            self.encoder.pulsePairMode = value
+
         else:
             raise RuntimeError('Bad configuration')
 
@@ -848,6 +860,7 @@ class AWGDev:
         import threading
         def g():
             self.generateNewWaveform()
+
         threading.Thread(target=g).start()
 
     def generatingNewWaveform(self):
@@ -861,34 +874,13 @@ class AWGDev:
         t1 = time.time()
 
         waveforms = self.encoder.generateWaveforms()
-        waveform1 = waveforms['AMDecoy']
-        marker11 = waveforms['AMLaser']
-        marker12 = waveforms['AMSync']
-        waveform2 = waveforms['AMTime1']
-        marker21 = waveforms['PM']
-        marker22 = waveforms['AMTime2']
-
-        if not self.encoder.betterAMTimeA:
-            wft = waveform2
-            waveform2 = marker21
-            marker21 = wft
-
-        waveform1 = [(w * 2 - 1) for w in waveform1]
-        waveform2 = [(w * 2 - 1) for w in waveform2]
-        marker11 = [0 if w == 0 else 1 for w in marker11]
-        marker12 = [0 if w == 0 else 1 for w in marker12]
-        marker21 = [0 if w == 0 else 1 for w in marker21]
-        marker22 = [0 if w == 0 else 1 for w in marker22]
-
-        marker1 = [[marker11[i], marker12[i]] for i in range(0, len(waveform1))]
-        marker2 = [[marker21[i], marker22[i]] for i in range(0, len(waveform2))]
-
+        reformedWaveforms = reformWaveforms(waveforms, self.encoder.betterAMTimeA)
         t2 = time.time()
 
-        self.dev.writeWaveform("Waveform1", waveform1)
-        self.dev.addMarker('Waveform1', marker1)
-        self.dev.writeWaveform("Waveform2", waveform2)
-        self.dev.addMarker('Waveform2', marker2)
+        self.dev.writeWaveform("Waveform1", reformedWaveforms[0])
+        self.dev.addMarker('Waveform1', reformedWaveforms[1])
+        self.dev.writeWaveform("Waveform2", reformedWaveforms[2])
+        self.dev.addMarker('Waveform2', reformedWaveforms[3])
         self.dev.assignOutput(1, "Waveform1")
         self.dev.assignOutput(2, "Waveform2")
         self.dev._setOutput(1, True)
@@ -896,7 +888,7 @@ class AWGDev:
 
         t3 = time.time()
 
-        print('Waveform generated in {} s, and applied in {} s'.format(t2-t1, t3-t2))
+        print('Waveform generated in {} s, and applied in {} s'.format(t2 - t1, t3 - t2))
         self.generatingWaveform = False
 
     def startPlay(self):
@@ -909,31 +901,63 @@ class AWGDev:
         self.dev.close()
 
 
+def reformWaveforms(waveforms, betterAMTimeA):
+    waveform1 = waveforms['AMDecoy']
+    marker11 = waveforms['Laser']
+    marker12 = waveforms['Sync']
+    waveform2 = waveforms['AMTime1']
+    marker21 = waveforms['PM']
+    marker22 = waveforms['AMTime2']
+
+    if not betterAMTimeA:
+        wft = waveform2
+        waveform2 = marker21
+        marker21 = wft
+
+    waveform1 = waveform1 * 2 - 1
+    waveform2 = waveform2 * 2 - 1
+
+    marker11 = np.array(marker11 > 0, dtype=int)
+    marker12 = np.array(marker12 > 0, dtype=int)
+    marker21 = np.array(marker21 > 0, dtype=int)
+    marker22 = np.array(marker22 > 0, dtype=int)
+    marker1 = np.column_stack((marker11, marker12))
+    marker2 = np.column_stack((marker21, marker22))
+
+    return (waveform1, marker1, waveform2, marker2)
+
 
 if __name__ == "__main__":
-    # encoder = AWGEncoder()
-    # encoder.randomNumbers = [0,1,2,3,4,5,6,7]
-    # encoder.waveformLength = len(encoder.randomNumbers) * 250
-    # encoder.firstPulseMode = True
-    # startTime = time.time()
-    # waveforms = encoder.generateWaveforms()
-    # stopTime = time.time()
-    # print('finished in {} s'.format(stopTime - startTime))
-    #
-    # import matplotlib.pyplot as plt
-    # waveform = waveforms['AMTime1']
-    # # waveform = waveforms['AMSync']
-    # # waveform = waveforms['AMLaser']
-    # plt.plot([i for i in range(0, len(waveform))], waveform)
-    # plt.show()
+    encoder = AWGEncoder()
+    encoder.randomNumbers = [0, 1, 2, 3, 4, 5, 6, 7]
+    encoder.waveformLength = len(encoder.randomNumbers) * 250
+    encoder.syncPeriod = 80
+    encoder.firstPulseMode = False
+    # encoder.pulsePairMode = False
+    encoder.pulsePairMode = True
+    startTime = time.time()
+    waveforms = encoder.generateWaveforms()
+    stopTime = time.time()
+    print('finished in {} s'.format(stopTime - startTime))
 
-    import Pydra
-    dev = AWGDev()
+    import matplotlib.pyplot as plt
+
+    waveform = waveforms['AMDecoy']
+    # waveform = waveforms['AMTime1']
+    # waveform = waveforms['AMTime2']
+    # waveform = waveforms['Sync']
+    # waveform = waveforms['Laser']
+    # waveform = waveforms['PM']
+    plt.plot([i for i in range(0, len(waveform))], waveform)
+    plt.show()
+
+    # import Pydra
+    # dev = AWGDev()
     # session = Pydra.Session.newSession(('192.168.25.27',20102), dev, 'AWG-MDI-Alice')
-    randomNumbersAlice = [0 for i in range(4000)]
-    waveformLength = len(randomNumbersAlice) * 250
-    dev.configure("waveformLength", waveformLength)
-    dev.configure("syncPeriod", 250)
-    dev.configure("firstLaserPulseMode", False)
-    dev.setRandomNumbers(randomNumbersAlice)
-    dev.generateNewWaveform()
+    # randomNumbersAlice = [0 for i in range(100000)]
+    # waveformLength = len(randomNumbersAlice) * 250
+    # dev.configure("waveformLength", waveformLength)
+    # dev.configure("syncPeriod", 250)
+    # dev.configure("firstLaserPulseMode", False)
+    # dev.setRandomNumbers(randomNumbersAlice)
+    # dev.generateNewWaveform()
