@@ -85,7 +85,7 @@ class Parser(dataPair: Tuple2[Path, Path], resultPath: Path) {
     Files.copy(resultInnerPath.resolve("CountChannelRelations.png"), Paths.get(resultInnerPath.toString + ".png"), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING)
     val halfRatios = Range(0, 40).map(i => math.pow(1.1, i))
     val ratios = halfRatios.reverse.dropRight(1).map(a => 1 / a) ++ halfRatios
-    showHOMandQBERs(List(1e-10) ++ Range(1, 81).toList.map(i => i / 100.0), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
+    showHOMandQBERs(List(1e-10) ++ Range(1, 100).toList.map(i => i / 100.0), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
   }
 
   private def loadMsgpackEntries(path: Path) = {

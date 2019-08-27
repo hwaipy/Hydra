@@ -55,7 +55,7 @@ object TDCParser extends JFXApp {
 
   lazy val client = MessageClient.newClient(parameters.named.get("host") match {
     case Some(host) => host
-    case None => "192.168.25.27"
+    case None => "172.16.60.199"
   }, parameters.named.get("port") match {
     case Some(port) => port.toInt
     case None => 20102

@@ -654,7 +654,7 @@ class AWGEncoder:
         self.pulseWidthLaser = 3
         self.pulseWidthTime0 = 2
         self.pulseWidthTime1 = 2
-        self.pulseWidthPhase = 2
+        self.pulseWidthPM = 2
         self.pulseWidthSync = 2
         self.interferometerDiff = 3
         self.delayDecoy = 0
@@ -756,7 +756,7 @@ class AWGEncoder:
             'AMTime2': ModulatorConfig(self.pulseWidthTime1 / waveformPeriod, self.delayTime2,
                                        self.interferometerDiff / waveformPeriod, waveformPeriodLength,
                                        self.waveformLength, self._ampModTime),
-            'PM': ModulatorConfig(self.pulseWidthPhase / waveformPeriod, self.delayPhase,
+            'PM': ModulatorConfig(self.pulseWidthPM / waveformPeriod, self.delayPhase,
                                   self.interferometerDiff / waveformPeriod, waveformPeriodLength, self.waveformLength,
                                   self._ampModPhase),
             'Laser': ModulatorConfig(self.pulseWidthLaser / waveformPeriod, self.delayLaser,
@@ -808,8 +808,8 @@ class AWGDev:
             self.encoder.pulseWidthTime0 = value
         elif 'pulseWidthTime1'.__eq__(key):
             self.encoder.pulseWidthTime1 = value
-        elif 'pulseWidthPhase'.__eq__(key):
-            self.encoder.pulseWidthPhase = value
+        elif 'pulseWidthPM'.__eq__(key):
+            self.encoder.pulseWidthPM = value
         elif 'pulseWidthLaser'.__eq__(key):
             self.encoder.pulseWidthLaser = value
         elif 'pulseWidthSync'.__eq__(key):
@@ -929,12 +929,13 @@ def reformWaveforms(waveforms, betterAMTimeA):
 
 if __name__ == "__main__":
     encoder = AWGEncoder()
-    encoder.randomNumbers = [0, 1, 2, 3, 4, 5, 6, 7]
+    encoder.randomNumbers = [6] * 8
     encoder.waveformLength = len(encoder.randomNumbers) * 250
     encoder.syncPeriod = 80
     encoder.firstPulseMode = False
     # encoder.pulsePairMode = False
     encoder.pulsePairMode = True
+    encoder.pulseWidthTime0 = 1
     startTime = time.time()
     waveforms = encoder.generateWaveforms()
     stopTime = time.time()
@@ -942,8 +943,8 @@ if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
 
-    waveform = waveforms['AMDecoy']
-    # waveform = waveforms['AMTime1']
+    # waveform = waveforms['AMDecoy']
+    waveform = waveforms['AMTime1']
     # waveform = waveforms['AMTime2']
     # waveform = waveforms['Sync']
     # waveform = waveforms['Laser']

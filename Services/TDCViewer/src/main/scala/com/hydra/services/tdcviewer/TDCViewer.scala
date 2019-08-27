@@ -59,7 +59,7 @@ object TDCViweer extends JFXApp {
 
   val client = MessageClient.newClient(parameters.named.get("host") match {
     case Some(host) => host
-    case None => "192.168.25.27"
+    case None => "172.16.60.199"
   }, parameters.named.get("port") match {
     case Some(port) => port.toInt
     case None => 20102
@@ -529,12 +529,16 @@ object TDCViweer extends JFXApp {
     val x0: Double = fit(1)
     val sigma: Double = fit(2)
     val fittedYData = recentXData.get.map(x => a * math.exp(-math.pow((x - x0), 2) / (2 * math.pow(sigma, 2))))
-    gaussianFitResult set Map("Peak" -> x0, "FWHM" -> sigma * 2.35)
+
+    val maxIndex = recentHistogram.get.indexOf(recentHistogram.get.max)
+    val maxT = recentXData.get()(maxIndex)
+
+    gaussianFitResult set Map("Peak" -> x0, "FWHM" -> sigma * 2.35, "Max" -> maxT)
     Platform.runLater(() => {
       println("update")
       fitSeries.data = (recentXData.get zip fittedYData).map(toChartData)
       fitSeriesLog.data = (recentXData.get zip fittedYData).map(toChartData)
-      fitResult.text = s"Peak: ${timeDomainNotation(x0)}, FWHM: ${timeDomainNotation(sigma * 2.35)}"
+      fitResult.text = s"Max:${maxT}, Peak: ${timeDomainNotation(x0)}, FWHM: ${timeDomainNotation(sigma * 2.35)}"
     })
     val pw = new PrintWriter(new FileOutputStream("Fit.csv", true))
     pw.println(s"${System.currentTimeMillis()}, ${x0}, ${sigma *2.35}")
