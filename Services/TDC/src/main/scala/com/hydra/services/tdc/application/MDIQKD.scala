@@ -307,6 +307,20 @@ class MDIQKDQBERAnalyser(channelCount: Int) extends DataAnalyser {
     map.put(s"HOM Sections", homSections)
     map.put(s"HOM Sections Detail", s"4*100 Array. 100 for 100 sections. 4 for: X-X, 0&0 without and with delays; All, 0&0 without and with delays")
 
+    val ccsAllOtherLeftCoincidences = Range(-14, 10).toList.map(delta => generateCoincidences(validItem1s.iterator, validItem2s.map(i => (i._1 + delta, i._2, i._3, i._4)).iterator).filter(c => (c.r1 == 0) && (c.r2 == 0)))
+    val ccsAllOtherOverallCoincidences = ccsAllOtherLeftCoincidences ++ ccsAllOtherCoincidences
+
+    def statisticCoincidenceSections(cl: List[Coincidence]) = {
+      val sections = new Array[Int](qberSectionCount)
+      cl.foreach(c => {
+        val sectionIndex = ((c.triggerTime - dataBlock.dataTimeBegin).toDouble / (dataBlock.dataTimeEnd - dataBlock.dataTimeBegin) * qberSectionCount).toInt
+        if (sectionIndex >= 0 && sectionIndex < qberSections.size) sections(sectionIndex) += 1
+      })
+      sections
+    }
+    val ccsAllOtherOverallCoincidencesSections = ccsAllOtherOverallCoincidences.map(statisticCoincidenceSections)
+    map.put(s"HOM Detailed Sections", ccsAllOtherOverallCoincidencesSections)
+
     val channelMonitorSyncList = dataBlock.content(channelMonitorSyncChannel)
     map.put("ChannelMonitorSync", Array[Long](dataBlock.dataTimeBegin, dataBlock.dataTimeEnd) ++ (channelMonitorSyncList.size match {
       case s if s > 10 => {
