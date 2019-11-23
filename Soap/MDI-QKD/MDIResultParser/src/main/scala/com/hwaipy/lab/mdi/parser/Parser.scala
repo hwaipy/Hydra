@@ -12,7 +12,7 @@ import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 
 class ParserMonitor(monitoringPath: Path, resultPath: Path, startTime: Date, stopTime: Date) {
-  private val executor = Executors.newFixedThreadPool(8)
+  private val executor = Executors.newFixedThreadPool(1)
   private val executionContext = ExecutionContext.fromExecutor(executor)
 
   def perform = {
@@ -251,15 +251,16 @@ class HOMandQBEREntry(val threshold: Double, val ratio: Double, val totalSection
 
 object Parser extends App {
   val format = new SimpleDateFormat("yyyyMMdd-hhmmss.SSS")
-  val startTime = format.parse("20190101-000000.000")
+  val startTime = format.parse("20190901-000000.000")
   val stopTime = format.parse("20191231-235959.999")
-    val rootPath = Paths.get("E:\\MDIQKD_Parse\\RawData")
+    val rootPath = Paths.get("E:\\MDIQKD_Parse\\Parsing")
 //  val rootPath = Paths.get("/Users/hwaipy/Desktop/MDI")
   val availableDates = Files.list(rootPath).iterator.asScala.toList.filter(p => p.getFileName.toString.size == 8).sorted
   val availableRuns = availableDates.map(date => Files.list(date).iterator.asScala.toList.filter(p => p.getFileName.toString.toLowerCase.startsWith("run") && !p.getFileName.toString.toLowerCase.endsWith("parsed"))).flatten.sorted
   println(s"Parsing ${availableRuns.size} runs in ${availableDates.size} days.")
 
   availableRuns.foreach(runPath => {
+    println(runPath)
     val monitor = new ParserMonitor(runPath, Paths.get(runPath.toString + "-parsed"), startTime, stopTime)
     monitor.performAndStop
   })

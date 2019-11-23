@@ -950,15 +950,15 @@ if __name__ == "__main__":
     # waveform = waveforms['Laser']
     # waveform = waveforms['PM']
     plt.plot([i for i in range(0, len(waveform))], waveform)
-    plt.show()
+    # plt.show()
 
     # import Pydra
-    # dev = AWGDev()
+    dev = AWGDev()
     # session = Pydra.Session.newSession(('192.168.25.27',20102), dev, 'AWG-MDI-Alice')
-    # randomNumbersAlice = [0 for i in range(100000)]
-    # waveformLength = len(randomNumbersAlice) * 250
-    # dev.configure("waveformLength", waveformLength)
-    # dev.configure("syncPeriod", 250)
-    # dev.configure("firstLaserPulseMode", False)
-    # dev.setRandomNumbers(randomNumbersAlice)
-    # dev.generateNewWaveform()
+    randomNumbersAlice = [0 for i in range(100000)]
+    waveformLength = len(randomNumbersAlice) * 250
+    dev.configure("waveformLength", waveformLength)
+    dev.configure("syncPeriod", 250)
+    dev.configure("firstLaserPulseMode", False)
+    dev.setRandomNumbers(randomNumbersAlice)
+    dev.generateNewWaveform()
