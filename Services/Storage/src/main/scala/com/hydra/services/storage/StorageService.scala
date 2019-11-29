@@ -229,6 +229,13 @@ class StorageService(basePath: Path, clientName: String, descriptionFile: String
     data
   }
 
+  def FSFileReadTailFramesFrom(user: String, path: String, from: Int, count: Int, offset: Long) = {
+    storage.updatePermission(new Permission(user))
+    val data = storage.FSFileReadTailFrames(path, from, count, offset)
+    storage.clearPermission
+    data
+  }
+
   def FSFileReadAllFrames(user: String, path: String) = {
     storage.updatePermission(new Permission(user))
     val data = storage.FSFileReadAllFrames(path)

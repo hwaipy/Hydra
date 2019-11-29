@@ -2,7 +2,7 @@ __author__ = 'Hwaipy'
 
 from Instruments import DeviceException, VISAInstrument
 import enum
-
+import numpy as np
 
 class KeySight_MultiMeter_34465A(VISAInstrument):
     manufacturer = 'Keysight Technologies'
@@ -46,8 +46,8 @@ class KeySight_MultiMeter_34465A(VISAInstrument):
 
 
 class KeySight_MultiMeter_34470A(KeySight_MultiMeter_34465A):
-    manufacturer = 'Keysight Technologies'
-    model = '34470A'
+    manufacturer = 'Agilent Technologies'
+    model = '34410A'
 
     def __init__(self, resourceID):
         super().__init__(resourceID)
@@ -75,6 +75,8 @@ class MultiMeterServiceWrap:
     def directMeasure(self, count=1):
         return self.dev.directMeasure(count)
 
+    def directMeasureAndFetchLater(self, count=1):
+        return self.dev.directMeasureAndFetchLater(count)
 
 if __name__ == '__main__':
     # import argparse
@@ -101,7 +103,7 @@ if __name__ == '__main__':
     # name = args.service_name
     #
     # model = '34470A'
-    visaResource = 'TCPIP0::192.168.25.56::inst0::INSTR'
+    visaResource = 'TCPIP0::192.168.25.110::inst0::INSTR'
     # hydraAddress = '192.168.25.27'
     # hydraPort = 20102
     # name = 'DMM2'
@@ -109,7 +111,7 @@ if __name__ == '__main__':
     # print("here")
 
     # if model == '34470A':
-    dev = KeySight_MultiMeter_34470A(visaResource)
+    dev = KeySight_MultiMeter_34465A(visaResource)
     # elif model == '34465A':
     #     dev = KeySight_MultiMeter_34465A(visaResource)
     # else:
@@ -124,11 +126,16 @@ if __name__ == '__main__':
     # dev.close()
 
     wrap = MultiMeterServiceWrap(dev)
-    wrap.setDCVoltageMeasurement(0.001, False, 0.0002)
+    wrap.setDCCurrentMeasurement(2, True, 0.005)
     while True:
-        r = wrap.directMeasure(5000)
-        print(max(r))
-        file = open('{}.csv'.format(time.time()), 'w')
-        for rr in r:
-            file.write('{}\n'.format(rr))
-        file.close()
+        r = wrap.directMeasure(200)
+        npr = np.array(r)
+
+        print('{}, {}'.format(np.average(npr), np.std(npr)))
+        # print(max(r))
+        # file = open('{}.csv'.format(time.time()), 'w')
+        # for rr in r:
+        #     file.write('{}\n'.format(rr))
+        # file.close()
+
+

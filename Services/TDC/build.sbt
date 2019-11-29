@@ -12,3 +12,4 @@ scalacOptions ++= Seq("-deprecation")
 scalacOptions ++= Seq("-Xlint")
 //scalacOptions ++= Seq("-Xlint:unchecked")
 //fork := true
+scalacOptions += "-target:jvm-1.8"

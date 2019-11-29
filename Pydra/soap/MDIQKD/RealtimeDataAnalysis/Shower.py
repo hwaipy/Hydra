@@ -269,8 +269,8 @@ class Shower:
 
 
 if __name__ == '__main__':
-    start = '20190805-032900'
-    stop = '20190805-044000'
+    start = '20190725-004900'
+    stop = '20190725-010600'
 
     resultDir = '/Users/Hwaipy/Desktop/MDI/results' if debug else 'D:\\Experiments\\MDIQKD\\RealTimeData\\Result'
 

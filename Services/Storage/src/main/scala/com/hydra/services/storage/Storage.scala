@@ -110,9 +110,9 @@ class Storage(val basePath: Path) {
     FrameStreamStorageElementExtension.load(element).readHeadFrames(from, count)
   }
 
-  def FSFileReadTailFrames(path: String, from: Int, count: Int) = {
+  def FSFileReadTailFrames(path: String, from: Int, count: Int, offset: Long = 0) = {
     val element = getStorageElement(path)
-    FrameStreamStorageElementExtension.load(element).readTailFrames(from, count)
+    FrameStreamStorageElementExtension.load(element).readTailFrames(from, count, offset)
   }
 
   def FSFileReadAllFrames(path: String) = {
@@ -663,9 +663,9 @@ class FrameStreamStorageElementExtension(val element: StorageElement) {
     frames.toList
   }
 
-  def readTailFrames(from: Int, count: Int) = {
+  def readTailFrames(from: Int, count: Int, offset: Long = 0) = {
     val frames = ListBuffer[Array[Byte]]()
-    val position = new AtomicLong(element.size)
+    val position = new AtomicLong(element.size - offset)
     Range(0, from + count).foreach(i => {
       val frameOption = readFrameBackward(position.get)
       frameOption match {

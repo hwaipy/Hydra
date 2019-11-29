@@ -181,10 +181,13 @@ class VolatileConfiguration:
 
 
 if __name__ == '__main__':
-    rndRoot = 'D:\\Dropbox\\Labwork\\Projects\\_2017-10-26 MDI-QKD\\2019-08-05 随机数生成\\'
+    rndRoot = 'C:\\Users\\Administrator\\Desktop\\MDIConfig\\'
     configRoot = 'C:\\Users\\Administrator\\Desktop\\MDIConfig\\'
-    randomNumbersAlice = [int(i) for i in list(np.load(r"{}A.npy".format(rndRoot)))]
-    randomNumbersBob = [int(i) for i in list(np.load(r"{}B.npy".format(rndRoot)))]
+    # randomNumbersAlice = [int(i) for i in list(np.load(r"{}A.npy".format(rndRoot)))]
+    # randomNumbersBob = [int(i) for i in list(np.load(r"{}B.npy".format(rndRoot)))]
+
+    randomNumbersAlice = ([6]*10000)[:10000]
+    randomNumbersBob = ([6]*10000)[:10000]
 
     # import random
     # rnd = random.Random()
