@@ -94,6 +94,9 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
   private val timeUnitSize = 1000000000000l
 
   private def feedTimeEvent(channel: Int, time: Long) {
+    if (channel < 4 && channel > 0) println(time)
+
+
     if (time > unitEndTime) {
       if (unitEndTime == Long.MinValue) unitEndTime = time
       else flush

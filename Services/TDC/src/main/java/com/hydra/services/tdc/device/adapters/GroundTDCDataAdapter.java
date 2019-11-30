@@ -37,7 +37,7 @@ public class GroundTDCDataAdapter implements TDCDataAdapter {
         }
         this.channelCount = channelCount;
         channelBit = (int) Math.ceil(Math.log(channelCount) / Math.log(2));
-        System.out.println(channelBit);
+//        System.out.println(channelBit);
         maxTime = Long.MAX_VALUE >> channelBit;
     }
 

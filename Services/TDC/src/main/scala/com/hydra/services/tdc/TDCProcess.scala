@@ -4,9 +4,9 @@ import java.util.concurrent.atomic.AtomicReference
 
 import com.hydra.core.MessagePack
 import com.hydra.io.{BlockingRemoteObject, MessageClient}
-import com.hydra.services.tdc.adapters.SimpleTDCDataAdapter
 import com.hydra.services.tdc.application.{MDIQKDEncodingAnalyser, MDIQKDQBERAnalyser}
 import com.hydra.services.tdc.device.adapters.GroundTDCDataAdapter
+import com.hydra.services.tdc.test.LocalTDCDataFeeder
 
 import scala.collection.mutable
 import scala.io.Source
@@ -19,16 +19,20 @@ object TDCProcess extends App {
   })
 
   val DEBUG = parameters.get("debug").getOrElse("false").toBoolean
+  val LOCAL = true
 
   val port = 20156
   val process = new TDCProcessService(port)
-  val client = MessageClient.newClient(parameters.get("server").getOrElse("192.168.25.27"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
-  process.postInit(client)
+  val clientOption = if (LOCAL) None else {
+    val client = MessageClient.newClient(parameters.get("server").getOrElse("192.168.25.27"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
+    process.postInit(client)
+    Some(client)
+  }
 
-  process.turnOnAnalyser("Counter")
-  process.turnOnAnalyser("Histogram", Map("Sync" -> 0, "Signal" -> 1, "ViewStart" -> -100000, "ViewStop" -> 100000))
-  process.turnOnAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "Period" -> 10000, "SignalChannel" -> 1, "TriggerChannel" -> 0))
-  process.turnOnAnalyser("MDIQKDQBER", Map())
+//  process.turnOnAnalyser("Counter")
+//  process.turnOnAnalyser("Histogram", Map("Sync" -> 0, "Signal" -> 1, "ViewStart" -> -100000, "ViewStop" -> 100000))
+//  process.turnOnAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "Period" -> 10000, "SignalChannel" -> 1, "TriggerChannel" -> 0))
+//  process.turnOnAnalyser("MDIQKDQBER", Map())
 
   println("Ground TDC Process started on port 20156.")
 
@@ -37,10 +41,14 @@ object TDCProcess extends App {
     //    SimpleTDCDataGenerator.launch(port, 1000)
     //    process.configureAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> SimpleTDCDataGenerator.randomNumbers.map(_.RN).toList))
   }
+  if (LOCAL) {
+    println("LOCAL mode, starting LocalTDCDataFeeder.")
+    LocalTDCDataFeeder.feed(process, port)
+  }
 
-  Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
+  if (!LOCAL) Source.stdin.getLines.filter(line => line.toLowerCase == "q").next
   println("Stoping Ground TDC Process...")
-  client.stop
+  clientOption.foreach(_.stop)
   process.stop
   if (DEBUG) {
     //    SimpleTDCDataGenerator.shutdown()
@@ -50,9 +58,9 @@ object TDCProcess extends App {
 class TDCProcessService(port: Int) {
   private val channelCount = 16
   private val groundTDA = new GroundTDCDataAdapter(channelCount)
-  private val simpleTDA = new SimpleTDCDataAdapter(channelCount)
+  //  private val simpleTDA = new SimpleTDCDataAdapter(channelCount)
   private val dataTDA = new LongBufferToDataBlockListTDCDataAdapter(channelCount)
-  private val server = new TDCProcessServer(channelCount, port, dataIncome, List(if (TDCProcess.DEBUG) simpleTDA else groundTDA, dataTDA))
+  private val server = new TDCProcessServer(channelCount, port, dataIncome, List(groundTDA, dataTDA))
   private val analysers = mutable.HashMap[String, DataAnalyser]()
   private val pathRef = new AtomicReference[String]("/test/tdc/default.fs")
   private val storageRef = new AtomicReference[BlockingRemoteObject](null)
@@ -72,7 +80,6 @@ class TDCProcessService(port: Int) {
     val result = new mutable.HashMap[String, Any]()
     analysers.map(e => (e._1, e._2.dataIncome(dataBlock))).filter(e => e._2.isDefined).foreach(e => result(e._1) = e._2.get)
     result("Time") = System.currentTimeMillis()
-    println(System.currentTimeMillis() - dataBlock.creationTime)
     val bytes = MessagePack.pack(result)
     if (storageRef.get != null) storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
   }
