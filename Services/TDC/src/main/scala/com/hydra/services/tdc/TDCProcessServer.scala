@@ -1,5 +1,6 @@
 package com.hydra.services.tdc
 
+import java.io.FileOutputStream
 import java.net.ServerSocket
 import java.nio.LongBuffer
 import java.util.concurrent.Executors
@@ -11,6 +12,7 @@ import com.hydra.services.tdc.device.{TDCDataAdapter, TDCParser}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import com.hydra.`type`.NumberTypeConversions._
+import com.hydra.core.Message
 
 class TDCProcessServer(val channelCount: Int, port: Int, dataIncome: Any => Unit, adapters: List[TDCDataAdapter]) {
   private val executionContext = ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor((r) => {
@@ -95,8 +97,6 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
 
   private def feedTimeEvent(channel: Int, time: Long) {
     if (channel < 4 && channel > 0) println(time)
-
-
     if (time > unitEndTime) {
       if (unitEndTime == Long.MinValue) unitEndTime = time
       else flush
@@ -112,7 +112,18 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
   }
 }
 
-class DataBlock(val content: Array[Array[Long]], val creationTime: Long, val dataTimeBegin: Long, val dataTimeEnd: Long)
+class DataBlock(val content: Array[Array[Long]], val creationTime: Long, val dataTimeBegin: Long, val dataTimeEnd: Long) {
+  def pack() = {
+    val start = System.nanoTime()
+    val message = Message.wrap(Map("Content" -> content, "CreationTime" -> creationTime, "DataTime" -> List(dataTimeBegin, dataTimeEnd)))
+    val out = new FileOutputStream("D:\\TEMP\\test.dat.dump")
+    val bytes = message.pack
+    out.write(bytes)
+    out.close()
+    val stop = System.nanoTime()
+    println(s"${(stop - start) / 1e9} s with ${bytes.size} bytes")
+  }
+}
 
 abstract class DataAnalyser {
   protected val on = new AtomicBoolean(false)

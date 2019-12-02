@@ -66,7 +66,7 @@ public class TDCParser {
             }
         }
         if (size > bufferSize) {
-//            System.out.println("Overflow!!!");
+            System.out.println("Overflow!!!");
         } else {
             dataQueue.offer(data);
         }

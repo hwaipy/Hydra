@@ -82,6 +82,8 @@ class TDCProcessService(port: Int) {
     result("Time") = System.currentTimeMillis()
     val bytes = MessagePack.pack(result)
     if (storageRef.get != null) storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
+
+//    dataBlock.pack()
   }
 
   def postInit(client: MessageClient) = {

@@ -1,6 +1,6 @@
 package com.hydra.services.tdc.test
 
-import java.io.FileInputStream
+import java.io.{File, FileInputStream}
 import java.net.Socket
 
 import com.hydra.services.tdc.TDCProcessService
@@ -18,17 +18,19 @@ import com.hydra.services.tdc.TDCProcessService
 //import com.hydra.services.tdc.test.TimeEvent._
 //
 object LocalTDCDataFeeder {
-  private val localDataFilePath = "C:\\Users\\Administrator\\Desktop\\20190806021320-A.dat"
+  private val localDataFilePath = "D:\\MDI_RAW\\20190807data\\20190807212438-A.dat"
 
   def feed(process: TDCProcessService, port: Int) = {
     val socket = new Socket("localhost", port)
     val outputStream = socket.getOutputStream
     val fileReadStream = new FileInputStream(localDataFilePath)
     val buffer = new Array[Byte](50000000)
+    val size = new File(localDataFilePath).length()
 
-    Range(0, 100).foreach(_ => {
+    Range(0, (size / buffer.size).toInt).foreach(_ => {
       fileReadStream.read(buffer)
       outputStream.write(buffer)
+      Thread.sleep(3000)
     })
     fileReadStream.close()
     outputStream.flush()
