@@ -260,7 +260,7 @@ object TDCParser extends JFXApp {
       val rndCounts = mdiqkdEncoding.keys.filter(key => key.startsWith("Count of RandomNumber"))
         .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
 
-      val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMap
+      val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMapHOM Side Count
       val pulse0Position = chartTextRegeons(2).fitCenter.get
       val pulse0Width = chartTextRegeons(2).fitWidth.get
       val pulse0Rise = chartTextRegeons(2).fitRise.get

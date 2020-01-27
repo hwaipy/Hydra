@@ -6,7 +6,7 @@ import com.hydra.core.MessagePack
 import com.hydra.io.{BlockingRemoteObject, MessageClient}
 import com.hydra.services.tdc.application.{MDIQKDEncodingAnalyser, MDIQKDQBERAnalyser}
 import com.hydra.services.tdc.device.adapters.GroundTDCDataAdapter
-import com.hydra.services.tdc.test.LocalTDCDataFeeder
+import com.hydra.services.tdc.test.{LocalTDCDataFeeder, MDIQKDReviewer}
 
 import scala.collection.mutable
 import scala.io.Source
@@ -23,16 +23,20 @@ object TDCProcess extends App {
 
   val port = 20156
   val process = new TDCProcessService(port)
-  val clientOption = if (LOCAL) None else {
+  val clientOption = if (LOCAL) {
+    val client = MessageClient.newClient(parameters.get("server").getOrElse("172.16.60.199"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
+    process.postInit(client)
+    Some(client)
+  } else {
     val client = MessageClient.newClient(parameters.get("server").getOrElse("192.168.25.27"), parameters.get("port").getOrElse("20102").toInt, parameters.get("clientName").getOrElse("GroundTDCService"), process)
     process.postInit(client)
     Some(client)
   }
 
-//  process.turnOnAnalyser("Counter")
-//  process.turnOnAnalyser("Histogram", Map("Sync" -> 0, "Signal" -> 1, "ViewStart" -> -100000, "ViewStop" -> 100000))
-//  process.turnOnAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "Period" -> 10000, "SignalChannel" -> 1, "TriggerChannel" -> 0))
-//  process.turnOnAnalyser("MDIQKDQBER", Map())
+  //  process.turnOnAnalyser("Counter")
+  //  process.turnOnAnalyser("Histogram", Map("Sync" -> 0, "Signal" -> 1, "ViewStart" -> -100000, "ViewStop" -> 100000))
+  //  process.turnOnAnalyser("MDIQKDEncoding", Map("RandomNumbers" -> List(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), "Period" -> 10000, "SignalChannel" -> 1, "TriggerChannel" -> 0))
+  //  process.turnOnAnalyser("MDIQKDQBER", Map())
 
   println("Ground TDC Process started on port 20156.")
 
@@ -59,7 +63,7 @@ class TDCProcessService(port: Int) {
   private val channelCount = 16
   private val groundTDA = new GroundTDCDataAdapter(channelCount)
   //  private val simpleTDA = new SimpleTDCDataAdapter(channelCount)
-  private val dataTDA = new LongBufferToDataBlockListTDCDataAdapter(channelCount)
+  val dataTDA = new LongBufferToDataBlockListTDCDataAdapter(channelCount)
   private val server = new TDCProcessServer(channelCount, port, dataIncome, List(groundTDA, dataTDA))
   private val analysers = mutable.HashMap[String, DataAnalyser]()
   private val pathRef = new AtomicReference[String]("/test/tdc/default.fs")
@@ -68,6 +72,7 @@ class TDCProcessService(port: Int) {
   analysers("Histogram") = new HistogramAnalyser(channelCount)
   analysers("MDIQKDEncoding") = new MDIQKDEncodingAnalyser(channelCount)
   analysers("MDIQKDQBER") = new MDIQKDQBERAnalyser(channelCount)
+  if (TDCProcess.LOCAL) analysers("MDIQKDReviewer") = new MDIQKDReviewer(channelCount)
 
   def stop() = server.stop
 
@@ -83,7 +88,7 @@ class TDCProcessService(port: Int) {
     val bytes = MessagePack.pack(result)
     if (storageRef.get != null) storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
 
-//    dataBlock.pack()
+    //    dataBlock.pack()
   }
 
   def postInit(client: MessageClient) = {
