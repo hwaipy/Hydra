@@ -15,6 +15,7 @@ import scala.util.Random
 
 object LocalTDCDataFeeder {
   private val localDataFilePath = "C:\\Users\\Administrator\\Desktop\\20190807212438-A.dat"
+  val localDataStorage = "D:\\Experiments\\MDIQKD\\Local\\raw"
   private val rndFilePath = "D:\\Dropbox\\Labwork\\Projects\\_2017-10-26 MDI-QKD\\2019-09-12 10km文章\\4.其它数据\\2.HOM计算\\3.RandomNumbers\\rnd.csv"
   val rnds = Source.fromFile(rndFilePath).getLines().toList.map(line => line.split(", *").map(_.toInt))
   val offset = 4343l * 6250l * 1 << 28 //7286344908800000

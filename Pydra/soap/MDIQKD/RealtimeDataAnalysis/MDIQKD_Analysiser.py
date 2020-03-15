@@ -167,5 +167,5 @@ class ChannelEntry:
 
 if __name__ == '__main__':
     analysiser = MDIQKD_Analysiser('D:\Experiments\MDIQKD\RealTimeData\Dumped')
-    session = Pydra.Session.newSession(('192.168.25.27', 20102), analysiser, 'MDIQKD-Dumper')
+    session = Pydra.Session.newSession(('172.16.60.199', 20102), analysiser, 'MDIQKD-Dumper')
     analysiser.start()

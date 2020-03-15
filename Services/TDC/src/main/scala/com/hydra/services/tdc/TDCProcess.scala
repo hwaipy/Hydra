@@ -1,5 +1,6 @@
 package com.hydra.services.tdc
 
+import java.io.{BufferedOutputStream, FileOutputStream}
 import java.util.concurrent.atomic.AtomicReference
 
 import com.hydra.core.MessagePack
@@ -86,7 +87,13 @@ class TDCProcessService(port: Int) {
     analysers.map(e => (e._1, e._2.dataIncome(dataBlock))).filter(e => e._2.isDefined).foreach(e => result(e._1) = e._2.get)
     result("Time") = System.currentTimeMillis()
     val bytes = MessagePack.pack(result)
-    if (storageRef.get != null) storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
+    if(TDCProcess.LOCAL){
+      val pw = new BufferedOutputStream(new FileOutputStream(LocalTDCDataFeeder.localDataStorage+"\\" + result("Time") + ".dump"))
+      pw.write(bytes)
+      pw.close()
+    }else{
+      if (storageRef.get != null) storageRef.get.FSFileAppendFrame("", pathRef.get, bytes)
+    }
 
     //    dataBlock.pack()
   }
