@@ -49,27 +49,41 @@ class FTDC(Instrument):
     def increaseCode(self, channel, code):
         self.setCode(channel, self.readCode(channel) + code)
 
+# if __name__ == '__main__':
+#     import sys
+#     import Pydra
+#     import random
+#     import math
+#
+#     # ran = random.Random()
+#     # vs = [0] * 4
+#     # for i in range(0, len(vs)):
+#     #     vs[i] = ran.random() * 14 - 7
+#     # for i in range(0, len(vs)):
+#     #     FTDC('192.168.25.4').setVoltage(i + 1, vs[i])
+#     # for i in range(0, len(vs)):
+#     #     ret = FTDC('192.168.25.4').readVoltage(i + 1)
+#     #     print(math.fabs(ret - vs[i])*1e6)
+#     # sys.exit(0)
+#
+#     session1 = Pydra.Session.newSession(('192.168.25.27', 20102), FTDC('192.168.25.4'), 'FTDC-Alice')
+#     session2 = Pydra.Session.newSession(('192.168.25.27', 20102), FTDC('192.168.25.7'), 'FTDC-Bob')
+#     for line in sys.stdin:
+#         if line == 'q\n':
+#             break
+#     session1.stop()
+#     session2.stop()
+
+
+
 if __name__ == '__main__':
     import sys
     import Pydra
-    import random
-    import math
 
-    # ran = random.Random()
-    # vs = [0] * 4
-    # for i in range(0, len(vs)):
-    #     vs[i] = ran.random() * 14 - 7
-    # for i in range(0, len(vs)):
-    #     FTDC('192.168.25.4').setVoltage(i + 1, vs[i])
-    # for i in range(0, len(vs)):
-    #     ret = FTDC('192.168.25.4').readVoltage(i + 1)
-    #     print(math.fabs(ret - vs[i])*1e6)
-    # sys.exit(0)
+    class AWGService:
+        def start(self):
+            return "Started"
+        def stop(self):
+            return "Stoped"
 
-    session1 = Pydra.Session.newSession(('192.168.25.27', 20102), FTDC('192.168.25.4'), 'FTDC-Alice')
-    session2 = Pydra.Session.newSession(('192.168.25.27', 20102), FTDC('192.168.25.7'), 'FTDC-Bob')
-    for line in sys.stdin:
-        if line == 'q\n':
-            break
-    session1.stop()
-    session2.stop()
+    session = Pydra.Session.newSession(('192.168.25.27', 20102), TestService(), 'TestService')

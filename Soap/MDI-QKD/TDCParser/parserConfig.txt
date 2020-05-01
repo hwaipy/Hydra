@@ -1,0 +1,6 @@
+pulse1Start = 0.0
+pulse1Stop = 1.5
+pulse2Start = 2.0
+pulse2Stop = 3.5
+vacuumStart = 3.6
+vacuumStop = 3.8

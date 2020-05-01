@@ -23,16 +23,16 @@ def riseTimeFit(xs, ys):
     #
 
     # in case there is a large background
-    bgs = ys[int(len(ys) * 0.8):-1]
-    bg = sum(bgs) / len(bgs)
-    ys = [y - bg for y in ys]
+    # bgs = ys[int(len(ys) * 0.8):-1]
+    # bg = sum(bgs) / len(bgs)
+    # ys = [y - bg for y in ys]
 
     SPD = [ys[0]]
     for y in ys[1:]:
         SPD.append(SPD[-1] + y)
     roughRise = 0
     for i in range(0, len(xs)):
-        if SPD[i] > 0.04 * SPD[-1]:
+        if SPD[i] > 0.02 * SPD[-1]:
             roughRise = xs[i]
             break
 

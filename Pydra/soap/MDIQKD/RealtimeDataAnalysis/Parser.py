@@ -16,7 +16,7 @@ class ParserMonitor:
     def __init__(self, storeDir, resultDir, fromNow=True):
         self.storeDir = storeDir
         self.resultDir = resultDir
-        self.lastParsed = datetime.now() if fromNow else datetime.strptime("20190926-205200.000", "%Y%m%d-%H%M%S.%f")
+        self.lastParsed = datetime.now() if fromNow else datetime.strptime("20200429-225700.000", "%Y%m%d-%H%M%S.%f")
         self.fromNow = fromNow
         self.executor = ThreadPoolExecutor(max_workers=8)
 

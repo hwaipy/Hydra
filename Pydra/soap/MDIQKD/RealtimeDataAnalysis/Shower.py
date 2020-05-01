@@ -96,6 +96,7 @@ class Shower:
         ax1.set_ylabel('HOM Dip')
         ax1.set_xlabel('ratios')
         ax1.grid(True,which="both",color="k",ls="--",lw=0.3)
+        ax1.semilogx(ratios,[0.55]*len(ratios),"black")
         ax2 = ax1.twinx()
         ax2.semilogx(ratios, aAll, 'green', label='Side Coincidences')
         ax2.set_ylabel('Side Coincidences')
@@ -269,8 +270,8 @@ class Shower:
 
 
 if __name__ == '__main__':
-    start = '20190725-004900'
-    stop = '20190725-010600'
+    start = '20200501-012120'
+    stop = '20200529-232900'
 
     resultDir = '/Users/Hwaipy/Desktop/MDI/results' if debug else 'D:\\Experiments\\MDIQKD\\RealTimeData\\Result'
 

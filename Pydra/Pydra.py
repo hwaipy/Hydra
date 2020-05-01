@@ -294,6 +294,7 @@ class Session:
         self.unpacker = msgpack.Unpacker(encoding='utf-8', ext_hook=hook)
 
         def createCommunicator():
+            print('cccc')
             sct = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sct.connect(self.address)
             self.socket = sct

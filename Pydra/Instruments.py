@@ -29,7 +29,10 @@ class VISAInstrument(Instrument):
         def stpWrite(*args):
             stp.invokeLater(self.resource.write, *args)
 
-        self.scpi = SCPI(stpQuery, stpWrite)
+        def stpQueryB(*args):
+            return stp.invokeAndWait(self.resource.query_binary_values, *args)
+
+        self.scpi = SCPI(stpQuery, stpWrite, stpQueryB)
         self.verifyIdentity()
 
     def getIdentity(self):

@@ -4,6 +4,7 @@ from Instruments import DeviceException, VISAInstrument
 import enum
 import numpy as np
 
+
 class KeySight_MultiMeter_34465A(VISAInstrument):
     manufacturer = 'Keysight Technologies'
     model = '34465A'
@@ -78,12 +79,14 @@ class MultiMeterServiceWrap:
     def directMeasureAndFetchLater(self, count=1):
         return self.dev.directMeasureAndFetchLater(count)
 
+
 if __name__ == '__main__':
     # import argparse
     # import sys
     # import Pydra
     import time
     import pyvisa as visa
+
     print(visa.ResourceManager().list_resources())
     #
     # parser = argparse.ArgumentParser()
@@ -103,7 +106,8 @@ if __name__ == '__main__':
     # name = args.service_name
     #
     # model = '34470A'
-    visaResource = 'TCPIP0::192.168.25.110::inst0::INSTR'
+    visaResource1 = 'TCPIP0::192.168.25.119::inst0::INSTR'
+    visaResource2 = 'TCPIP0::192.168.25.120::inst0::INSTR'
     # hydraAddress = '192.168.25.27'
     # hydraPort = 20102
     # name = 'DMM2'
@@ -111,7 +115,8 @@ if __name__ == '__main__':
     # print("here")
 
     # if model == '34470A':
-    dev = KeySight_MultiMeter_34465A(visaResource)
+    dev1 = KeySight_MultiMeter_34465A(visaResource1)
+    dev2 = KeySight_MultiMeter_34470A(visaResource2)
     # elif model == '34465A':
     #     dev = KeySight_MultiMeter_34465A(visaResource)
     # else:
@@ -125,17 +130,29 @@ if __name__ == '__main__':
     # session.stop()
     # dev.close()
 
-    wrap = MultiMeterServiceWrap(dev)
-    wrap.setDCCurrentMeasurement(2, True, 0.005)
+    ref = 0
+
+    wrap1 = MultiMeterServiceWrap(dev1)
+    wrap2 = MultiMeterServiceWrap(dev2)
+    wrap1.setDCCurrentMeasurement(0.001, True, 0.005)
+    wrap2.setDCCurrentMeasurement(0.001, True, 0.005)
     while True:
-        r = wrap.directMeasure(200)
-        npr = np.array(r)
+        f1 = wrap1.directMeasureAndFetchLater(200)
+        f2 = wrap2.directMeasureAndFetchLater(200)
+        r1 = f1()
+        r2 = f2()
+        npr1 = np.array(r1)
+        npr2 = np.array(r2)
 
-        print('{}, {}'.format(np.average(npr), np.std(npr)))
-        # print(max(r))
-        # file = open('{}.csv'.format(time.time()), 'w')
-        # for rr in r:
-        #     file.write('{}\n'.format(rr))
-        # file.close()
+        ave1 = np.average(npr1)
+        ave2 = np.average(npr2)
+        ratio = ave1 / ave2
 
+        if ref == 0:
+            ref = ratio
+        ratioPPM = (ratio / ref - 1) * 1e6
 
+        print('{}, {}, {}, {}'.format(ave1, ave2, ratio, ratioPPM))
+        file = open('LS.csv'.format(time.time()), 'a')
+        file.write('{},{},{},{}\n'.format(ave1, ave2, ratio, ratioPPM))
+        file.close()
