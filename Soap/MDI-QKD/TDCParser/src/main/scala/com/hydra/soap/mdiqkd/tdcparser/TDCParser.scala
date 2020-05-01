@@ -1,7 +1,7 @@
 package com.hydra.soap.mdiqkd.tdcparser
 
-import java.io.File
-import java.util.{Timer, TimerTask}
+import java.io.{File, FileReader}
+import java.util.{Properties, Timer, TimerTask}
 import java.util.concurrent.{Executors, ThreadFactory}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
@@ -82,7 +82,15 @@ object TDCParser extends JFXApp {
     visualBounds.getMinX + (visualBounds.getMaxX - visualBounds.getMinX - frameSize.width) / 2,
     visualBounds.getMinY + (visualBounds.getMaxY - visualBounds.getMinY - frameSize.height) / 2)
 
-  val regionDefination = Map("Pulse1" -> Tuple2(2.0, 4.0), "Pulse2" -> Tuple2(5.1, 7.1), "Vacuum" -> Tuple2(8.0, 10.0))
+  val propertiesC = new Properties()
+  val propertiesReader = new FileReader("parserConfig.txt")
+  propertiesC.load(propertiesReader)
+  propertiesReader.close()
+
+  val regionDefination = Map(
+    "Pulse1" -> Tuple2(propertiesC.getOrDefault("pulse1Start", "0.0").toString.toDouble, propertiesC.getOrDefault("pulse1Stop", "1.5").toString.toDouble),
+    "Pulse2" -> Tuple2(propertiesC.getOrDefault("pulse2Start", "2.0").toString.toDouble, propertiesC.getOrDefault("pulse2Stop", "3.5").toString.toDouble),
+    "Vacuum" -> Tuple2(propertiesC.getOrDefault("vacuumStart", "3.6").toString.toDouble, propertiesC.getOrDefault("vacuumStop", "3.8").toString.toDouble))
 
   val histogramStrategyAllPulses = new HistogramStrategy("All Pulses", RandomNumber.ALL_RANDOM_NUMBERS.map(_.RN), regionDefination)
   val histogramStrategyVacuum = new HistogramStrategy("Vacuum", RandomNumber.ALL_RANDOM_NUMBERS.filter(_.isVacuum).map(_.RN), regionDefination)
@@ -173,6 +181,7 @@ object TDCParser extends JFXApp {
     val bytes = MessagePack.pack(reportMap ++ qberReport)
 
     storageInvoker.FSFileAppendFrame("", reportPath, bytes)
+    println("append")
 
     //    val seq1 = (reportMap ++ qberReport).map(z => (z._1, BsonDouble(z._2))).toSeq
     //    val seq2 = Seq(("QBERSections", BsonArray(qberSection.map(li => BsonArray(li.map(i => BsonInt32(i)))))))
@@ -260,7 +269,7 @@ object TDCParser extends JFXApp {
       val rndCounts = mdiqkdEncoding.keys.filter(key => key.startsWith("Count of RandomNumber"))
         .map(key => (key.replace("Count of RandomNumber[", "").replace("]", "").toInt, mdiqkdEncoding(key).asInstanceOf[Int])).toMap
 
-      val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMapHOM Side Count
+      val reports = chartTextRegeons.map(_.updateHistogram(delay, period, integrated.get, histograms, rndCounts)).toMap
       val pulse0Position = chartTextRegeons(2).fitCenter.get
       val pulse0Width = chartTextRegeons(2).fitWidth.get
       val pulse0Rise = chartTextRegeons(2).fitRise.get

@@ -1,8 +1,9 @@
 package com.hydra.services.tdc
 
-import java.io.FileOutputStream
+import java.io.{BufferedOutputStream, File, FileOutputStream}
 import java.net.ServerSocket
 import java.nio.LongBuffer
+import java.nio.file.{Files, StandardCopyOption}
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -30,6 +31,11 @@ class TDCProcessServer(val channelCount: Int, port: Int, dataIncome: Any => Unit
       println(s"accepted: ${socket}")
       val remoteAddress = socket.getRemoteSocketAddress
       System.out.println(s"Connected from ${remoteAddress}")
+
+      var sectionStartTime = System.currentTimeMillis()
+      var sectionStoredSize = 0
+      var sectionStoreStream = new BufferedOutputStream(new FileOutputStream("TEMP.TDC"))
+
       try {
         val in = socket.getInputStream
         val loopEndRef = new AtomicBoolean(false)
@@ -39,9 +45,21 @@ class TDCProcessServer(val channelCount: Int, port: Int, dataIncome: Any => Unit
           else {
             val array = new Array[Byte](read)
             Array.copy(buffer, 0, array, 0, read)
+            sectionStoreStream.write(array)
+            sectionStoredSize += read
+            if (sectionStoredSize > 1e7) {
+              sectionStoreStream.close()
+              val currentTime = System.currentTimeMillis()
+              Files.move(new File("TEMP.TDC").toPath, new File(s"${sectionStartTime}-${currentTime}.tdc").toPath, StandardCopyOption.REPLACE_EXISTING)
+              sectionStartTime = currentTime
+              sectionStoreStream = new BufferedOutputStream(new FileOutputStream("TEMP.TDC"))
+              sectionStoredSize = 0
+            }
             tdcParser.offer(array)
           }
         }
+      } catch {
+        case e: Throwable => e.printStackTrace()
       } finally {
         println(s"End of connection: ${remoteAddress}")
       }
@@ -92,15 +110,11 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
   }
 
   private val timeEvents = Range(0, channelCount).map(_ => ArrayBuffer[Long]()).toList
-  var unitEndTime = Long.MinValue
+  private var unitEndTime = Long.MinValue
   private val timeUnitSize = 1000000000000l
-  //  private var DEBUG_lastSync = 0l
 
   private def feedTimeEvent(channel: Int, time: Long) {
-    //    if (channel < 4 && channel > 0) {
-    //      println(time - DEBUG_lastSync)
-    //      DEBUG_lastSync = time
-    //    }
+    if (channel < 4 && channel > 0) println(time)
     if (time > unitEndTime) {
       if (unitEndTime == Long.MinValue) unitEndTime = time
       else flush
