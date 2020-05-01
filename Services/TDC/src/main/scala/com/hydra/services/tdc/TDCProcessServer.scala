@@ -92,11 +92,15 @@ class LongBufferToDataBlockListTDCDataAdapter(channelCount: Int) extends TDCData
   }
 
   private val timeEvents = Range(0, channelCount).map(_ => ArrayBuffer[Long]()).toList
-  private var unitEndTime = Long.MinValue
+  var unitEndTime = Long.MinValue
   private val timeUnitSize = 1000000000000l
+  //  private var DEBUG_lastSync = 0l
 
   private def feedTimeEvent(channel: Int, time: Long) {
-    if (channel < 4 && channel > 0) println(time)
+    //    if (channel < 4 && channel > 0) {
+    //      println(time - DEBUG_lastSync)
+    //      DEBUG_lastSync = time
+    //    }
     if (time > unitEndTime) {
       if (unitEndTime == Long.MinValue) unitEndTime = time
       else flush

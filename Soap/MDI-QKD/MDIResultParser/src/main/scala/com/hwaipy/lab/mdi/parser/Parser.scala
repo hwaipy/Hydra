@@ -17,7 +17,7 @@ class ParserMonitor(monitoringPath: Path, resultPath: Path, startTime: Date, sto
 
   def perform = {
     val dataPairs = getDataPairs
-    dataPairs.map(pair => Future[Unit] {
+    dataPairs.headOption.map(pair => Future[Unit] {
       try {
         parse(pair)
       }
@@ -46,6 +46,7 @@ class ParserMonitor(monitoringPath: Path, resultPath: Path, startTime: Date, sto
     val inTimeEntries = entries.filter(e => e._2.after(startTime) && e._2.before(stopTime))
     val inTimeQBEREntries = inTimeEntries.filter(_._1.getFileName.toString.toLowerCase.endsWith("_qber.dump"))
     val inTimeChannelEntries = inTimeEntries.filter(_._1.getFileName.toString.toLowerCase.endsWith("_channel.dump"))
+
     if (inTimeQBEREntries.isEmpty || inTimeChannelEntries.isEmpty) Nil
     else {
       val buffer = new ArrayBuffer[Tuple2[Path, Path]]()
@@ -79,13 +80,14 @@ class Parser(dataPair: Tuple2[Path, Path], resultPath: Path) {
   val powerOffsets = (timeMatchedQBEREntries.map(p => p.relatedPowers._1).min, timeMatchedQBEREntries.map(p => p.relatedPowers._2).min)
 
   def parse = {
-    val resultInnerPath = resultPath.resolve(qberFile.getFileName.toString.slice(0, 15))
-    Files.createDirectories(resultInnerPath)
-    showCountChannelRelations(resultInnerPath.resolve("CountChannelRelations"))
-    Files.copy(resultInnerPath.resolve("CountChannelRelations.png"), Paths.get(resultInnerPath.toString + ".png"), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING)
-    val halfRatios = Range(0, 40).map(i => math.pow(1.1, i))
-    val ratios = halfRatios.reverse.dropRight(1).map(a => 1 / a) ++ halfRatios
-    showHOMandQBERs(List(1e-10) ++ Range(1, 100).toList.map(i => i / 100.0), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
+    println("Parsing")
+    //val resultInnerPath = resultPath.resolve(qberFile.getFileName.toString.slice(0, 15))
+    //Files.createDirectories(resultInnerPath)
+    //showCountChannelRelations(resultInnerPath.resolve("CountChannelRelations"))
+    //Files.copy(resultInnerPath.resolve("CountChannelRelations.png"), Paths.get(resultInnerPath.toString + ".png"), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING)
+    //val halfRatios = Range(0, 40).map(i => math.pow(1.1, i))
+    //val ratios = halfRatios.reverse.dropRight(1).map(a => 1 / a) ++ halfRatios
+    //showHOMandQBERs(List(1e-10) ++ Range(1, 100).toList.map(i => i / 100.0), ratios.toList, resultInnerPath.resolve("HOMandQBERs.csv"))
   }
 
   private def loadMsgpackEntries(path: Path) = {
@@ -171,6 +173,8 @@ class QBERs(val sections: Array[Map[String, Any]]) {
   }).flatten
   validate()
 
+  sections.foreach(s => println(s("Channel 1 in Window")))
+
   private def validate() = {
     val channelMonitorSyncZip = channelMonitorSyncs.dropRight(1).zip(channelMonitorSyncs.drop(1))
     val valid = channelMonitorSyncZip.map(z => math.abs(z._2 - z._1 - 10) < 0.001).forall(b => b)
@@ -251,15 +255,15 @@ class HOMandQBEREntry(val threshold: Double, val ratio: Double, val totalSection
 
 object Parser extends App {
   val format = new SimpleDateFormat("yyyyMMdd-hhmmss.SSS")
-  val startTime = format.parse("20190901-000000.000")
+  val startTime = format.parse("20180901-000000.000")
   val stopTime = format.parse("20191231-235959.999")
-    val rootPath = Paths.get("E:\\MDIQKD_Parse\\Parsing")
+  val rootPath = Paths.get("D:\\Experiments\\MDIQKD\\RawData")
 //  val rootPath = Paths.get("/Users/hwaipy/Desktop/MDI")
   val availableDates = Files.list(rootPath).iterator.asScala.toList.filter(p => p.getFileName.toString.size == 8).sorted
   val availableRuns = availableDates.map(date => Files.list(date).iterator.asScala.toList.filter(p => p.getFileName.toString.toLowerCase.startsWith("run") && !p.getFileName.toString.toLowerCase.endsWith("parsed"))).flatten.sorted
   println(s"Parsing ${availableRuns.size} runs in ${availableDates.size} days.")
 
-  availableRuns.foreach(runPath => {
+  availableRuns.headOption.foreach(runPath => {
     println(runPath)
     val monitor = new ParserMonitor(runPath, Paths.get(runPath.toString + "-parsed"), startTime, stopTime)
     monitor.performAndStop
